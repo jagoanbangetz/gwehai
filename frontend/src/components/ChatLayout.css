@@ -1,0 +1,185 @@
+/* chatPage: flex 1, min-height 0, min-width 0 so messagesArea is the ONLY scroll (ChatGPT-like) */
+.chat-page {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  overflow: hidden;
+}
+
+.chat-page__top {
+  flex: 0 0 auto;
+}
+
+.chat-page__messages {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* composerArea: sticky at bottom, never scrolls */
+.chat-page__composer {
+  flex: 0 0 auto;
+  position: sticky;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(8px);
+  padding: 12px 16px;
+  z-index: 10;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* messagesArea: THE ONLY scrollable region (flex 1 + min-height 0 is critical) */
+.messages-area {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding: 24px 16px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.messages-area__inner {
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.messages-area__anchor {
+  scroll-margin-bottom: 24px;
+  min-height: 1px;
+  pointer-events: none;
+}
+
+/* Scrollbar */
+.messages-area::-webkit-scrollbar {
+  width: 8px;
+}
+
+.messages-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.messages-area::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.messages-area::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Scroll to bottom floating button */
+.messages-area__scroll-to-bottom {
+  position: absolute;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.85);
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  transition: background 0.2s, color 0.2s, transform 0.15s;
+  z-index: 5;
+}
+
+.messages-area__scroll-to-bottom:hover {
+  background: rgba(0, 0, 0, 0.95);
+  color: rgba(255, 255, 255, 1);
+  transform: translateX(-50%) scale(1.05);
+}
+
+.messages-area__scroll-to-bottom:active {
+  transform: translateX(-50%) scale(0.98);
+}
+
+/* Composer wrapper (composerArea): sticky at bottom */
+.composer {
+  flex: 0 0 auto;
+  position: sticky;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  backdrop-filter: blur(8px);
+  padding: 12px 16px;
+  z-index: 10;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Message bubble: max-width, padding, radius (used by MessageBubble.tsx or .message-bubble) */
+.message-bubble {
+  max-width: 720px;
+  margin: 0 auto;
+  border-radius: 16px;
+  padding: 16px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.message-bubble--user {
+  margin-left: auto;
+  margin-right: 0;
+}
+
+.message-bubble--assistant {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+/* Long text and code in messages (apply inside messages area) */
+.messages-area .message-text,
+.messages-area .markdown-content {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.messages-area pre,
+.messages-area .markdown-content pre {
+  overflow-x: auto;
+  max-width: 100%;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.messages-area code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* OPTIONAL (B): enable on assistant bubble for extremely long answers - max-height + internal scroll */
+.message-bubble--scrollable {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+  .messages-area {
+    padding: 16px 12px;
+  }
+
+  .composer {
+    padding: 10px 12px;
+  }
+
+  .messages-area__scroll-to-bottom {
+    bottom: 80px;
+    width: 40px;
+    height: 40px;
+  }
+}

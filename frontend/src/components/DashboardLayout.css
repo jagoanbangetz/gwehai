@@ -1,0 +1,102 @@
+/* appShell: fixed viewport height so flex children can scroll (ChatGPT-like) */
+.dashboard-layout {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: oklch(0 0 0);
+  color: oklch(1 0 0);
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-top-line {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: oklch(1 0 0);
+  z-index: 1001;
+}
+
+/* contentRow: flex 1 + min-height 0 so it shrinks and allows chatPage to scroll */
+.dashboard-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  margin-top: 2px;
+  overflow: hidden;
+}
+
+.dashboard-main-wrap {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 180ms ease, flex 180ms ease;
+}
+
+.dashboard-main-wrap-collapsed {
+  flex: 0 !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+.dashboard-main-content {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Desktop: sidebar always visible */
+@media (min-width: 1025px) {
+  .dashboard-body {
+    /* sidebar 280px from AppSidebar.app-sidebar-desktop */
+  }
+}
+
+/* Mobile/tablet: sidebar is drawer, main takes full width */
+@media (max-width: 1024px) {
+  .dashboard-body {
+    /* drawer overlays; main is full width */
+  }
+}
+
+/* Floating restore-chat button when main panel is collapsed (desktop only) */
+.dashboard-restore-chat {
+  position: fixed;
+  top: 72px;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: oklch(0.12 0.02 260);
+  border: 1px solid oklch(0.3 0 0);
+  border-radius: 10px;
+  color: oklch(0.95 0 0);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-family: inherit;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: background 0.2s, color 0.2s, transform 0.15s;
+}
+
+.dashboard-restore-chat:hover {
+  background: oklch(0.2 0.02 260);
+  color: oklch(1 0 0);
+}
+
+.dashboard-restore-chat:active {
+  transform: scale(0.98);
+}
+
+.dashboard-restore-chat-label {
+  white-space: nowrap;
+}

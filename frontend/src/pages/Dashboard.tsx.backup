@@ -1,0 +1,2160 @@
+import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import { logo } from '../assets/images'
+import './Dashboard.css'
+import apiClient from '../utils/api'
+import { ToastContainer, Toast } from '../components/Toast'
+import CustomSelect from '../components/CustomSelect'
+import { getModelIcon, isProModel } from '../utils/modelIcons'
+import { gwehaiClient, GwehAIEvent } from '../utils/gwehaiApi'
+import MarkdownMessage from '../components/MarkdownMessage'
+
+interface Tool {
+  id: string
+  name: string
+  input?: any
+  logs: string[]
+  status: 'running' | 'ok' | 'error'
+  output?: any
+  messageId: string
+}
+
+interface Message {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: Date
+  eventType?: string // 'thinking' | 'tool' | 'result' | 'content' | 'status' | 'error' | 'done'
+  toolName?: string
+  isStreaming?: boolean
+  done?: boolean
+  toolIds?: string[]
+}
+
+interface ToolState {
+  activeTools: number
+  hasTools: boolean
+  toolsComplete: boolean
+}
+
+interface ChatHistory {
+  id: string
+  title: string
+  messages: Message[]
+  createdAt: Date
+  updatedAt: Date
+}
+
+interface ReportRow {
+  id: string
+  jobId: string
+  target?: string
+  fileUrl?: string | null
+  metadata?: Record<string, any>
+  createdAt?: string
+}
+
+interface CurrentPlan {
+  id: string
+  status: string
+  startedAt: string
+  expiresAt?: string | null
+  pointsGranted: number
+  pointsUsed: number
+  reportsGenerated: number
+  messagesSent: number
+  plan?: {
+    id: string
+    code: string
+    name: string
+    monthlyPriceUsd?: number | null
+    pointsIncluded?: number | null
+  }
+}
+
+const Dashboard = () => {
+  const { user, isAuthenticated, logout } = useAuth()
+  const navigate = useNavigate()
+  const [messages, setMessages] = useState<Message[]>([])
+  const [input, setInput] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [selectedModel, setSelectedModel] = useState('Claude-Opus-4.5')
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [chatHistory, setChatHistory] = useState<ChatHistory[]>([])
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showSearch, setShowSearch] = useState(false)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [editingChatId, setEditingChatId] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [showHelpModal, setShowHelpModal] = useState(false)
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [showPlanModal, setShowPlanModal] = useState(false)
+  const [helpMessages, setHelpMessages] = useState<Message[]>([])
+  const [helpInput, setHelpInput] = useState('')
+  const [isHelpLoading, setIsHelpLoading] = useState(false)
+  const [settingsData, setSettingsData] = useState({
+    email: '',
+    password: '',
+    defaultLanguage: 'en',
+    defaultModelId: '',
+  })
+  const [availableModels, setAvailableModels] = useState<any[]>([])
+  const [isSavingSettings, setIsSavingSettings] = useState(false)
+  const [toasts, setToasts] = useState<Toast[]>([])
+  const [isVoiceRecording, setIsVoiceRecording] = useState(false)
+  const [voiceTranscript, setVoiceTranscript] = useState('')
+  const [reports, setReports] = useState<ReportRow[]>([])
+  const [isLoadingReports, setIsLoadingReports] = useState(false)
+  const [currentPlan, setCurrentPlan] = useState<CurrentPlan | null>(null)
+  const [pointsBalance, setPointsBalance] = useState<number | null>(null)
+  const [isLoadingPlan, setIsLoadingPlan] = useState(false)
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null)
+  const [tools, setTools] = useState<Record<string, Tool>>({}) // toolId -> Tool
+  const [messageTools, setMessageTools] = useState<Record<string, string[]>>({}) // messageId -> toolIds[]
+  const [messageToolState, setMessageToolState] = useState<Record<string, ToolState>>({})
+  const [currentAssistantMessageId, setCurrentAssistantMessageId] = useState<string | null>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const helpMessagesEndRef = useRef<HTMLDivElement>(null)
+  const voiceRecognitionRef = useRef<any | null>(null)
+  const streamingMessageRef = useRef<number | null>(null) // Index of currently streaming message
+  const eventSourceRef = useRef<EventSource | null>(null) // Use ref for event source to avoid closure issues
+  const currentAssistantMessageIdRef = useRef<string | null>(null)
+  const messageToolStateRef = useRef<Record<string, ToolState>>({})
+  const toolsRef = useRef<Record<string, Tool>>({})
+  const messagesRef = useRef<Message[]>([])
+
+  const showToast = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info', duration = 3000) => {
+    const id = Date.now().toString() + Math.random().toString(36).substr(2, 9)
+    setToasts((prev) => [...prev, { id, message, type, duration }])
+  }
+
+  const removeToast = (id: string) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== id))
+  }
+
+  const loadReports = async () => {
+    try {
+      setIsLoadingReports(true)
+      const res = await apiClient.get('/reports')
+      setReports(res.data || [])
+    } catch (error: any) {
+      console.error('Failed to load reports:', error)
+      showToast(error.response?.data?.message || 'Failed to load reports.', 'error')
+    } finally {
+      setIsLoadingReports(false)
+    }
+  }
+
+  const loadPlan = async () => {
+    try {
+      setIsLoadingPlan(true)
+      const [planRes, balanceRes] = await Promise.all([
+        apiClient.get('/plans/current'),
+        apiClient.get('/points/balance'),
+      ])
+      setCurrentPlan(planRes.data || null)
+      setPointsBalance(balanceRes.data?.balance ?? null)
+    } catch (error: any) {
+      console.error('Failed to load plan info:', error)
+      showToast(error.response?.data?.message || 'Failed to load plan information.', 'error')
+    } finally {
+      setIsLoadingPlan(false)
+    }
+  }
+
+  const startVoiceRecognition = () => {
+    try {
+      const SpeechRecognition =
+        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+
+      if (!SpeechRecognition) {
+        showToast('Voice recognition is not supported in this browser.', 'warning')
+        return
+      }
+
+      const recognition = new SpeechRecognition()
+      recognition.lang = 'en-US'
+      recognition.interimResults = true
+      recognition.continuous = true
+
+      let finalTranscript = ''
+
+      recognition.onstart = () => {
+        setIsVoiceRecording(true)
+        setVoiceTranscript('')
+      }
+
+      recognition.onresult = (event: any) => {
+        let interim = ''
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const transcript = event.results[i][0].transcript
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript + ' '
+          } else {
+            interim += transcript
+          }
+        }
+        setVoiceTranscript((finalTranscript + interim).trim())
+      }
+
+      recognition.onerror = () => {
+        showToast('Voice recognition error. Please try again.', 'error')
+        setIsVoiceRecording(false)
+      }
+
+      recognition.onend = () => {
+        // Keep UI open so user can confirm/cancel the captured text
+      }
+
+      voiceRecognitionRef.current = recognition
+      recognition.start()
+    } catch (err) {
+      console.error('Voice recognition init failed', err)
+      showToast('Unable to start voice recognition.', 'error')
+    }
+  }
+
+  const stopVoiceRecognition = () => {
+    if (voiceRecognitionRef.current) {
+      try {
+        voiceRecognitionRef.current.stop()
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  const cancelVoiceInput = () => {
+    stopVoiceRecognition()
+    setIsVoiceRecording(false)
+    setVoiceTranscript('')
+  }
+
+  const confirmVoiceInput = () => {
+    stopVoiceRecognition()
+    if (voiceTranscript.trim()) {
+      setInput(prev =>
+        prev && !prev.endsWith(' ')
+          ? `${prev} ${voiceTranscript.trim()}`
+          : `${prev}${voiceTranscript.trim()}`
+      )
+    }
+    setIsVoiceRecording(false)
+    setVoiceTranscript('')
+    inputRef.current?.focus()
+  }
+
+  useEffect(() => {
+    if (showReportModal) {
+      loadReports()
+    }
+  }, [showReportModal])
+
+  useEffect(() => {
+    if (showPlanModal) {
+      loadPlan()
+    }
+  }, [showPlanModal])
+
+  // Auto-collapse sidebar on mobile
+  useEffect(() => {
+    const checkScreenSize = () => {
+      const isMobile = window.innerWidth < 1024
+      setSidebarOpen(prev => {
+        // Only auto-collapse if on mobile and currently open
+        // Don't auto-expand on desktop to preserve user preference
+        if (isMobile && prev) {
+          return false
+        }
+        return prev
+      })
+    }
+
+    // Check on mount
+    checkScreenSize()
+
+    // Listen for resize events with debounce
+    let resizeTimeout: ReturnType<typeof setTimeout>
+    const handleResize = () => {
+      clearTimeout(resizeTimeout)
+      resizeTimeout = setTimeout(checkScreenSize, 150)
+    }
+
+    window.addEventListener('resize', handleResize)
+
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      clearTimeout(resizeTimeout)
+    }
+  }, []) // Empty dependency array - only run on mount and cleanup
+
+  // Close sidebar when clicking outside on mobile
+  useEffect(() => {
+    if (!sidebarOpen) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      const isMobile = window.innerWidth < 1024
+      
+      if (isMobile && sidebarOpen) {
+        // Check if click is outside sidebar
+        const sidebar = document.querySelector('.dashboard-sidebar')
+        const mobileToggle = document.querySelector('.mobile-menu-toggle')
+        
+        if (sidebar && !sidebar.contains(target) && !mobileToggle?.contains(target)) {
+          setSidebarOpen(false)
+        }
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [sidebarOpen])
+
+  const loadUserProfile = async () => {
+    try {
+      const response = await apiClient.get('/auth/me')
+      const profile = response.data
+      setSettingsData({
+        email: profile.email || '',
+        password: '',
+        defaultLanguage: profile.defaultLanguage || 'en',
+        defaultModelId: profile.defaultModelId || '',
+      })
+    } catch (error) {
+      console.error('Failed to load user profile:', error)
+    }
+  }
+
+  const loadModels = async () => {
+    try {
+      const response = await apiClient.get('/chat/models')
+      setAvailableModels(response.data || [])
+    } catch (error) {
+      console.error('Failed to load models:', error)
+      // Fallback to default models
+      setAvailableModels([
+        { id: 'claude-opus-4.5', name: 'Claude-Opus-4.5' },
+        { id: 'chatgpt-5.2', name: 'ChatGPT-5.2' },
+        { id: 'gemini-3', name: 'Gemini-3' },
+        { id: 'grok-4', name: 'Grok-4' },
+      ])
+    }
+  }
+
+  const handleSaveSettings = async () => {
+    setIsSavingSettings(true)
+    try {
+      const updateData: any = {}
+      if (settingsData.email && settingsData.email !== user?.email) {
+        updateData.email = settingsData.email
+      }
+      if (settingsData.password) {
+        updateData.password = settingsData.password
+      }
+      if (settingsData.defaultLanguage) {
+        updateData.defaultLanguage = settingsData.defaultLanguage
+      }
+      if (settingsData.defaultModelId) {
+        updateData.defaultModelId = settingsData.defaultModelId
+      }
+
+      await apiClient.post('/auth/settings', updateData)
+      
+      // Reload user profile to get updated data
+      await loadUserProfile()
+      
+      showToast('Settings saved successfully!', 'success')
+      setShowSettingsModal(false)
+    } catch (error: any) {
+      console.error('Failed to save settings:', error)
+      showToast(error.response?.data?.message || 'Failed to save settings. Please try again.', 'error')
+    } finally {
+      setIsSavingSettings(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/login')
+      return
+    }
+    
+    // Load user profile and models when authenticated
+    const loadData = async () => {
+      await Promise.all([loadUserProfile(), loadModels()])
+    }
+    loadData()
+    
+    // Load chat history from localStorage
+    const savedHistory = localStorage.getItem(`gwehai_chat_history_${user?.id}`)
+    if (savedHistory) {
+      try {
+        const parsed = JSON.parse(savedHistory)
+        setChatHistory(parsed.map((chat: any) => ({
+          ...chat,
+          createdAt: new Date(chat.createdAt),
+          updatedAt: new Date(chat.updatedAt),
+          messages: chat.messages.map((msg: any) => ({
+            ...msg,
+            timestamp: new Date(msg.timestamp)
+          }))
+        })))
+      } catch (e) {
+        console.error('Error loading chat history:', e)
+      }
+    }
+  }, [isAuthenticated, navigate, user?.id])
+
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages])
+
+  useEffect(() => {
+    // Save chat history when messages change
+    if (messages.length > 0 && currentChatId && user?.id) {
+      setChatHistory(prev => {
+        const chat = prev.find(c => c.id === currentChatId)
+        if (chat) {
+          const updatedChat = {
+            ...chat,
+            messages,
+            updatedAt: new Date(),
+            title: messages.find(m => m.role === 'user')?.content.substring(0, 50) || 'New Chat'
+          }
+          const updatedHistory = prev.map(c => 
+            c.id === currentChatId ? updatedChat : c
+          )
+          localStorage.setItem(`gwehai_chat_history_${user.id}`, JSON.stringify(updatedHistory))
+          return updatedHistory
+        }
+        return prev
+      })
+    } else if (messages.length > 0 && !currentChatId && user?.id) {
+      // Create new chat if messages exist but no current chat
+      const newChatId = Date.now().toString()
+      const newChat: ChatHistory = {
+        id: newChatId,
+        title: messages.find(m => m.role === 'user')?.content.substring(0, 50) || 'New Chat',
+        messages,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+      setCurrentChatId(newChatId)
+      setChatHistory(prev => {
+        const updated = [newChat, ...prev]
+        localStorage.setItem(`gwehai_chat_history_${user.id}`, JSON.stringify(updated))
+        return updated
+      })
+    }
+  }, [messages, currentChatId, user?.id])
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  const handleNewChat = () => {
+    // Close any existing event source
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
+    }
+    // Reset state
+    setMessages([])
+    setCurrentChatId(null)
+    setCurrentJobId(null)
+    setTools({})
+    setMessageTools({})
+    setMessageToolState({})
+    setCurrentAssistantMessageId(null)
+    streamingMessageRef.current = null
+    setIsLoading(false)
+    inputRef.current?.focus()
+    
+    // Close sidebar on mobile
+    if (window.innerWidth < 1024) {
+      setSidebarOpen(false)
+    }
+  }
+
+  const handleLoadChat = (chatId: string) => {
+    // Close any existing event source
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
+    }
+    // Load chat
+    const chat = chatHistory.find(c => c.id === chatId)
+    if (chat) {
+      setMessages(chat.messages)
+      setCurrentChatId(chatId)
+      setCurrentJobId(null) // Reset job ID when loading a different chat
+      setMessageTools({})
+      setMessageToolState({})
+      setCurrentAssistantMessageId(null)
+      streamingMessageRef.current = null
+      setIsLoading(false)
+    }
+    
+    // Close sidebar on mobile after loading chat
+    if (window.innerWidth < 1024) {
+      setSidebarOpen(false)
+    }
+  }
+
+  const handleDeleteChat = (chatId: string) => {
+    const updatedHistory = chatHistory.filter(c => c.id !== chatId)
+    setChatHistory(updatedHistory)
+    localStorage.setItem(`gwehai_chat_history_${user?.id}`, JSON.stringify(updatedHistory))
+    if (currentChatId === chatId) {
+      setMessages([])
+      setCurrentChatId(null)
+    }
+    setOpenMenuId(null)
+  }
+
+  const handleRenameChat = (chatId: string) => {
+    const chat = chatHistory.find(c => c.id === chatId)
+    if (chat) {
+      setEditingChatId(chatId)
+      setEditTitle(chat.title)
+      setOpenMenuId(null)
+    }
+  }
+
+  const handleSaveRename = (chatId: string, e?: React.KeyboardEvent) => {
+    if (e && e.key !== 'Enter') return
+    if (!editTitle.trim()) {
+      handleCancelRename()
+      return
+    }
+    
+    const updatedHistory = chatHistory.map(chat =>
+      chat.id === chatId ? { ...chat, title: editTitle.trim() } : chat
+    )
+    setChatHistory(updatedHistory)
+    localStorage.setItem(`gwehai_chat_history_${user?.id}`, JSON.stringify(updatedHistory))
+    setEditingChatId(null)
+    setEditTitle('')
+  }
+
+  const handleCancelRename = () => {
+    setEditingChatId(null)
+    setEditTitle('')
+  }
+
+  const handleHelpSend = async () => {
+    if (!helpInput.trim() || isHelpLoading) return
+
+    const userMessage: Message = {
+      id: createMessageId(),
+      role: 'user',
+      content: helpInput,
+      timestamp: new Date()
+    }
+
+    setHelpMessages(prev => [...prev, userMessage])
+    setHelpInput('')
+    setIsHelpLoading(true)
+
+    try {
+      const response = await apiClient.post('/chat', {
+        message: helpInput,
+        conversation: []
+      })
+
+      const assistantMessage: Message = {
+        id: createMessageId(),
+        role: 'assistant',
+        content: response.data.response || response.data.message?.content || 'I\'m here to help! How can I assist you with GwehAI?',
+        timestamp: new Date()
+      }
+
+      setHelpMessages(prev => [...prev, assistantMessage])
+    } catch (error) {
+      console.error('Help chat error:', error)
+      const errorMessage: Message = {
+        id: createMessageId(),
+        role: 'assistant',
+        content: 'I apologize, but I encountered an error. Please try again or contact support.',
+        timestamp: new Date()
+      }
+      setHelpMessages(prev => [...prev, errorMessage])
+    } finally {
+      setIsHelpLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (helpMessages.length > 0) {
+      helpMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [helpMessages])
+
+  useEffect(() => {
+    currentAssistantMessageIdRef.current = currentAssistantMessageId
+  }, [currentAssistantMessageId])
+
+  useEffect(() => {
+    messageToolStateRef.current = messageToolState
+  }, [messageToolState])
+
+  useEffect(() => {
+    toolsRef.current = tools
+  }, [tools])
+
+  useEffect(() => {
+    messagesRef.current = messages
+  }, [messages])
+
+  // Cleanup event source on unmount
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
+        eventSourceRef.current = null
+      }
+    }
+  }, [])
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node
+      // Check if click is outside any menu container
+      const menuContainer = (target as Element).closest('.chat-menu-container')
+      if (!menuContainer) {
+        setOpenMenuId(null)
+      }
+    }
+
+    if (openMenuId) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [openMenuId])
+
+  const createMessageId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+
+  const addAssistantMessage = (eventType?: Message['eventType']) => {
+    const id = createMessageId()
+    const newMessage: Message = {
+      id,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+      isStreaming: true,
+      done: false,
+      ...(eventType ? { eventType } : {}),
+    }
+    setMessages(prev => [...prev, newMessage])
+    setCurrentAssistantMessageId(id)
+    return id
+  }
+
+  const addUserMessage = (content: string) => {
+    const id = createMessageId()
+    const newMessage: Message = {
+      id,
+      role: 'user',
+      content,
+      timestamp: new Date(),
+      done: true,
+    }
+    setMessages(prev => [...prev, newMessage])
+    return id
+  }
+
+  const updateMessageContent = (messageId: string, delta: string) => {
+    if (!delta) return
+    setMessages(prev =>
+      prev.map(message =>
+        message.id === messageId
+          ? {
+              ...message,
+              content: (message.content || '') + delta,
+              isStreaming: true,
+              done: false,
+              eventType: 'content',
+            }
+          : message
+      )
+    )
+  }
+
+  const markMessageDone = (messageId: string) => {
+    setMessages(prev =>
+      prev.map(message =>
+        message.id === messageId
+          ? { ...message, isStreaming: false, done: true }
+          : message
+      )
+    )
+  }
+
+  const ensureToolList = (messageId: string) => {
+    setMessageTools(prev => (prev[messageId] ? prev : { ...prev, [messageId]: [] }))
+  }
+
+  const ensureToolState = (messageId: string) => {
+    setMessageToolState(prev => {
+      if (prev[messageId]) return prev
+      return {
+        ...prev,
+        [messageId]: { activeTools: 0, hasTools: false, toolsComplete: false },
+      }
+    })
+  }
+
+  const startTool = (toolCallId: string, name: string, input: any) => {
+    let messageId = currentAssistantMessageIdRef.current
+    const toolState = messageId ? messageToolStateRef.current[messageId] : undefined
+
+    if (!messageId || (toolState && toolState.toolsComplete)) {
+      messageId = addAssistantMessage('tool')
+    }
+
+    ensureToolList(messageId)
+    ensureToolState(messageId)
+
+    setMessageToolState(prev => ({
+      ...prev,
+      [messageId!]: {
+        activeTools: (prev[messageId!]?.activeTools || 0) + 1,
+        hasTools: true,
+        toolsComplete: false,
+      },
+    }))
+
+    setTools(prev => ({
+      ...prev,
+      [toolCallId]: {
+        id: toolCallId,
+        name: name || 'tool',
+        input,
+        logs: [],
+        status: 'running',
+        messageId: messageId!,
+      },
+    }))
+
+    setMessageTools(prev => ({
+      ...prev,
+      [messageId!]: [...(prev[messageId!] || []), toolCallId],
+    }))
+  }
+
+  const appendToolLog = (toolCallId: string, text: string) => {
+    setTools(prev => {
+      const tool = prev[toolCallId]
+      if (!tool) return prev
+      return {
+        ...prev,
+        [toolCallId]: {
+          ...tool,
+          logs: [...tool.logs, text],
+        },
+      }
+    })
+  }
+
+  const endTool = (toolCallId: string, status: 'ok' | 'error', output: any) => {
+    let messageId: string | null = null
+    setTools(prev => {
+      const tool = prev[toolCallId]
+      if (!tool) return prev
+      messageId = tool.messageId
+      return {
+        ...prev,
+        [toolCallId]: { ...tool, status, output },
+      }
+    })
+
+    if (!messageId) return
+    setMessageToolState(prev => {
+      const state = prev[messageId!]
+      if (!state) return prev
+      const activeTools = Math.max(0, state.activeTools - 1)
+      return {
+        ...prev,
+        [messageId!]: {
+          ...state,
+          activeTools,
+          toolsComplete: activeTools === 0 && state.hasTools,
+        },
+      }
+    })
+  }
+
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) return
+
+    // Create new chat if none exists
+    if (!currentChatId) {
+      const newChatId = Date.now().toString()
+      const newChat: ChatHistory = {
+        id: newChatId,
+        title: input.substring(0, 50),
+        messages: [],
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+      setCurrentChatId(newChatId)
+      setChatHistory(prev => [newChat, ...prev])
+    }
+
+    const userInput = input
+    addUserMessage(userInput)
+    setInput('')
+    inputRef.current?.focus()
+    setIsLoading(true)
+
+    // Close any existing event source
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
+    }
+
+    try {
+      // Step 1: Send request to GwehAI API (use stream: false to get clean JSON response)
+      const jobResponse = await gwehaiClient.startScan(userInput, false, currentJobId || undefined)
+      const jobId = jobResponse.job_id
+      setCurrentJobId(jobId)
+
+      // Step 2: Create initial assistant message for streaming with "thinking" state
+      // Use functional update to get the correct index after adding the message
+      addAssistantMessage('thinking')
+
+      // Step 3: Connect to SSE for real-time updates
+      const es = gwehaiClient.connectToEvents(
+        jobId,
+        (event: GwehAIEvent) => {
+          handleStreamEvent(event, -1)
+        },
+        (_error) => {
+          // Connection failed after multiple retries
+          console.warn('SSE connection failed after retries for job:', jobId)
+          setIsLoading(false)
+          streamingMessageRef.current = null
+          eventSourceRef.current = null
+          
+          // Show error message to user
+          setMessages(prev => {
+            const lastMessage = prev[prev.length - 1]
+            if (lastMessage && lastMessage.role === 'assistant' && lastMessage.isStreaming) {
+              return prev.map((msg, idx) => 
+                idx === prev.length - 1 
+                  ? { ...msg, isStreaming: false, content: msg.content || 'Connection lost. Please try again.' }
+                  : msg
+              )
+            }
+            return prev
+          })
+          
+          showToast('Connection lost. The response may be incomplete.', 'warning')
+        },
+        () => {
+          // Connection opened successfully - no need to log
+        }
+      )
+
+      eventSourceRef.current = es
+    } catch (error: any) {
+      console.error('Chat error:', error)
+      setIsLoading(false)
+      streamingMessageRef.current = null
+      
+      // Remove the empty streaming message if it was added
+      setMessages(prev => {
+        const lastMessage = prev[prev.length - 1]
+        if (lastMessage && lastMessage.role === 'assistant' && !lastMessage.content && lastMessage.isStreaming) {
+          return prev.slice(0, -1)
+        }
+        return prev
+      })
+      
+      const errorMessage: Message = {
+        id: createMessageId(),
+        role: 'assistant',
+        content: error.message || 'I apologize, but I encountered an error. Please try again or check your connection.',
+        timestamp: new Date(),
+        eventType: 'error'
+      }
+      setMessages(prev => [...prev, errorMessage])
+      
+      // Show appropriate error message
+      const errorText = error.message || 'Unknown error'
+      if (errorText.includes('target URL') || errorText.includes('valid URL')) {
+        showToast('Please include a URL when requesting a pentest (e.g., "pentest https://example.com")', 'warning')
+      } else if (errorText.includes('Failed to fetch') || errorText.includes('NetworkError')) {
+        showToast('Failed to connect to GwehAI API. Please check if the API is running.', 'error')
+      } else {
+        showToast(errorText.length > 100 ? errorText.substring(0, 100) + '...' : errorText, 'error')
+      }
+    }
+  }
+
+  const handleStreamEvent = (event: GwehAIEvent, _messageIndex: number) => {
+    if (event.type !== 'content') {
+      console.log('[Dashboard] Received stream event:', event.type, 'Data:', event.data ? Object.keys(event.data) : 'no data')
+    }
+
+    const getCurrentMessage = () => {
+      const messageId = currentAssistantMessageIdRef.current
+      return messageId ? messagesRef.current.find(message => message.id === messageId) : undefined
+    }
+
+    const ensureAssistantForText = () => {
+      let messageId = currentAssistantMessageIdRef.current
+      const toolState = messageId ? messageToolStateRef.current[messageId] : undefined
+      const currentMessage = getCurrentMessage()
+      if (!messageId || !currentMessage || currentMessage.done || (toolState && toolState.hasTools)) {
+        messageId = addAssistantMessage('content')
+      }
+      return messageId
+    }
+
+    switch (event.type) {
+      case 'connected':
+        return
+
+      case 'thinking': {
+        let messageId = currentAssistantMessageIdRef.current
+        if (!messageId) {
+          messageId = addAssistantMessage('thinking')
+        }
+        setMessages(prev =>
+          prev.map(message =>
+            message.id === messageId
+              ? { ...message, content: `💭 ${event.data.message || 'Thinking...'}`, eventType: 'thinking', isStreaming: true }
+              : message
+          )
+        )
+        return
+      }
+
+      case 'tool':
+      case 'tool_start': {
+        const toolCallId = event.data.tool_call_id || `tool-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+        const toolName = event.data.tool || event.data.name || 'Unknown tool'
+        const toolInput = event.data.input || event.data.args || {}
+        startTool(toolCallId, toolName, toolInput)
+        return
+      }
+
+      case 'tool_log': {
+        const logToolId = event.data.tool_call_id
+        const logText = event.data.text || event.data.log || ''
+        if (logToolId) {
+          appendToolLog(logToolId, logText)
+        }
+        return
+      }
+
+      case 'tool_end':
+      case 'result': {
+        const endToolId = event.data.tool_call_id
+        const toolStatus = event.data.status || 'ok'
+        const toolOutput = event.data.output || event.data.result || null
+        if (endToolId) {
+          endTool(endToolId, toolStatus === 'error' ? 'error' : 'ok', toolOutput)
+        }
+        return
+      }
+
+      case 'content': {
+        let chunk = event.data.chunk || event.data.content || event.data.text || ''
+        if (typeof chunk !== 'string') {
+          if (chunk && typeof chunk === 'object') {
+            chunk = chunk.chunk || chunk.content || chunk.text || chunk.data?.chunk || chunk.data?.content || ''
+          } else {
+            chunk = String(chunk || '')
+          }
+        }
+
+        let cleanChunk = String(chunk)
+          .replace(/\{"type":"content","data":\{"chunk":"([^"]+)"\}[^}]*\}/g, '$1')
+          .replace(/\{"type":"content","data":\{"chunk":"([^"]*)"\}[^}]*\}/g, '$1')
+          .replace(/\{"chunk":"([^"]+)"\}/g, '$1')
+          .replace(/\{"chunk":"([^"]*)"\}/g, '$1')
+          .replace(/^\{.*?"chunk"\s*:\s*"([^"]+)".*\}$/g, '$1')
+          .replace(/^\{.*?"chunk"\s*:\s*"([^"]*)".*\}$/g, '$1')
+          .replace(/^["']|["']$/g, '')
+          .replace(/\\n/g, '\n')
+          .replace(/\\t/g, '\t')
+          .replace(/\\"/g, '"')
+          .replace(/\\'/g, "'")
+          .replace(/\\r/g, '\r')
+          .replace(/\\\\/g, '\\')
+          .replace(/^\{"type":.*?\}$/g, '')
+
+        if (cleanChunk.startsWith('{') && cleanChunk.includes('"chunk"')) {
+          try {
+            const parsed = JSON.parse(cleanChunk)
+            if (parsed?.data?.chunk) {
+              cleanChunk = String(parsed.data.chunk || '')
+            } else if (parsed?.chunk) {
+              cleanChunk = String(parsed.chunk || '')
+            }
+          } catch {
+            // keep cleaned text
+          }
+        }
+
+        cleanChunk = String(cleanChunk || '')
+        if (!cleanChunk || cleanChunk === 'undefined' || cleanChunk === 'null') {
+          return
+        }
+
+        const messageId = ensureAssistantForText()
+        updateMessageContent(messageId, cleanChunk)
+        return
+      }
+
+      case 'content_done': {
+        const messageId = currentAssistantMessageIdRef.current
+        if (messageId) {
+          markMessageDone(messageId)
+        }
+        return
+      }
+
+      case 'status': {
+        const status = event.data.status || ''
+        if (status === 'completed' || status === 'failed' || status === 'stopped') {
+          setIsLoading(false)
+          streamingMessageRef.current = null
+          if (eventSourceRef.current) {
+            eventSourceRef.current.close()
+            eventSourceRef.current = null
+          }
+        }
+        return
+      }
+
+      case 'error': {
+        setIsLoading(false)
+        streamingMessageRef.current = null
+        const messageId = currentAssistantMessageIdRef.current || addAssistantMessage('error')
+        const errorMessage = typeof (event.data.message || event.data.error) === 'string'
+          ? (event.data.message || event.data.error || 'An error occurred')
+          : String(event.data.message || event.data.error || 'An error occurred')
+        setMessages(prev =>
+          prev.map(message =>
+            message.id === messageId
+              ? { ...message, content: `❌ Error: ${errorMessage}`, eventType: 'error', isStreaming: false, done: true }
+              : message
+          )
+        )
+        if (eventSourceRef.current) {
+          eventSourceRef.current.close()
+          eventSourceRef.current = null
+        }
+        return
+      }
+
+      case 'done': {
+        setIsLoading(false)
+        streamingMessageRef.current = null
+        const messageId = currentAssistantMessageIdRef.current
+        if (messageId) {
+          markMessageDone(messageId)
+        }
+        if (event.data.report_path) {
+          showToast('Scan completed! Report available.', 'success')
+        }
+        if (eventSourceRef.current) {
+          eventSourceRef.current.close()
+          eventSourceRef.current = null
+        }
+        return
+      }
+
+      default:
+        if (event.data.message) {
+          const messageId = ensureAssistantForText()
+          updateMessageContent(messageId, String(event.data.message || ''))
+        }
+        return
+    }
+  }
+
+
+  const filteredChatHistory = chatHistory.filter(chat =>
+    chat.title.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
+
+  const getUserInitials = (name?: string, email?: string) => {
+    if (name) {
+      const parts = name.split(' ')
+      if (parts.length >= 2) {
+        return (parts[0][0] + parts[1][0]).toUpperCase()
+      }
+      return name.substring(0, 2).toUpperCase()
+    }
+    if (email) {
+      return email.substring(0, 2).toUpperCase()
+    }
+    return 'AI'
+  }
+
+  const models = [
+    'Claude-Opus-4.5',
+    'ChatGPT-5.2',
+    'Gemini-3',
+    'Grok-4',
+    'Custom Model'
+  ]
+
+  if (!isAuthenticated) {
+    return null
+  }
+
+  return (
+    <div className="dashboard">
+      <ToastContainer toasts={toasts} onClose={removeToast} />
+      {/* Top Red Line */}
+      <div className="dashboard-top-line"></div>
+
+      {/* Left Sidebar */}
+      <aside className={`dashboard-sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
+        <div className="sidebar-header">
+          <div className="sidebar-logo">
+            <img src={logo} alt="GwehAI" className="sidebar-logo-image" />
+            {sidebarOpen && (
+              <>
+                <span className="logo-text">Gweh</span>
+                <span className="logo-badge">[AI]</span>
+              </>
+            )}
+          </div>
+          <button 
+            className="sidebar-toggle"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              {sidebarOpen ? (
+                <path d="M15 18l-6-6 6-6" />
+              ) : (
+                <path d="M9 18l6-6-6-6" />
+              )}
+            </svg>
+          </button>
+        </div>
+
+        {/* User Profile Section */}
+        {sidebarOpen && (
+          <div className="sidebar-user-profile">
+            <div className="user-avatar">
+              <span className="avatar-initials">{getUserInitials(user?.name, user?.email)}</span>
+            </div>
+            <div className="user-info">
+              <div className="user-name">{user?.name || user?.email}</div>
+              {user?.email && user?.name && (
+                <div className="user-handle">@{user.email.split('@')[0]}</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <nav className="sidebar-nav">
+          <button className="nav-item" onClick={handleNewChat} title="New Chat">
+            {sidebarOpen ? (
+              <>
+                <span className="nav-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 5v14M5 12h14"/>
+                  </svg>
+                </span>
+                <span className="nav-text">New Chat</span>
+              </>
+            ) : (
+              <span className="nav-icon-only">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+              </span>
+            )}
+          </button>
+          <button 
+            className="nav-item" 
+            onClick={() => setShowSearch(!showSearch)} 
+            title="Search Chat"
+          >
+            {sidebarOpen ? (
+              <>
+                <span className="nav-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="11" cy="11" r="8"/>
+                    <path d="m21 21-4.35-4.35"/>
+                  </svg>
+                </span>
+                <span className="nav-text">Search Chat</span>
+              </>
+            ) : (
+              <span className="nav-icon-only">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="8"/>
+                  <path d="m21 21-4.35-4.35"/>
+                </svg>
+              </span>
+            )}
+          </button>
+
+          {sidebarOpen && showSearch && (
+            <div className="sidebar-search">
+              <input
+                type="text"
+                placeholder="Search chats..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="search-input"
+                autoFocus
+              />
+            </div>
+          )}
+
+          {sidebarOpen && (
+            <>
+              <div className="sidebar-divider"></div>
+              <div className="sidebar-section-header">
+                <span className="section-title">YOUR CHATS</span>
+                <span className="section-chevron">▼</span>
+              </div>
+            </>
+          )}
+
+          <div className="chat-history-list">
+            {filteredChatHistory.map((chat) => (
+              <div
+                key={chat.id}
+                className={`chat-history-item ${currentChatId === chat.id ? 'active' : ''}`}
+                onClick={() => {
+                  if (editingChatId !== chat.id) {
+                    handleLoadChat(chat.id)
+                  }
+                }}
+              >
+                {sidebarOpen ? (
+                  <>
+                    {editingChatId === chat.id ? (
+                      <input
+                        type="text"
+                        className="chat-title-input"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        onBlur={() => handleSaveRename(chat.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleSaveRename(chat.id, e)
+                          } else if (e.key === 'Escape') {
+                            handleCancelRename()
+                          }
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        autoFocus
+                      />
+                    ) : (
+                      <span className="chat-title">{chat.title}</span>
+                    )}
+                    <div className="chat-menu-container">
+                      <button
+                        className="chat-menu-button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setOpenMenuId(openMenuId === chat.id ? null : chat.id)
+                        }}
+                        title="More options"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="5" r="1"/>
+                          <circle cx="12" cy="12" r="1"/>
+                          <circle cx="12" cy="19" r="1"/>
+                        </svg>
+                      </button>
+                      {openMenuId === chat.id && (
+                        <div className="chat-menu-dropdown">
+                          <button
+                            className="chat-menu-item"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleRenameChat(chat.id)
+                            }}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                            </svg>
+                            Rename
+                          </button>
+                          <button
+                            className="chat-menu-item delete"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteChat(chat.id)
+                            }}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <polyline points="3 6 5 6 21 6"/>
+                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                            </svg>
+                            Delete chat
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <span className="chat-icon">💬</span>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {sidebarOpen && (
+            <>
+              <div className="sidebar-divider"></div>
+              <div className="sidebar-menu-section">
+                <button className="nav-item" onClick={() => setShowUpgradeModal(true)} title="Upgrade Plan">
+                  <span className="nav-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                      <path d="M2 17l10 5 10-5M2 12l10 5 10-5"/>
+                    </svg>
+                  </span>
+                  <span className="nav-text">Upgrade Plan</span>
+                </button>
+                <button className="nav-item" onClick={() => setShowSettingsModal(true)} title="Settings">
+                  <span className="nav-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="3"/>
+                      <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24"/>
+                    </svg>
+                  </span>
+                  <span className="nav-text">Settings</span>
+                </button>
+                <button className="nav-item" onClick={() => setShowHelpModal(true)} title="Help">
+                  <span className="nav-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>
+                    </svg>
+                  </span>
+                  <span className="nav-text">Help</span>
+                  <span className="nav-chevron">▶</span>
+                </button>
+                <div className="sidebar-divider"></div>
+                <button className="nav-item" onClick={handleLogout} title="Log out">
+                  <span className="nav-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
+                    </svg>
+                  </span>
+                  <span className="nav-text">Log out</span>
+                </button>
+              </div>
+            </>
+          )}
+        </nav>
+
+      </aside>
+
+      {/* Main Content */}
+      <div className={`dashboard-main ${!sidebarOpen ? 'sidebar-closed' : ''}`}>
+        {/* Top Header */}
+        <header className="dashboard-header">
+          {/* Mobile hamburger menu button */}
+          <button 
+            className="mobile-menu-toggle"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            aria-label="Toggle menu"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              {sidebarOpen ? (
+                <path d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path d="M3 12h18M3 6h18M3 18h18" />
+              )}
+            </svg>
+          </button>
+          <nav className="header-nav">
+            <a href="#" className="header-link" onClick={(e) => { e.preventDefault(); setShowReportModal(true); }}>Report</a>
+            <a href="#" className="header-link" onClick={(e) => { e.preventDefault(); setShowPlanModal(true); }}>Plan</a>
+          </nav>
+          <div className="header-actions">
+            <span className="user-email">{user?.email}</span>
+          </div>
+        </header>
+
+        {/* Chat Area */}
+        <main className="dashboard-chat">
+          {/* Logo + title only when there is no conversation yet */}
+          {messages.length === 0 && (
+            <div className="chat-logo-section">
+              <div className="chat-logo">
+                <img src={logo} alt="GwehAI" className="chat-logo-image" />
+              </div>
+              <h1 className="chat-logo-text">GwehAI</h1>
+            </div>
+          )}
+
+          {/* Messages */}
+          <div className="chat-messages-container">
+            {messages.length === 0 ? (
+              <div className="chat-empty">
+                <p className="empty-text">Start a conversation with GwehAI</p>
+                <p className="empty-subtext">Ask security questions or request a pentest (e.g., "What is SQL injection?" or "pentest https://example.com")</p>
+              </div>
+            ) : (
+              <div className="chat-messages">
+                {messages.map((message) => {
+                  const toolIds = messageTools[message.id] || []
+                  const toolState = messageToolState[message.id]
+                  const runningTools = toolIds.some((toolId) => tools[toolId]?.status === 'running')
+                  const visibleToolIds = toolIds.filter((toolId) => {
+                    const tool = tools[toolId]
+                    if (!tool) return false
+                    const toolName = (tool.name || '').toLowerCase()
+                    if (toolName === 'create_finding') {
+                      return false
+                    }
+                    const commandCandidate =
+                      tool.input?.args?.command ||
+                      tool.input?.command ||
+                      tool.input?.args?.cmd ||
+                      tool.input?.args?.query ||
+                      tool.input?.args?.url ||
+                      ''
+                    const hasCommand = typeof commandCandidate === 'string' && commandCandidate.trim().length > 0
+                    const hasLogs = Array.isArray(tool.logs) && tool.logs.length > 0
+                    const hasOutput = tool.output != null && (typeof tool.output === 'string' ? tool.output.trim().length > 0 : true)
+                    return hasCommand || hasLogs || hasOutput
+                  })
+
+                  return (
+                  <div key={message.id} className={`chat-message ${message.role} ${message.eventType ? `event-${message.eventType}` : ''}`}>
+                    <div className="message-avatar">
+                      {message.role === 'user' ? (
+                        <span className="message-avatar-label">[USER]</span>
+                      ) : (
+                        <img src={logo} alt="GwehAI" className="message-avatar-logo" />
+                      )}
+                    </div>
+                    <div className="message-content">
+                      <div className="message-bubble">
+                        <div className="message-text">
+                        {message.eventType === 'thinking' && !message.content ? (
+                          <div className="thinking-indicator">
+                            <span className="thinking-dots">
+                              <span></span><span></span><span></span>
+                            </span>
+                            <span className="thinking-text">Thinking...</span>
+                          </div>
+                        ) : message.isStreaming && !message.content ? (
+                          <span className="typing-indicator">
+                            <span></span><span></span><span></span>
+                          </span>
+                        ) : (
+                          <>
+                            {message.role === 'assistant' ? (
+                              <MarkdownMessage 
+                                content={typeof message.content === 'string' 
+                                  ? message.content 
+                                  : message.content 
+                                    ? String(message.content) 
+                                    : ''}
+                                isStreaming={message.isStreaming && !!message.content}
+                              />
+                            ) : (
+                              <span className="message-content-text">
+                                {typeof message.content === 'string' 
+                                  ? message.content 
+                                  : message.content 
+                                    ? String(message.content) 
+                                    : ''}
+                              </span>
+                            )}
+                          </>
+                        )}
+                        </div>
+                        
+                        {/* Loading line while tools run */}
+                        {message.role === 'assistant' && (
+                          (runningTools || (toolState?.activeTools && toolState.activeTools > 0)) ? (
+                            <div className="assistant-action-line">
+                              EXECUTING
+                              <span className="loading-dots">
+                                <span></span><span></span><span></span>
+                              </span>
+                            </div>
+                          ) : null
+                        )}
+                      
+                        {/* Tool Panel - Show tools for assistant messages */}
+                        {message.role === 'assistant' && (visibleToolIds.length > 0 || toolState?.activeTools) && (
+                          <div className="tool-panel">
+                            <div className="tool-panel-header" onClick={(e) => {
+                              const body = (e.currentTarget.nextElementSibling as HTMLElement)
+                              if (body) {
+                                body.style.display = body.style.display === 'none' ? 'block' : 'none'
+                                const toggle = e.currentTarget.querySelector('.tool-panel-toggle')
+                                if (toggle) {
+                                  toggle.textContent = body.style.display === 'none' ? '▼' : '▲'
+                                }
+                              }
+                            }}>
+                              <div className="tool-panel-title">
+                                <span className="icon">⚙︎</span>
+                                <span>Terminal</span>
+                              </div>
+                              <div className="tool-panel-toggle">▼</div>
+                            </div>
+                            <div className="tool-panel-body">
+                              {visibleToolIds.map((toolId) => {
+                                const tool = tools[toolId]
+                                if (!tool) return null
+
+                                const commandCandidate =
+                                  tool.input?.args?.command ||
+                                  tool.input?.command ||
+                                  tool.input?.args?.cmd ||
+                                  tool.input?.args?.query ||
+                                  tool.input?.args?.url ||
+                                  ''
+                                const hasCommand = typeof commandCandidate === 'string' && commandCandidate.trim().length > 0
+                                const hasLogs = Array.isArray(tool.logs) && tool.logs.length > 0
+                                const hasOutput = tool.output != null && (typeof tool.output === 'string' ? tool.output.trim().length > 0 : true)
+
+                                return (
+                                  <div key={toolId} className="tool-card">
+                                    <div className="terminal-titlebar">
+                                      <span className="terminal-dots">
+                                        <span></span>
+                                        <span></span>
+                                        <span></span>
+                                      </span>
+                                      <span className="terminal-title">
+                                        Terminal{tool.name ? ` • ${tool.name}` : ''}
+                                      </span>
+                                    </div>
+                                    <div className="tool-terminal">
+                                      {hasCommand && (
+                                        <div className="tool-terminal-line tool-terminal-command">
+                                          <span className="tool-terminal-prompt">$</span>
+                                          <span>{commandCandidate}</span>
+                                        </div>
+                                      )}
+                                      {hasLogs && tool.logs.map((log, logIdx) => (
+                                        <div key={logIdx} className="tool-terminal-line">
+                                          {log}
+                                        </div>
+                                      ))}
+                                      {hasOutput && !hasLogs && (
+                                        <div className="tool-terminal-line">
+                                          {typeof tool.output === 'string' ? tool.output : JSON.stringify(tool.output, null, 2)}
+                                        </div>
+                                      )}
+                                      {!hasLogs && !hasOutput && (
+                                        <div className="tool-terminal-line">(waiting for output...)</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                              {visibleToolIds.length === 0 && toolState?.activeTools ? (
+                                <div className="tool-card">
+                                  <div className="terminal-titlebar">
+                                    <span className="terminal-dots">
+                                      <span></span>
+                                      <span></span>
+                                      <span></span>
+                                    </span>
+                                    <span className="terminal-title">Terminal • Waiting</span>
+                                  </div>
+                                  <div className="tool-terminal">
+                                    <div className="tool-terminal-line">(running tools...)</div>
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {!message.isStreaming && (
+                        <div className="message-time">
+                          {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )})}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+          </div>
+
+          {/* Input Area - centered like ChatGPT */}
+          <div className="chat-input-area">
+            {isVoiceRecording ? (
+              <div className="voice-input-shell">
+                <div className="voice-input-container">
+                  <div className="voice-wave-row">
+                    <div className="voice-wave-line" />
+                  </div>
+                  <div className="voice-input-footer">
+                    <div className="voice-status">
+                      <span className="voice-status-dot" />
+                      <span className="voice-status-text">
+                        {voiceTranscript ? 'Captured voice input' : 'Listening...'}
+                      </span>
+                    </div>
+                    <div className="voice-actions">
+                      <button
+                        type="button"
+                        className="voice-action-btn cancel"
+                        onClick={cancelVoiceInput}
+                      >
+                        ✕
+                      </button>
+                      <button
+                        type="button"
+                        className="voice-action-btn confirm"
+                        onClick={confirmVoiceInput}
+                        disabled={!voiceTranscript.trim()}
+                      >
+                        ✓
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="input-container">
+                <button className="input-attach">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+                  </svg>
+                </button>
+                <textarea
+                  ref={inputRef}
+                  className="chat-input"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="Ask a question or request a pentest..."
+                  rows={1}
+                  disabled={isLoading}
+                />
+                <div className="input-actions">
+                  <button className="input-voice" type="button" onClick={startVoiceRecognition} title="Voice input">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+                      <path d="M19 10v2a7 7 0 01-14 0v-2" />
+                      <line x1="12" y1="19" x2="12" y2="23" />
+                      <line x1="8" y1="23" x2="16" y2="23" />
+                    </svg>
+                  </button>
+                  <button 
+                    className="input-send"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={handleSend}
+                    disabled={isLoading || !input.trim()}
+                    title="Send message"
+                  >
+                    {isLoading ? (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="loading-spinner">
+                        <circle cx="12" cy="12" r="10" strokeOpacity="0.3" />
+                        <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+                      </svg>
+                    ) : (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13" />
+                        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
+
+      {/* Upgrade Plan Modal */}
+      {showUpgradeModal && (
+        <div className="modal-overlay" onClick={() => setShowUpgradeModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Upgrade Plan</h2>
+              <button className="modal-close" onClick={() => setShowUpgradeModal(false)}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="upgrade-plans-grid">
+                {[
+                  { points: 100, price: 20, name: 'Starter Pack' },
+                  { points: 200, price: 35, name: 'Pro Pack', save: 5 },
+                  { points: 500, price: 70, name: 'Expert Pack', save: 30, popular: true },
+                  { points: 600, price: 100, name: 'Elite Pack', save: 20 },
+                ].map((pack, index) => (
+                  <div key={index} className={`upgrade-plan-card ${pack.popular ? 'popular' : ''}`}>
+                    {pack.popular && <div className="popular-badge">Most Popular</div>}
+                    <div className="plan-header">
+                      <h3>{pack.name}</h3>
+                      {pack.save && <div className="save-badge">Save ${pack.save}</div>}
+                    </div>
+                    <div className="plan-price">
+                      <span className="price">${pack.price}</span>
+                      <span className="points">for {pack.points} points</span>
+                      <span className="price-per-point">${(pack.price / pack.points).toFixed(2)} per point</span>
+                    </div>
+                    <button className="plan-button" onClick={() => {
+                      showToast(`Redirecting to purchase ${pack.points} points for $${pack.price}...`, 'info')
+                      setShowUpgradeModal(false)
+                    }}>
+                      Buy Now
+                    </button>
+                  </div>
+                ))}
+                <div className="upgrade-plan-card enterprise">
+                  <div className="plan-header">
+                    <h3>Enterprise</h3>
+                  </div>
+                  <div className="plan-price">
+                    <span className="price">Custom</span>
+                    <span className="points">Tailored to your needs</span>
+                  </div>
+                  <ul className="enterprise-features">
+                    <li>Volume Discounts</li>
+                    <li>Dedicated Support</li>
+                    <li>Custom Integrations</li>
+                  </ul>
+                  <button className="plan-button" onClick={() => {
+                    window.location.href = '/contact'
+                    setShowUpgradeModal(false)
+                  }}>
+                    Contact Us
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Settings Modal */}
+      {showSettingsModal && (
+        <div className="modal-overlay" onClick={() => setShowSettingsModal(false)}>
+          <div className="modal-content settings-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Settings</h2>
+              <button className="modal-close" onClick={() => setShowSettingsModal(false)}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="settings-section">
+                <h3 className="settings-section-title">Authentication</h3>
+                <div className="settings-item">
+                  <label>Add Google Auth</label>
+                  <button className="settings-button" onClick={() => window.location.href = '/api/auth/google'}>
+                    {(user as any)?.googleId ? 'Google Account Connected' : 'Connect Google Account'}
+                  </button>
+                </div>
+                <div className="settings-item">
+                  <label>Email</label>
+                  <input 
+                    type="email" 
+                    className="settings-input" 
+                    value={settingsData.email}
+                    onChange={(e) => setSettingsData({ ...settingsData, email: e.target.value })}
+                  />
+                </div>
+                <div className="settings-item">
+                  <label>Password</label>
+                  <input 
+                    type="password" 
+                    className="settings-input" 
+                    placeholder="Enter new password (leave blank to keep current)"
+                    value={settingsData.password}
+                    onChange={(e) => setSettingsData({ ...settingsData, password: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="settings-section">
+                <h3 className="settings-section-title">Preferences</h3>
+                <div className="settings-item">
+                  <label>Default Language</label>
+                  <CustomSelect
+                    value={settingsData.defaultLanguage}
+                    onChange={(value) => setSettingsData({ ...settingsData, defaultLanguage: value })}
+                    options={[
+                      { value: 'en', label: 'English' },
+                      { value: 'es', label: 'Spanish' },
+                      { value: 'fr', label: 'French' },
+                      { value: 'de', label: 'German' },
+                      { value: 'ja', label: 'Japanese' },
+                    ]}
+                    placeholder="Select a language"
+                  />
+                </div>
+                <div className="settings-item">
+                  <label>Default AI Agent</label>
+                  <CustomSelect
+                    value={settingsData.defaultModelId}
+                    onChange={(value) => setSettingsData({ ...settingsData, defaultModelId: value })}
+                    options={availableModels.map((model) => ({
+                      value: model.id,
+                      label: model.displayName || model.name || model.id,
+                      icon: getModelIcon(model.provider || '', model.name || model.displayName),
+                      tag: isProModel(model.name || model.displayName) ? 'Pro' : undefined,
+                    }))}
+                    placeholder="Select a model"
+                  />
+                </div>
+              </div>
+              <div className="settings-actions">
+                <button 
+                  className="settings-save-button" 
+                  onClick={handleSaveSettings}
+                  disabled={isSavingSettings}
+                >
+                  {isSavingSettings ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Help Modal */}
+      {showHelpModal && (
+        <div className="modal-overlay" onClick={() => setShowHelpModal(false)}>
+          <div className="modal-content help-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Help & Support</h2>
+              <button className="modal-close" onClick={() => setShowHelpModal(false)}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body help-modal-body">
+              <div className="help-chat-container">
+                <div className="help-messages">
+                  {helpMessages.length === 0 ? (
+                    <div className="help-empty">
+                      <p>How can I help you today?</p>
+                    </div>
+                  ) : (
+                    helpMessages.map((msg, idx) => (
+                      <div key={idx} className={`help-message ${msg.role}`}>
+                        <div className="help-message-content">{msg.content}</div>
+                      </div>
+                    ))
+                  )}
+                  {isHelpLoading && (
+                    <div className="help-message assistant">
+                      <div className="help-message-content">
+                        <span className="typing-indicator">
+                          <span></span><span></span><span></span>
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  <div ref={helpMessagesEndRef} />
+                </div>
+                <div className="help-input-container">
+                  <input
+                    type="text"
+                    className="help-input"
+                    value={helpInput}
+                    onChange={(e) => setHelpInput(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && !isHelpLoading && helpInput.trim()) {
+                        handleHelpSend()
+                      }
+                    }}
+                    placeholder="Ask a question..."
+                  />
+                  <button
+                    className="help-send-button"
+                    onClick={handleHelpSend}
+                    disabled={isHelpLoading || !helpInput.trim()}
+                  >
+                    {isHelpLoading ? '...' : '>'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report Modal */}
+      {showReportModal && (
+        <div className="modal-overlay" onClick={() => setShowReportModal(false)}>
+          <div className="modal-content report-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Security Reports</h2>
+              <button className="modal-close" onClick={() => setShowReportModal(false)}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="report-table-container">
+                <table className="report-table">
+                  <thead>
+                    <tr>
+                      <th>Test Name</th>
+                      <th>Target</th>
+                      <th>Files</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {isLoadingReports ? (
+                      <tr>
+                        <td colSpan={3} className="report-loading-cell">
+                          Loading reports...
+                        </td>
+                      </tr>
+                    ) : reports.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="report-empty-cell">
+                          No reports yet. Generate a security test to see it here.
+                        </td>
+                      </tr>
+                    ) : (
+                      reports.map((report) => {
+                        const displayName =
+                          (report.metadata as any)?.name ||
+                          (report.metadata as any)?.testName ||
+                          report.jobId
+                        const fileUrl = report.fileUrl
+                        return (
+                          <tr key={report.id}>
+                            <td className="test-name">{displayName}</td>
+                            <td className="target">{report.target || '—'}</td>
+                            <td className="files">
+                              <div className="files-list">
+                                {fileUrl ? (
+                                  <a
+                                    href={fileUrl}
+                                    className="file-download"
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    <svg
+                                      width="16"
+                                      height="16"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                    >
+                                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                      <polyline points="7 10 12 15 17 10" />
+                                      <line x1="12" y1="15" x2="12" y2="3" />
+                                    </svg>
+                                    Download report
+                                  </a>
+                                ) : (
+                                  <span className="no-file">Pending</span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Plan Modal */}
+      {showPlanModal && (
+        <div className="modal-overlay" onClick={() => setShowPlanModal(false)}>
+          <div className="modal-content plan-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">My Plan & Usage</h2>
+              <button className="modal-close" onClick={() => setShowPlanModal(false)}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="plan-info-section">
+                <h3 className="plan-section-title">Current Plan</h3>
+                {isLoadingPlan ? (
+                  <div className="plan-card">
+                    <div className="plan-loading">Loading plan...</div>
+                  </div>
+                ) : !currentPlan ? (
+                  <div className="plan-card">
+                    <div className="plan-card-header">
+                      <span className="plan-name">No active plan</span>
+                    </div>
+                    <div className="plan-details">
+                      <div className="plan-detail-item">
+                        <span className="detail-label">Status:</span>
+                        <span className="detail-value">You are currently on the free tier.</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="plan-card">
+                    <div className="plan-card-header">
+                      <span className="plan-name">{currentPlan.plan?.name || currentPlan.plan?.code || 'Custom Plan'}</span>
+                      <span className="plan-badge">{currentPlan.status.toUpperCase()}</span>
+                    </div>
+                    <div className="plan-details">
+                      <div className="plan-detail-item">
+                        <span className="detail-label">Points:</span>
+                        <span className="detail-value">
+                          {currentPlan.pointsGranted} total
+                        </span>
+                      </div>
+                      <div className="plan-detail-item">
+                        <span className="detail-label">Price:</span>
+                        <span className="detail-value">
+                          {currentPlan.plan?.monthlyPriceUsd != null
+                            ? `$${currentPlan.plan.monthlyPriceUsd}`
+                            : 'Custom'}
+                        </span>
+                      </div>
+                      <div className="plan-detail-item">
+                        <span className="detail-label">Status:</span>
+                        <span className={`detail-value ${currentPlan.status === 'active' ? 'active' : ''}`}>
+                          {currentPlan.status}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="usage-section">
+                <h3 className="plan-section-title">Usage Statistics</h3>
+                <div className="usage-stats">
+                  <div className="usage-stat-card">
+                    <div className="stat-label">Wallet Points</div>
+                    <div className="stat-value">
+                      {pointsBalance != null ? pointsBalance : '—'}
+                    </div>
+                  </div>
+                  <div className="usage-stat-card">
+                    <div className="stat-label">Points Used</div>
+                    <div className="stat-value">
+                      {currentPlan
+                        ? `${currentPlan.pointsUsed} / ${currentPlan.pointsGranted || currentPlan.pointsUsed}`
+                        : '0 / 0'}
+                    </div>
+                    <div className="stat-progress">
+                      <div
+                        className="stat-progress-bar"
+                        style={{
+                          width: currentPlan && currentPlan.pointsGranted
+                            ? `${Math.min(
+                                100,
+                                Math.round(
+                                  (currentPlan.pointsUsed / currentPlan.pointsGranted) * 100,
+                                ),
+                              )}%`
+                            : '0%',
+                        }}
+                      ></div>
+                    </div>
+                    <div className="stat-percentage">
+                      {currentPlan && currentPlan.pointsGranted
+                        ? `${Math.min(
+                            100,
+                            Math.round(
+                              (currentPlan.pointsUsed / currentPlan.pointsGranted) * 100,
+                            ),
+                          )}%`
+                        : '0%'}
+                    </div>
+                  </div>
+                  <div className="usage-stat-card">
+                    <div className="stat-label">Points Remaining</div>
+                    <div className="stat-value">
+                      {currentPlan && currentPlan.pointsGranted
+                        ? Math.max(currentPlan.pointsGranted - currentPlan.pointsUsed, 0)
+                        : 0}
+                    </div>
+                  </div>
+                  <div className="usage-stat-card">
+                    <div className="stat-label">Total Messages</div>
+                    <div className="stat-value">
+                      {currentPlan ? currentPlan.messagesSent : 0}
+                    </div>
+                  </div>
+                  <div className="usage-stat-card">
+                    <div className="stat-label">Reports Generated</div>
+                    <div className="stat-value">
+                      {currentPlan ? currentPlan.reportsGenerated : 0}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="plan-actions">
+                <button className="upgrade-plan-button" onClick={() => {
+                  setShowPlanModal(false)
+                  setShowUpgradeModal(true)
+                }}>
+                  Upgrade Plan
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  )
+}
+
+export default Dashboard

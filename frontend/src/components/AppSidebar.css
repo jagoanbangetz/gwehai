@@ -1,0 +1,169 @@
+/* Outer aside: desktop width or mobile drawer */
+.app-sidebar {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: oklch(0.05 0 0);
+  border-right: 1px solid oklch(0.2 0 0 / 0.3);
+  flex-shrink: 0;
+  transition: width 180ms ease;
+}
+
+/* Inner 3-section layout: header (sticky) | scroll (only scrollable) | footer (sticky) */
+.sidebar {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  background: oklch(0.05 0 0);
+}
+
+.sidebarHeader {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  flex-shrink: 0;
+  background: oklch(0.05 0 0);
+  border-bottom: 1px solid oklch(0.2 0 0 / 0.3);
+}
+
+.sidebarScroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+  padding-bottom: 12px;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ChatGPT-like thin scrollbar inside sidebar only */
+.sidebarScroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.sidebarScroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebarScroll::-webkit-scrollbar-thumb {
+  background: oklch(0.35 0 0 / 0.5);
+  border-radius: 4px;
+}
+
+.sidebarScroll::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.45 0 0 / 0.6);
+}
+
+.sidebarScroll::-webkit-scrollbar-thumb:active {
+  background: oklch(0.5 0 0 / 0.7);
+}
+
+/* Firefox */
+.sidebarScroll {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.35 0 0 / 0.5) transparent;
+}
+
+.sidebarFooter {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  flex-shrink: 0;
+  background: oklch(0.05 0 0);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 12px;
+}
+
+/* Desktop: always visible, fixed width */
+.app-sidebar-desktop {
+  width: 280px;
+}
+
+/* Desktop collapsed: narrow strip, avatar-only footer */
+.app-sidebar-desktop.app-sidebar-desktop-collapsed {
+  width: 72px;
+}
+
+/* Collapsed: header shows only logo icon + collapse button; nav shows only icons */
+.app-sidebar-desktop-collapsed .logo-text,
+.app-sidebar-desktop-collapsed .logo-badge {
+  display: none;
+}
+
+.app-sidebar-desktop-collapsed .nav-text {
+  display: none;
+}
+
+.app-sidebar-desktop-collapsed .sidebar-header {
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 12px 8px;
+  gap: 8px;
+}
+
+.app-sidebar-desktop-collapsed .sidebar-logo {
+  justify-content: center;
+}
+
+.app-sidebar-desktop-collapsed .sidebar-nav-header .nav-item {
+  justify-content: center;
+  padding: 10px;
+}
+
+.app-sidebar-desktop-collapsed .sidebar-search {
+  display: none;
+}
+
+/* Mobile: drawer overlay */
+.app-sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: oklch(0 0 0 / 0.5);
+  z-index: 999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.app-sidebar-overlay-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Mobile: drawer slides in from left */
+.app-sidebar-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 280px;
+  max-width: 85vw;
+  z-index: 1000;
+  transform: translateX(-100%);
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: none;
+}
+
+.app-sidebar-drawer-open {
+  transform: translateX(0);
+  box-shadow: 4px 0 24px oklch(0 0 0 / 0.5);
+}
+
+/* Mobile: <1024px — drawer overlay. Align with useMediaQuery("(max-width: 1023px)"). */
+@media (max-width: 1023px) {
+  .app-sidebar-overlay {
+    display: block;
+  }
+}
+
+@media (min-width: 1024px) {
+  .app-sidebar-drawer {
+    position: relative;
+    transform: none;
+    box-shadow: none;
+  }
+}

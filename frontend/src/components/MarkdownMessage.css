@@ -1,0 +1,188 @@
+/* Markdown typography: readable line-height, spacing (dark theme) */
+
+.markdown-content-wrapper {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.markdown-content {
+  flex: 1;
+  width: 100%;
+  color: rgba(255, 255, 255, 0.92);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.6;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  min-width: 0;
+}
+
+.markdown-cursor {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.markdown-content .markdown-paragraph {
+  margin: 0.5em 0;
+  line-height: 1.6;
+}
+
+.markdown-content .markdown-paragraph:first-child {
+  margin-top: 0;
+}
+
+.markdown-content .markdown-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content .markdown-paragraph + .markdown-paragraph {
+  margin-top: 0.6em;
+}
+
+/* Headings */
+.markdown-content .markdown-heading {
+  font-weight: 600;
+  margin: 0.9em 0 0.4em 0;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.markdown-content .markdown-h1 {
+  font-size: 1.75rem;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+}
+
+.markdown-content .markdown-h2 {
+  font-size: 1.4rem;
+  margin-top: 0.9em;
+  margin-bottom: 0.45em;
+}
+
+.markdown-content .markdown-h3 {
+  font-size: 1.2rem;
+  margin-top: 0.8em;
+  margin-bottom: 0.4em;
+}
+
+.markdown-content .markdown-h4 {
+  font-size: 1.1rem;
+  margin-top: 0.7em;
+  margin-bottom: 0.35em;
+}
+
+/* Inline code: chip style */
+.markdown-inline-code {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-family: ui-monospace, 'JetBrains Mono', 'Cascadia Code', monospace;
+  font-size: 0.9em;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Code block: use CodeBlock.css; ensure wrapper doesn't double-style */
+.markdown-content .markdown-code-block {
+  margin: 0.6em 0;
+}
+
+/* Lists */
+.markdown-content .markdown-list {
+  margin: 0.5em 0;
+  padding-left: 1.25em;
+  line-height: 1.6;
+}
+
+.markdown-content .markdown-ul {
+  list-style-type: disc;
+}
+
+.markdown-content .markdown-ol {
+  list-style-type: decimal;
+}
+
+.markdown-content .markdown-list-item {
+  margin: 0.3em 0;
+  line-height: 1.6;
+}
+
+.markdown-content .markdown-list-item input[type="checkbox"] {
+  margin-right: 0.5em;
+  accent-color: rgba(255, 255, 255, 0.7);
+}
+
+/* Blockquotes */
+.markdown-content .markdown-blockquote {
+  border-left: 4px solid rgba(255, 255, 255, 0.25);
+  padding-left: 0.75rem;
+  margin: 0.6em 0;
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  line-height: 1.6;
+}
+
+/* Links */
+.markdown-content .markdown-link {
+  color: rgba(120, 180, 255, 0.95);
+  text-decoration: underline;
+  text-decoration-color: rgba(120, 180, 255, 0.5);
+}
+
+.markdown-content .markdown-link:hover {
+  color: rgba(150, 200, 255, 1);
+}
+
+/* Tables */
+.markdown-content .markdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75em 0;
+  overflow-x: auto;
+  display: block;
+  max-width: 100%;
+}
+
+.markdown-content .markdown-thead {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.markdown-content .markdown-th {
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.markdown-content .markdown-td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.markdown-content .markdown-hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  margin: 1em 0;
+}
+
+.markdown-content .markdown-strong {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.markdown-content .markdown-em {
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.markdown-content .markdown-del {
+  text-decoration: line-through;
+  color: rgba(255, 255, 255, 0.6);
+}

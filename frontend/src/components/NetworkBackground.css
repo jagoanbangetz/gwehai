@@ -1,0 +1,155 @@
+.network-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.3;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.network-svg {
+  width: 100%;
+  height: 100%;
+  animation: float 20s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-20px, -20px) scale(1.05);
+  }
+}
+
+.cloud-group {
+  animation: pulse 4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+.cloud-main {
+  fill: rgba(255, 255, 255, 0.1);
+  stroke: rgba(255, 255, 255, 0.2);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 10px rgba(99, 102, 241, 0.3));
+}
+
+.cloud-dot {
+  fill: rgba(99, 102, 241, 0.6);
+  animation: blink 2s ease-in-out infinite;
+}
+
+.cloud-dot:nth-child(2) {
+  animation-delay: 0.3s;
+}
+
+.cloud-dot:nth-child(3) {
+  animation-delay: 0.6s;
+}
+
+.cloud-dot:nth-child(4) {
+  animation-delay: 0.9s;
+}
+
+@keyframes blink {
+  0%, 100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.network-node {
+  animation: nodeFloat 6s ease-in-out infinite;
+}
+
+.user-node {
+  animation-delay: 0s;
+}
+
+.globe-node {
+  animation-delay: 1.5s;
+}
+
+.building-node {
+  animation-delay: 3s;
+}
+
+.web-node {
+  animation-delay: 4.5s;
+}
+
+@keyframes nodeFloat {
+  0%, 100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(5px, -5px);
+  }
+}
+
+.node-circle {
+  fill: rgba(255, 255, 255, 0.05);
+  stroke: rgba(99, 102, 241, 0.4);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.2));
+}
+
+.node-building {
+  fill: rgba(255, 255, 255, 0.05);
+  stroke: rgba(99, 102, 241, 0.4);
+  stroke-width: 2;
+}
+
+.node-web {
+  fill: rgba(255, 255, 255, 0.05);
+  stroke: rgba(99, 102, 241, 0.4);
+  stroke-width: 2;
+}
+
+.node-dot {
+  fill: rgba(99, 102, 241, 0.8);
+  animation: pulseDot 2s ease-in-out infinite;
+}
+
+@keyframes pulseDot {
+  0%, 100% {
+    r: 3;
+    opacity: 0.6;
+  }
+  50% {
+    r: 5;
+    opacity: 1;
+  }
+}
+
+.connection-line {
+  stroke: rgba(99, 102, 241, 0.2);
+  stroke-width: 1.5;
+  stroke-dasharray: 5, 5;
+  animation: dashMove 3s linear infinite;
+  filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.3));
+}
+
+@keyframes dashMove {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 20;
+  }
+}

@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  pentest-tools:
+    build:
+      context: ./backend/skills
+      dockerfile: Dockerfile.pentest-tools
+    image: gwehai-pentest-tools
+    container_name: gwehai-pentest-tools
+    # Keep running so backend can: docker exec gwehai-pentest-tools <cmd>
+    command: ["sleep", "infinity"]
+    # Optional: mount workspace for saving outputs (e.g. reports) into host
+    # volumes:
+    #   - ./backend/workspace:/workspace
+    networks:
+      - gwehai-network
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: gwehai-postgres
+    environment:
+      POSTGRES_USER: gwehai
+      POSTGRES_PASSWORD: gwehai_dev_password
+      POSTGRES_DB: gwehai_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gwehai -d gwehai_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gwehai-network
+
+volumes:
+  postgres_data:
+
+networks:
+  gwehai-network:
+    driver: bridge

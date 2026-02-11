@@ -1,0 +1,320 @@
+.custom-select {
+  position: relative;
+  width: 100%;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.custom-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: oklch(0.95 0 0);
+  border: 1px solid oklch(0.85 0 0 / 0.3);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  color: oklch(0 0 0);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  user-select: none;
+  min-height: 44px;
+}
+
+.custom-select-trigger-content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.custom-select-trigger-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.custom-select-trigger-tag {
+  background: oklch(0.2 0 0 / 0.1);
+  color: oklch(0.4 0 0);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.custom-select-trigger:hover {
+  border-color: oklch(0.7 0 0 / 0.4);
+  background: oklch(0.98 0 0);
+}
+
+.custom-select.open .custom-select-trigger {
+  border-color: oklch(0.6 0 0 / 0.5);
+  background: oklch(0.98 0 0);
+  box-shadow: 
+    0 0 0 1px oklch(0.7 0 0 / 0.2),
+    0 4px 12px oklch(0 0 0 / 0.1);
+}
+
+.custom-select-value {
+  flex: 1;
+  text-align: left;
+}
+
+.custom-select-value.placeholder {
+  color: oklch(0.5 0 0);
+}
+
+.custom-select-arrow {
+  flex-shrink: 0;
+  margin-left: 0.75rem;
+  color: oklch(0.4 0 0);
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.custom-select-arrow.open {
+  transform: rotate(180deg);
+}
+
+.custom-select-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: oklch(1 0 0);
+  border: 1px solid oklch(0.85 0 0 / 0.3);
+  border-radius: 8px;
+  box-shadow: 
+    0 8px 32px oklch(0 0 0 / 0.15),
+    0 0 0 1px oklch(0.9 0 0 / 0.2);
+  z-index: 1000;
+  max-height: 320px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  animation: slideDown 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  margin-top: 4px;
+}
+
+.custom-select-search {
+  padding: 0.5rem 0.75rem 0.25rem 0.75rem;
+}
+
+.custom-select-search-input {
+  width: 100%;
+  border-radius: 6px;
+  border: 1px solid oklch(0.85 0 0 / 0.4);
+  padding: 0.4rem 0.6rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  background: oklch(0.96 0 0);
+  color: oklch(0 0 0);
+}
+
+.custom-select-search-input::placeholder {
+  color: oklch(0.6 0 0);
+}
+
+.custom-select-search-input:focus {
+  outline: none;
+  border-color: oklch(0.6 0 0 / 0.7);
+}
+
+/* Dark variant search styling inside chat model select */
+.chat-model-select .custom-select-search-input {
+  background: oklch(0.12 0 0 / 0.98);
+  border-color: oklch(0.4 0 0 / 0.9);
+  color: oklch(0.96 0 0);
+  box-shadow:
+    0 0 0 1px oklch(0.32 0 0 / 0.9),
+    0 6px 16px oklch(0 0 0 / 0.7);
+}
+
+.chat-model-select .custom-select-search-input::placeholder {
+  color: oklch(0.7 0 0);
+}
+
+.chat-model-select .custom-select-search-input:focus {
+  border-color: oklch(0.7 0 0 / 0.9);
+  box-shadow:
+    0 0 0 1px oklch(0.7 0 0 / 0.9),
+    0 8px 20px oklch(0 0 0 / 0.8);
+}
+
+.custom-select-dropdown::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-select-dropdown::-webkit-scrollbar-track {
+  background: oklch(0.1 0 0 / 0.5);
+  border-radius: 3px;
+}
+
+.custom-select-dropdown::-webkit-scrollbar-thumb {
+  background: oklch(0.3 0 0 / 0.6);
+  border-radius: 3px;
+}
+
+.custom-select-dropdown::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.4 0 0 / 0.7);
+}
+
+.custom-select-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1rem;
+  color: oklch(0 0 0);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+  position: relative;
+}
+
+.custom-select-option-content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.custom-select-option-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.custom-select-option-tag {
+  background: oklch(0.2 0.1 120 / 0.2);
+  color: oklch(0.3 0.1 120);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-left: auto;
+  margin-right: 0.5rem;
+}
+
+.custom-select-option:first-child {
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+
+.custom-select-option:last-child {
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+.custom-select-option:hover,
+.custom-select-option.highlighted {
+  background: oklch(0.95 0 0);
+}
+
+.custom-select-option.selected {
+  background: oklch(0.4 0.2 240 / 0.15);
+  color: oklch(0 0 0);
+  font-weight: 600;
+}
+
+.custom-select-option.selected:hover,
+.custom-select-option.selected.highlighted {
+  background: oklch(0.45 0.2 240 / 0.2);
+}
+
+.custom-select-option-label {
+  flex: 1;
+  text-align: left;
+}
+
+.custom-select-checkmark {
+  flex-shrink: 0;
+  margin-left: 0.5rem;
+  color: oklch(0.4 0.2 240);
+  stroke-width: 3;
+  width: 18px;
+  height: 18px;
+}
+
+.custom-select-option.selected .custom-select-checkmark {
+  color: oklch(0.5 0.2 240);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Focus styles for accessibility */
+.custom-select:focus {
+  outline: none;
+}
+
+.custom-select:focus .custom-select-trigger {
+  border-color: oklch(1 0 0 / 0.6);
+  box-shadow: 
+    0 0 0 3px oklch(1 0 0 / 0.1),
+    0 4px 12px oklch(0 0 0 / 0.2);
+}
+
+/* Dark variant for chat input */
+.chat-model-select .custom-select-trigger {
+  background: oklch(0.1 0 0 / 0.95);
+  border: 1px solid oklch(0.3 0 0 / 0.7);
+  color: oklch(1 0 0);
+}
+
+.chat-model-select .custom-select-trigger:hover,
+.chat-model-select .custom-select.open .custom-select-trigger {
+  background: oklch(0.14 0 0 / 0.98);
+  border-color: oklch(0.6 0 0 / 0.8);
+}
+
+.chat-model-select .custom-select-arrow {
+  color: oklch(0.8 0 0);
+}
+
+.chat-model-select .custom-select-value.placeholder {
+  color: oklch(0.6 0 0);
+}
+
+.chat-model-select .custom-select-dropdown {
+  background: oklch(0.12 0 0 / 0.98);
+  border-color: oklch(0.4 0 0 / 0.9);
+  box-shadow:
+    0 12px 32px oklch(0 0 0 / 0.6),
+    0 0 0 1px oklch(0.4 0 0 / 0.8);
+}
+
+.chat-model-select .custom-select-option {
+  color: oklch(0.9 0 0);
+}
+
+.chat-model-select .custom-select-option:hover,
+.chat-model-select .custom-select-option.highlighted {
+  background: oklch(0.2 0 0 / 0.9);
+}
+
+.chat-model-select .custom-select-option.selected {
+  background: oklch(0.35 0.1 240 / 0.6);
+  color: oklch(1 0 0);
+}
+
+.chat-model-select .custom-select-option.selected .custom-select-checkmark {
+  color: oklch(0.9 0.15 240);
+}
