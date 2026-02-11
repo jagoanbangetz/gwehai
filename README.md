@@ -76,6 +76,18 @@ The frontend will run on `http://localhost:3000`
 - Backend: `npm run build`
 - Frontend: `npm run build`
 
+## GwehAI Agent Features (Summary)
+
+GwehAI is a **web application security pentesting assistant**. It uses **skills** (recon, verify, WEB_CHECKLIST, DNS intel, subdomain finder, WAF bypass, Burp-style testing, image-to-text) and **tools** (memory search/get/write, exec, craft_payload, report_finding, multi-session agents) to:
+
+- **Recon** — Map sites, enumerate paths/subdomains, check headers and tech (curl, nmap, dirsearch, nikto).
+- **Verify** — Confirm vulnerabilities (e.g. sqlmap for SQLi, curl for XSS) and save findings with proof (POC).
+- **Checklist-driven pentest** — For “pentest this URL”, loads WEB_CHECKLIST.md and works through recon → input handling (SQLi, XSS) → auth → access control → other; does not stop after one finding.
+- **Multi-agent** — Spawn sub-agents (e.g. Gweh, Shadow, Nexus), delegate recon/verification, and combine findings via sessions_spawn, sessions_send, sessions_history.
+- **Scope & safety** — Only tests in-scope targets (SCOPE.md); every finding requires report_finding with concrete POC; no destructive actions.
+
+For a full feature list (skills, tools, workflow, safety), see **[AGENT_FEATURES.md](./AGENT_FEATURES.md)**.
+
 ## Security Testing Capabilities
 
 GwehAI can help with:
