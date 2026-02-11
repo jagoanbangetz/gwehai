@@ -3446,17 +3446,26 @@
     width: 100%;
   }
 
-  /* Mobile: hide big logo and suggestion buttons for minimal empty state */
+  /* Mobile: show same welcome as desktop (logo + start text); only hide suggestion buttons */
   .chat-logo-section {
-    display: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1rem 0.5rem;
   }
 
   .chat-empty-mobile {
     display: none;
   }
 
+  /* Show "Start a conversation with GwehAI" and examples on mobile like desktop */
   .chat-empty {
-    display: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem 1rem 2rem;
+    text-align: center;
   }
 
   /* Mobile sidebar overlay */

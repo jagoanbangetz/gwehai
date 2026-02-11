@@ -69,12 +69,14 @@ const AppTopBar: React.FC<AppTopBarProps> = ({
       </div>
 
       <div className="app-topbar-right">
-        <button type="button" className="app-topbar-icon" onClick={onProfileClick} aria-label="Menu">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="8" r="2" />
-            <path d="M12 13v6M8 21h8" />
-          </svg>
-        </button>
+        {!mobileLayout && (
+          <button type="button" className="app-topbar-icon" onClick={onProfileClick} aria-label="Menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="8" r="2" />
+              <path d="M12 13v6M8 21h8" />
+            </svg>
+          </button>
+        )}
         {!mobileLayout && userEmail && (
           <span className="app-topbar-email">{userEmail}</span>
         )}
