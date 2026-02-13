@@ -32,6 +32,7 @@ import { ReportsModule } from './reports/reports.module';
 import { PlansModule } from './plans/plans.module';
 import { GwehAIModule } from './gwehai/gwehai.module';
 import { ToolsModule } from './tools/tools.module';
+import { PentestJobsModule } from './pentest-jobs/pentest-jobs.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { ToolsModule } from './tools/tools.module';
     AdminModule,
     GwehAIModule,
     ToolsModule,
+    PentestJobsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -12,9 +12,10 @@ Always start from these when running a full pentest.
 
 | Path | Purpose |
 |------|---------|
+| **skills/CORE_ORCHESTRATOR.md** | Core Orchestrator — one conversation = one PentestContext; PentestState schema; phase gates (recon → exploit → report); checklist order; state IO; reset policy; no duplicate phases. |
 | **skills/WEB_CHECKLIST.md** | Web pentest orchestrator + checklist (Scope → Recon → Enumeration → Verify → Report; recon → input handling → auth → access control → other). |
 | **skills/PENTEST_WORKFLOW.md** | Pentest Workflow & State Machine — stages, locks, Pentest State + Work Registry schema under `daily/<target>/<YYYY-MM-DD>`. |
-| **skills/MULTI_AGENT_COORDINATION.md** | Multi-agent coordination — roles (ReconAgent, EnumAgent, VerifyAgents, ReportAgent), Work Registry, claim/lock protocol, and de-duplication. |
+| **skills/MULTI_AGENT_COORDINATION.md** | Multi-agent coordination — roles (B–H: Recon, Enum, Verify-ACL/Injection/RequestConfig/BusinessLogic, Report), Work Registry, claim/lock, HELP_REQUEST, FINDING_KEY. |
 | **skills/SOUL.md** | Agent persona (who you are, boundaries, behavior). |
 
 ---
@@ -26,6 +27,7 @@ Use during **Recon** / early mapping phases.
 | Path | Purpose |
 |------|---------|
 | **skills/recon/SKILL.md** | Core recon — map targets, enumerate paths, check headers/tech, WAF hints (curl, nmap, dirsearch, wfuzz). |
+| **skills/enumeration/SKILL.md** | Enumeration slice — parameter discovery (query/body), auth surface mapping, light hidden-param fuzzing; outputs to Parameters.discovered. |
 | **skills/dns-intel/SKILL.md** | DNS intel — records, whois, reverse whois/domain relationships. |
 | **skills/check-host/SKILL.md** | Check-host — distributed ping/http/tcp/dns checks from multiple global nodes. |
 | **skills/subdomain-finder/SKILL.md** | Subdomain finder — parse C99 scan pages and summarize subdomains/IPs. |
@@ -42,6 +44,7 @@ Use during **Enumeration** and **Verify** for parameterized endpoints.
 | **skills/sqli/SKILL.md** | SQL injection — fuzz parameters, verify with sqlmap; POC = payload + proof (DB name or response snippet). |
 | **skills/nosql-injection/SKILL.md** | NoSQL injection — for NoSQL-backed apps; report when logic bypass or data disclosure confirmed. |
 | **skills/xss/SKILL.md** | Reflected & stored XSS — safe script payloads; POC shows execution evidence. |
+| **skills/xss-advanced/SKILL.md** | Advanced XSS — DOM-based, attribute/SVG/context, mutation; safe PoC only. |
 | **skills/lfi/SKILL.md** | LFI / path traversal — file parameters with PoC paths (e.g. `../../../etc/passwd`). |
 | **skills/command-injection/SKILL.md** | Command injection — inputs passed to shell; PoC only (id, whoami). |
 | **skills/open-redirect/SKILL.md** | Open redirect — test redirect/url/next params with PoC URL. |

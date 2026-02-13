@@ -95,13 +95,10 @@ When the user explicitly requests **multiple agents** (e.g. “work with 3 agent
 
 1. Ensure the canonical state file at `daily/<target>/<YYYY-MM-DD>` includes:
    - `# Pentest State` (with Stage and Locks).
-   - `# Work Registry` (Active Agents, Task Queue, Claims, Completed).
+   - `# Work Registry` (Active Agents, Task Queue, Claims, Completed, Help Requests).
 2. Confirm which **stage** is current via the Stage Router (Scope → Recon → Enumeration → Verify → Report).
-3. Use `sessions_spawn(role/title)` to create sub-agents for that stage.
-4. Create appropriate **TASK_IDs** in the Work Registry:
-   - Recon tasks (headers/tech/robots/dirsearch/WAF).
-   - Enumeration tasks (params/auth surface/API mapping).
-   - Verify tasks (SQLi/XSS/IDOR/CSRF/Logic/etc.).
+3. Only Orchestrator may use `sessions_spawn`. Spawn by slice: **B** ReconAgent, **C** EnumAgent, **D** Verify-ACL, **E** Verify-Injection, **F** Verify-RequestConfig, **G** Verify-BusinessLogic, **H** ReportAgent (optional).
+4. Build **Task Queue** by stage + category + endpoint/param (normalized URL). Verify slices: ACL, Injection, RequestConfig, BusinessLogic. Assign tasks deterministically (e.g. hash-based sharding) to avoid overlap.
 5. Send each sub-agent a **structured message** (via `sessions_send`) that includes:
    - Target, current Stage.
    - Assigned TASK_IDs.
@@ -109,7 +106,7 @@ When the user explicitly requests **multiple agents** (e.g. “work with 3 agent
    - Required outputs (what to write into Work Registry and Pentest State).
    - Explicit instruction: **“Do not run anything unless you successfully claim the task in the Work Registry.”**
 
-Each sub-agent must:
+Each sub-agent (worker) must NOT call sessions_spawn/list/send/history/status; must claim before exec/craft_payload; write only to Work Registry. If help needed, create HELP_REQUEST. Sub-agent must:
 
 - Read `daily/<target>/<YYYY-MM-DD>` (Pentest State + Work Registry) using **memory_get**.
 - For each assigned TASK_ID:
@@ -135,46 +132,51 @@ The orchestrator should:
 
 ## Skill Router (within a Stage)
 
-After the Stage Router chooses the **current stage**, use the **Skill Router** to load only the most relevant skill for the specific task in that stage.
+After the Stage Router chooses the **current stage**, use the **Skill Router** to load only the most relevant skill. Within **Verify**, route by slice:
+
+- **ACL** (Verify-ACL) → **skills/idor/SKILL.md**, access-control patterns.
+- **Injection** (Verify-Injection) → **skills/sqli/SKILL.md**, **skills/xss-advanced/SKILL.md**, **skills/lfi/SKILL.md**, **skills/command-injection/SKILL.md**, **skills/xxe/SKILL.md**, **skills/nosql-injection/SKILL.md**.
+- **RequestConfig** (Verify-RequestConfig) → **skills/csrf/SKILL.md**, **skills/ssrf/SKILL.md**, **skills/cors/SKILL.md**, **skills/open-redirect/SKILL.md**, **skills/rate-limit/SKILL.md** (+ header snapshot).
+- **BusinessLogic** (Verify-BusinessLogic) → **skills/logic-flaw/SKILL.md**.
 
 Load skills via **memory_get(path: "skills/<path>")**. Do not load multiple skills for one sub-step unless explicitly needed (e.g. post-login-acl after ui-flow for cookies).
 
 | Trigger / Checklist step | Load this skill only |
 |--------------------------|----------------------|
 | Recon, map site, enumerate paths, headers, tech | **skills/recon/SKILL.md** |
-| Verify a potential finding (SQLi/XSS/etc.) | **skills/verify/SKILL.md** |
-| SQL injection testing | **skills/sqli/SKILL.md** |
+| Enumeration (params, auth surface, API map) | **skills/enumeration/SKILL.md** |
+| Verify a potential finding (generic) | **skills/verify/SKILL.md** |
+| SQL injection | **skills/sqli/SKILL.md** |
 | XSS (reflected or stored) | **skills/xss/SKILL.md** |
+| XSS advanced (DOM, context, mutation) | **skills/xss-advanced/SKILL.md** |
 | LFI / path traversal | **skills/lfi/SKILL.md** |
 | Command injection | **skills/command-injection/SKILL.md** |
 | Open redirect | **skills/open-redirect/SKILL.md** |
 | HTTP header injection | **skills/header-injection/SKILL.md** |
 | XXE (XML endpoints) | **skills/xxe/SKILL.md** |
 | NoSQL injection | **skills/nosql-injection/SKILL.md** |
-| IDOR (tamper user/id to access other's data) | **skills/idor/SKILL.md** |
-| Authentication journey (register, login, session, reset) | **skills/auth-journey/SKILL.md** |
-| CSRF on state-changing actions | **skills/csrf/SKILL.md** |
-| SSRF (webhook, fetch URL, callback) | **skills/ssrf/SKILL.md** |
-| File upload (type bypass, path traversal, XSS) | **skills/file-upload/SKILL.md** |
-| JWT / session (alg none, weak secret, token in URL) | **skills/jwt-session/SKILL.md** |
-| CORS (reflect Origin, credentials) | **skills/cors/SKILL.md** |
-| UI-driven flow (login, checkout via browser) | **skills/ui-flow/SKILL.md** |
-| Post-login ACL (use cookies/HAR; IDOR, escalation) | **skills/post-login-acl/SKILL.md** |
-| Logic flaw (step bypass, tampering, race, replay) | **skills/logic-flaw/SKILL.md** |
-| Access control (IDOR, escalation, tampering, logic) — generic | **skills/access-control/SKILL.md** |
-| Auth & session — generic | **skills/auth/SKILL.md** |
-| Rate limiting & anti-automation (login/register/forgot/otp/reset/auth APIs, or when 401/403 indicate an auth boundary) | **skills/rate-limit/SKILL.md** |
-| Other (methods, headers, disclosure, CAPTCHA) | **skills/other/SKILL.md** |
+| IDOR / ACL | **skills/idor/SKILL.md** |
+| Authentication journey | **skills/auth-journey/SKILL.md** |
+| CSRF | **skills/csrf/SKILL.md** |
+| SSRF | **skills/ssrf/SKILL.md** |
+| File upload | **skills/file-upload/SKILL.md** |
+| JWT / session | **skills/jwt-session/SKILL.md** |
+| CORS | **skills/cors/SKILL.md** |
+| UI-driven flow | **skills/ui-flow/SKILL.md** |
+| Post-login ACL | **skills/post-login-acl/SKILL.md** |
+| Logic flaw / Business logic | **skills/logic-flaw/SKILL.md** |
+| Access control (generic) | **skills/access-control/SKILL.md** |
+| Auth & session (generic) | **skills/auth/SKILL.md** |
+| Rate limiting | **skills/rate-limit/SKILL.md** |
+| Other | **skills/other/SKILL.md** |
 
 **Skill usage rules**
 
 1. **One skill per focused task** unless a dependency is explicitly needed (e.g. ui-flow to capture HAR, then post-login-acl).
 2. After loading a skill, follow its **THINK → ACT → OBSERVE → REFLECT → LOG** flow.
-3. For each confirmed vulnerability, call **report_finding** before moving on.
-4. Log progress in the Pentest State under:
-   - `# Checklist progress`
-   - `# Tested vectors`
-   - Relevant `Artifacts` and `Findings` subsections.
+3. For each confirmed vulnerability, call **report_finding** before moving on (respect FINDING_KEY uniqueness).
+4. **No exec or craft_payload** unless the task is **claimed** in the Work Registry. **Workers** do not spawn or manage sessions.
+5. Log progress to **daily/<target>/<YYYY-MM-DD>**: only **Orchestrator** updates `# Checklist progress` and `# Tested vectors`; workers write to Work Registry → Completed only.
 
 ---
 

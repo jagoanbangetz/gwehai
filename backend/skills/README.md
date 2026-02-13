@@ -57,7 +57,7 @@ The agent is instructed to use these skills when the user asks for recon, verifi
 | **TOOLS.md** | Tools the agent can use: memory_search, memory_get, read_file, write_file, optional browser/exec; NestJS tool definitions. |
 | **WHAT_THE_AGENT_DOES.md** | End-to-end flow: what the AI does when it pentests a website (recon → find → verify → report). |
 | **install-tools.sh** | Automation installer for pentest CLI tools (nmap, masscan, dig, whois, sqlmap, wfuzz, nikto, curl, netcat, traceroute, sslyze, etc.) on Debian/Ubuntu, Fedora/RHEL, macOS. |
-| **Dockerfile.pentest-tools** | Docker image with the same tools; run them inside a container (see below). |
+| **Dockerfile.pentest-tools** | Docker image with pentest tools; run them inside a container (see below). **Available tools** in the image are listed in [TOOLS.md](./TOOLS.md) ("Tools available in the pentest Docker image"); the AI is told these in the system prompt. |
 
 ## Running pentest tools in Docker
 

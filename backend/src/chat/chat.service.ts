@@ -4,6 +4,7 @@ import { DataSource, Repository } from 'typeorm';
 import { Conversation } from '../entities/conversation.entity';
 import { ConversationMemory } from '../entities/conversation-memory.entity';
 import { Message, MessageRole } from '../entities/message.entity';
+import { MessagePartType } from '../entities/message-part.entity';
 import { MessagePart } from '../entities/message-part.entity';
 import { Model } from '../entities/model.entity';
 import { UsageEvent } from '../entities/usage-event.entity';
@@ -219,6 +220,40 @@ export class ChatService {
       title: 'New Conversation',
     });
     return await this.conversationRepo.save(conversation);
+  }
+
+  /**
+   * Create a single conversation with an initial seed message (e.g. pentest job context).
+   * Used by Pentest Job Runner: one job = one conversation = one pentest context.
+   */
+  async createConversationWithSeed(
+    userId: string,
+    title: string,
+    seedMessage: string,
+    modelId?: string,
+    pentestJobId?: string,
+  ): Promise<Conversation> {
+    const conversation = await this.getOrCreateConversation(userId, undefined, modelId);
+    conversation.title = title;
+    if (pentestJobId) conversation.pentestJobId = pentestJobId;
+    await this.conversationRepo.save(conversation);
+
+    const userMessage = this.messageRepo.create({
+      conversationId: conversation.id,
+      role: MessageRole.USER,
+      content: seedMessage,
+    });
+    await this.messageRepo.save(userMessage);
+
+    const part = this.messagePartRepo.create({
+      messageId: userMessage.id,
+      type: MessagePartType.TEXT,
+      content: seedMessage,
+      order: 0,
+    });
+    await this.messagePartRepo.save(part);
+
+    return conversation;
   }
 
   /**
@@ -756,6 +791,7 @@ export class ChatService {
           severity: args.severity ? String(args.severity) : undefined,
           target: args.target ? String(args.target) : undefined,
           poc: args.poc ? String(args.poc) : undefined,
+          finding_key: args.finding_key ? String(args.finding_key) : undefined,
         });
         return JSON.stringify({ ok: true, report_id: report.id, message: 'Finding saved to database' });
       }

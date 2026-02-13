@@ -24,16 +24,22 @@ export class ToolsService {
     private readonly payloadSandbox: PayloadSandboxService,
   ) {}
 
+  /** Conversation memory is scoped by conversationId (jobId). One conversation = one context; validation enforces jobId for memory access. */
   async memorySearch(query: string, maxResults: number = 10, jobId?: string): Promise<MemorySearchResult[]> {
     if (!query || !query.trim()) {
       throw new BadRequestException('query is required');
+    }
+    if (!jobId || !jobId.trim()) {
+      throw new BadRequestException(
+        'Conversation context (jobId) is required for memory_search. One conversation = one pentest context.',
+      );
     }
 
     const needle = query.toLowerCase();
     const results: MemorySearchResult[] = [];
 
     // Memory is one row per conversation, data = JSON { key: value }
-    if (jobId) {
+    {
       const row = await this.memoryRepo.findOne({ where: { conversationId: jobId } });
       const data = (row?.data ?? {}) as Record<string, string>;
       for (const [key, value] of Object.entries(data)) {
@@ -98,7 +104,11 @@ export class ToolsService {
 
     // Conversation memory: one row per conversation, data = JSON { key: value }
     if (this.isMemoryPath(filePath)) {
-      if (!jobId) return '';
+      if (!jobId || !jobId.trim()) {
+        throw new BadRequestException(
+          'Conversation context (jobId) is required for memory_get on pentest state. One conversation = one pentest context.',
+        );
+      }
       const key = this.normalizeMemoryKey(filePath);
       const row = await this.memoryRepo.findOne({ where: { conversationId: jobId } });
       const data = (row?.data ?? {}) as Record<string, string>;
@@ -127,9 +137,9 @@ export class ToolsService {
       throw new BadRequestException('path must be main, daily/YYYY-MM-DD, or daily/website/YYYY-MM-DD (e.g. daily/testphp.vulnweb.com/2026-02-10). Conversation memory is stored only in the database.');
     }
 
-    if (!jobId) {
+    if (!jobId || !jobId.trim()) {
       throw new BadRequestException(
-        'Conversation context is required to write memory. Memory is stored in the database per conversation.',
+        'Conversation context (jobId) is required to write memory. One conversation = one pentest context; memory is stored per conversation.',
       );
     }
 
@@ -273,7 +283,7 @@ export class ToolsService {
 
   private getAllowlist(): Map<string, { requiresTarget: boolean }> {
     return new Map([
-      // Pentest / network (target required)
+      // Pentest / network (target required) — match Dockerfile.pentest-tools available tools
       ['nmap', { requiresTarget: true }],
       ['masscan', { requiresTarget: true }],
       ['dig', { requiresTarget: true }],
@@ -281,12 +291,20 @@ export class ToolsService {
       ['dirsearch', { requiresTarget: true }],
       ['sqlmap', { requiresTarget: true }],
       ['wfuzz', { requiresTarget: true }],
+      ['ffuf', { requiresTarget: true }],
       ['nikto', { requiresTarget: true }],
       ['curl', { requiresTarget: true }],
       ['nc', { requiresTarget: true }],
       ['netcat', { requiresTarget: true }],
       ['tcptraceroute', { requiresTarget: true }],
       ['sslyze', { requiresTarget: true }],
+      ['subfinder', { requiresTarget: true }],
+      ['httpx', { requiresTarget: true }],
+      ['naabu', { requiresTarget: true }],
+      ['nuclei', { requiresTarget: true }],
+      ['gobuster', { requiresTarget: true }],
+      ['git-dumper', { requiresTarget: true }],
+      ['rg', { requiresTarget: false }],
       // Common CLI (all run in container; no target required)
       ['ls', { requiresTarget: false }],
       ['cat', { requiresTarget: false }],

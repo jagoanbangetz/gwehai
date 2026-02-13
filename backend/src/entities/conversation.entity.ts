@@ -42,6 +42,11 @@ export class Conversation {
   @Column({ type: 'varchar', length: 32, default: 'finished' })
   runStatus: string; // running | finished | error | stopped
 
+  /** When set, this conversation is linked to a pentest job (one job = one chat context). */
+  @Column({ type: 'uuid', nullable: true })
+  @Index()
+  pentestJobId: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

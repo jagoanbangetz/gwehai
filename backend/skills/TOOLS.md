@@ -146,6 +146,24 @@ Optional tools for **reconnaissance**, **vulnerability verification** (not full 
 
 Implementation: wrap existing tools (curl, ffuf, nmap, dirsearch, etc.) via **exec** with a strict allowlist, or implement HTTP/crawl in NestJS and enforce scope before each request.
 
+### Tools available in the pentest Docker image (Dockerfile.pentest-tools)
+
+When the backend runs **exec** inside the **gwehai-pentest-tools** container, the following tools are **available**. Tell the AI these are the tools it can use.
+
+| Category | Tool | Use for |
+|----------|------|--------|
+| **Network** | nmap, masscan* | port_scan (e.g. nmap -sV -p 80,443 &lt;host&gt;) |
+| **DNS / info** | dig, whois | subdomain_enum, domain info |
+| **HTTP** | curl | fetch_url, headers, GET/POST |
+| **Recon / scan** | nikto, nuclei, subfinder, httpx, naabu | Web server scan; vuln scanning (nuclei); subdomains, HTTP probe, port discovery |
+| **Fuzzing** | **ffuf** | Fuzzing params/paths (use ffuf; wfuzz is not in the image) |
+| **Dir brute** | gobuster* or ffuf | Directory/path enumeration (dirsearch not in image) |
+| **SQLi** | sqlmap | verify_sqli (e.g. sqlmap -u "URL" --level=1 --risk=1 --batch) |
+| **SSL/TLS** | sslyze | SSL/TLS analysis |
+| **Other** | git-dumper, rg (ripgrep) | Git dump; grep (rg). John (JOHN=/opt/john/run) for hashes. theHarvester pip package is present but may not expose a CLI in this image. |
+
+\* Optional (installed from apt if available). **wfuzz** and **dirsearch** are **not** in the Docker image — use **ffuf** for fuzzing and path discovery.
+
 ### Real CLI tools → template mapping
 
 You **do** use these real tools; the agent calls them via **exec** (or your wrapper tools) with scope checks and an allowlist. Map them as follows:
@@ -156,20 +174,23 @@ You **do** use these real tools; the agent calls them via **exec** (or your wrap
 | | **masscan** | port_scan | Same: allowlist args; target must be in scope. |
 | **Information gathering** | **dig** | subdomain_enum / DNS | DNS queries for domain; domain in scope. |
 | | **whois** | (info) | Domain info; domain in scope. |
-| **Web app testing** | **dirsearch** | dir_brute | Dir/file brute-force; base URL in scope; use your wordlist or allowlist. |
+| **Subdomains / HTTP** | **subfinder**, **httpx**, **naabu** | subdomain_enum, HTTP probe, port discovery | In Docker image. |
+| **Web app testing** | **ffuf** | dir_brute / fuzzing | Use ffuf for fuzzing and path discovery (wfuzz/dirsearch not in Docker image). |
+| | **gobuster** | dir_brute | If available in image. |
 | | **sqlmap** | verify_sqli | **Allowlist only**: e.g. `--level=1 --risk=1`, no `--os-cmd` / `--file-write`. Target URL in scope. |
-| | **wfuzz** | test_endpoint / fuzzing | Fuzz params/headers; URL in scope; payloads from allowlist. |
 | | **nikto** | (recon) | Web server scan; URL in scope; run with safe options only. |
+| | **nuclei** | (vuln scan) | Template-based scanning; target in scope. |
 | **Network / HTTP** | **curl** | fetch_url / http_request | GET/POST/HEAD; URL in scope. Prefer your own fetch_url that checks scope. |
 | | **netcat** | (network) | Optional; allowlist args only (e.g. banner grab); target in scope. |
 | | **traceroute** | (network) | Route tracing; host in scope. |
-| **SSL/TLS** | **sslyze** | (new or exec) | SSL/TLS analysis; host in scope. Expose via exec with allowlist or a small wrapper. |
+| **SSL/TLS** | **sslyze** | (new or exec) | SSL/TLS analysis; host in scope. In Docker image. |
 
-- **Yes — you need to use these** (or equivalents) so the agent can do real recon and verification. Expose them via **exec** with strict allowlists and scope checks, or as **wrapper tools** (e.g. `dir_brute` → runs dirsearch under the hood).
+- **Yes — you need to use these** (or equivalents) so the agent can do real recon and verification. Expose them via **exec** with strict allowlists and scope checks, or as **wrapper tools** (e.g. `dir_brute` → ffuf or gobuster).
 - **Scope:** Before every exec, ensure the **target** (host, domain, URL) is in SCOPE.md (or your scope store). Reject if not.
 - **Allowlist:** Only allow specific commands and flags (e.g. `nmap -sV -p 80,443 <host>`, not `nmap --script=exploit`). For sqlmap, use safe levels and never allow data exfil or OS commands.
+- **Docker image (Dockerfile.pentest-tools):** The tools listed in the table above are available in the container. Use **ffuf** for fuzzing (not wfuzz); use **ffuf** or **gobuster** for dir brute (not dirsearch).
 
-**Automation installer:** A shell script **install-tools.sh** in this folder installs the tools above on Debian/Ubuntu (apt), Fedora/RHEL (dnf), and macOS (Homebrew), plus Python tools via pip/pipx (sqlmap, wfuzz, sslyze, dirsearch). Run: `./install-tools.sh [--skip-pip] [--dry-run]`.
+**Automation installer:** A shell script **install-tools.sh** in this folder installs tools on Debian/Ubuntu (apt), Fedora/RHEL (dnf), and macOS (Homebrew), plus Python tools via pip/pipx (sqlmap, wfuzz, sslyze, dirsearch). Run: `./install-tools.sh [--skip-pip] [--dry-run]`. **When using the Docker image**, see the "Tools available in the pentest Docker image" table above.
 
 ### Verification (vulnerability checks, not full exploit)
 

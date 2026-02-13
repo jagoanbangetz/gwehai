@@ -60,6 +60,8 @@ interface ChatHistory {
   messages: Message[]
   createdAt: Date
   updatedAt: Date
+  /** When set, this chat is linked to a pentest job (one job = one conversation). */
+  jobId?: string
 }
 
 /** One row in the Report menu: grouped by conversation */
@@ -131,7 +133,17 @@ interface CurrentPlan {
 }
 
 /** Map DB conversation + messages to ChatHistory entry */
-function conversationToChatHistory(conv: { id: string; title?: string | null; messages?: Array<{ id: string; role: string; content?: string | null; createdAt: string }>; createdAt: string; updatedAt: string }): ChatHistory {
+function conversationToChatHistory(
+  conv: {
+    id: string
+    title?: string | null
+    messages?: Array<{ id: string; role: string; content?: string | null; createdAt: string }>
+    createdAt: string
+    updatedAt: string
+    pentestJobId?: string | null
+  },
+  jobIdFromUrl?: string,
+): ChatHistory {
   const messages: Message[] = (conv.messages || [])
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
     .map((m) => ({
@@ -141,12 +153,14 @@ function conversationToChatHistory(conv: { id: string; title?: string | null; me
       timestamp: new Date(m.createdAt),
       done: true,
     }))
+  const jobId = conv.pentestJobId ?? jobIdFromUrl
   return {
     id: conv.id,
     title: conv.title || 'New Chat',
     messages,
     createdAt: new Date(conv.createdAt),
     updatedAt: new Date(conv.updatedAt),
+    ...(jobId ? { jobId } : {}),
   }
 }
 
@@ -238,9 +252,10 @@ const Dashboard = () => {
         messages?: Array<{ id: string; role: string; content?: string | null; createdAt: string }>
         createdAt: string
         updatedAt: string
+        pentestJobId?: string | null
       }>>('/chat/conversations')
       const list = Array.isArray(res.data) ? res.data : (res as any).data?.conversations || []
-      const history = list.map(conversationToChatHistory)
+      const history = list.map((c) => conversationToChatHistory(c))
       setChatHistory(history)
     } catch (e) {
       console.warn('Refetch chat history:', e)
@@ -538,16 +553,19 @@ const Dashboard = () => {
           messages?: Array<{ id: string; role: string; content?: string | null; createdAt: string }>
           createdAt: string
           updatedAt: string
+          pentestJobId?: string | null
         }>>('/chat/conversations')
         const list = Array.isArray(res.data) ? res.data : (res as any).data?.conversations || []
-        const history = list.map(conversationToChatHistory)
+        const history = list.map((c) => conversationToChatHistory(c))
         setChatHistory(history)
 
-        // URL ?session_id= or ?conversation_id= or ?jobs_id= → open that chat and continue
+        // URL ?session_id= or ?conversation_id= or ?conversationId= or ?jobs_id= → open that chat and continue
         const conversationId =
           searchParams.get('session_id') ||
           searchParams.get('conversation_id') ||
+          searchParams.get('conversationId') ||
           searchParams.get('jobs_id')
+        const jobIdFromUrl = searchParams.get('jobId') || undefined
         if (conversationId) {
           try {
             const { data: conv } = await apiClient.get<{
@@ -556,12 +574,18 @@ const Dashboard = () => {
               messages?: Array<{ id: string; role: string; content?: string | null; createdAt: string }>
               createdAt: string
               updatedAt: string
+              pentestJobId?: string | null
             }>(`/chat/conversations/${conversationId}`)
             if (conv) {
-              const chat = conversationToChatHistory(conv)
+              const chat = conversationToChatHistory(conv, jobIdFromUrl)
               setMessages(chat.messages)
               setCurrentChatId(chat.id)
               setCurrentConversationId(chat.id)
+              // Ensure this conversation appears in sidebar (e.g. newly created from Pentest "Open Conversation")
+              setChatHistory(prev => {
+                if (prev.some(c => c.id === chat.id)) return prev
+                return [chat, ...prev]
+              })
             }
           } catch (e) {
             console.warn('Could not load conversation from URL:', conversationId, e)
@@ -1797,6 +1821,10 @@ const Dashboard = () => {
             </svg>
           </span>
           <span className="nav-text">Search Chat</span>
+        </button>
+        <button className="nav-item" onClick={() => navigate('/agent/pentest-runner')} title="Pentest Job Runner">
+          <span className="nav-icon">&#9876;</span>
+          <span className="nav-text">Pentest Runner</span>
         </button>
         {showSearch && (
           <div className="sidebar-search">

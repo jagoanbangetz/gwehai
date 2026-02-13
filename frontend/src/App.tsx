@@ -12,6 +12,7 @@ import Terms from './pages/Terms'
 import Privacy from './pages/Privacy'
 import Contact from './pages/Contact'
 import Careers from './pages/Careers'
+import PentestRunner from './pages/PentestRunner'
 
 function App() {
   return (
@@ -33,6 +34,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Dashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/agent/pentest-runner" 
+              element={
+                <ProtectedRoute>
+                  <PentestRunner />
                 </ProtectedRoute>
               } 
             />
