@@ -29,11 +29,12 @@
     "db:status": "cd .. && docker-compose ps",
     "db:seed": "ts-node src/scripts/seed-points.ts 999999",
     "db:delete-all-data": "ts-node src/scripts/delete-all-data.ts",
-    "db:delete-all-data:confirm": "ts-node src/scripts/delete-all-data.ts --confirm"
+    "db:delete-all-data:confirm": "ts-node src/scripts/delete-all-data.ts --confirm",
+    "make-admin": "ts-node src/scripts/make-admin.ts"
   },
   "dependencies": {
-    "@mariozechner/pi-ai": "0.52.8",
     "@mariozechner/pi-agent-core": "0.52.8",
+    "@mariozechner/pi-ai": "0.52.8",
     "@mariozechner/pi-coding-agent": "0.52.8",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^10.0.0",
@@ -47,6 +48,7 @@
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
+    "nodemailer": "^8.0.1",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "passport-jwt": "^4.0.1",
@@ -63,6 +65,7 @@
     "@types/express": "^4.17.17",
     "@types/jest": "^29.5.2",
     "@types/node": "^20.3.1",
+    "@types/nodemailer": "^7.0.9",
     "@types/passport-google-oauth20": "^2.0.17",
     "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^2.0.12",

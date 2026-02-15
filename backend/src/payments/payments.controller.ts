@@ -39,19 +39,4 @@ export class PaymentsController {
     const user = req.user as any;
     return await this.paymentsService.getUserOrders(user.id);
   }
-
-  @Post('webhook/stripe')
-  async stripeWebhook(@Body() body: any) {
-    // In production, verify webhook signature
-    const { type, data } = body;
-
-    if (type === 'payment_intent.succeeded') {
-      const paymentIntent = data.object;
-      // Find order by payment intent ID
-      // Then confirm payment
-      // This is simplified - in production, store payment intent ID when creating order
-    }
-
-    return { received: true };
-  }
 }

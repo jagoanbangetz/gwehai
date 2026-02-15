@@ -3,7 +3,6 @@ import Header from '../components/Header'
 import Footer from '../components/Footer'
 import AnimatedBackground from '../components/AnimatedBackground'
 import './Contact.css'
-import PageLoader from '../components/PageLoader'
 
 const Contact = () => {
   const [formData, setFormData] = useState({
@@ -40,7 +39,6 @@ const Contact = () => {
   }
 
   return (
-    <PageLoader>
     <div className="contact-page dark-theme">
       <AnimatedBackground variant="full" intensity="low" />
       <Header />
@@ -179,7 +177,6 @@ const Contact = () => {
       </main>
       <Footer />
     </div>
-    </PageLoader>
   )
 }
 

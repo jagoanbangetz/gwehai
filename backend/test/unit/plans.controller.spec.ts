@@ -1,5 +1,7 @@
 import { PlansController } from '../../src/plans/plans.controller';
 import { PlansService } from '../../src/plans/plans.service';
+import { PlanResolutionService } from '../../src/plans/plan-resolution.service';
+import { PlanUsageService } from '../../src/plans/plan-usage.service';
 
 describe('PlansController', () => {
   const plansService = {
@@ -8,11 +10,21 @@ describe('PlansController', () => {
     getUsageForUser: jest.fn(),
   } as unknown as PlansService;
 
+  const planResolution = {
+    getUserPlan: jest.fn(),
+    getPlanDefinition: jest.fn(),
+    getPlansRegistry: jest.fn(),
+  } as unknown as PlanResolutionService;
+
+  const planUsage = {
+    getUsage: jest.fn(),
+  } as unknown as PlanUsageService;
+
   let controller: PlansController;
 
   beforeEach(() => {
     jest.resetAllMocks();
-    controller = new PlansController(plansService);
+    controller = new PlansController(plansService, planResolution, planUsage);
   });
 
   it('returns available plans', async () => {

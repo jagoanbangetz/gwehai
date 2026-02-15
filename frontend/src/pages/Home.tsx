@@ -5,11 +5,9 @@ import FAQ from '../components/FAQ'
 import Footer from '../components/Footer'
 import ScrollToTop from '../components/ScrollToTop'
 import AnimatedBackground from '../components/AnimatedBackground'
-import PageLoader from '../components/PageLoader'
 
 const Home = () => {
   return (
-    <PageLoader>
     <>
       <AnimatedBackground variant="full" intensity="medium" />
       <Header />
@@ -19,7 +17,6 @@ const Home = () => {
       <Footer />
       <ScrollToTop />
     </>
-    </PageLoader>
   )
 }
 

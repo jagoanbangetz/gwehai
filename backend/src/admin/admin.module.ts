@@ -12,6 +12,9 @@ import { MessageFile } from '../entities/message-file.entity';
 import { Conversation } from '../entities/conversation.entity';
 import { ConversationMemory } from '../entities/conversation-memory.entity';
 import { Hacktivity } from '../entities/hacktivity.entity';
+import { AdminAuditLog } from '../entities/admin-audit-log.entity';
+import { GwehAIModule } from '../gwehai/gwehai.module';
+import { AdminService } from './admin.service';
 
 @Module({
   imports: [
@@ -27,9 +30,12 @@ import { Hacktivity } from '../entities/hacktivity.entity';
       Conversation,
       ConversationMemory,
       Hacktivity,
+      AdminAuditLog,
     ]),
+    GwehAIModule,
   ],
   controllers: [AdminController],
+  providers: [AdminService],
 })
 export class AdminModule {}
 

@@ -46,14 +46,11 @@ DB_DATABASE=gwehai_db
 JWT_SECRET=your-super-secret-jwt-key-change-in-production
 JWT_EXPIRES_IN=7d
 
-# Google OAuth
+# Google OAuth (Sign in / Register / Connect with Google)
+# Callback URL must be your BACKEND base URL + /api/auth/google/callback (backend uses global prefix "api")
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
-GOOGLE_CALLBACK_URL=http://localhost:3001/auth/google/callback
-
-# Stripe (optional)
-STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key
-STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret
+GOOGLE_CALLBACK_URL=http://localhost:3001/api/auth/google/callback
 ```
 
 ## Installation
@@ -120,7 +117,6 @@ npm run test:e2e
 - `GET /payments/packs` - Get available credit packs (requires JWT)
 - `POST /payments/orders` - Create credit order (requires JWT)
 - `GET /payments/orders` - Get user orders (requires JWT)
-- `POST /payments/webhook/stripe` - Stripe webhook handler
 
 ## Database Schema
 

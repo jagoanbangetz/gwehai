@@ -53,10 +53,10 @@ export class Subscription {
   monthlyPointsGrant: number; // Points granted each month
 
   @Column({ nullable: true })
-  providerSubscriptionId: string; // Stripe subscription ID, etc.
+  providerSubscriptionId: string; // External provider subscription ID
 
   @Column({ nullable: true })
-  providerCustomerId: string; // Stripe customer ID, etc.
+  providerCustomerId: string; // External provider customer ID
 
   @Column({ type: 'timestamp', nullable: true })
   currentPeriodStart: Date;

@@ -1,12 +1,11 @@
+import { Link } from 'react-router-dom'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
 import AnimatedBackground from '../components/AnimatedBackground'
 import './Legal.css'
-import PageLoader from '../components/PageLoader'
 
 const Terms = () => {
   return (
-    <PageLoader>
     <div className="legal-page dark-theme">
       <AnimatedBackground variant="full" intensity="low" />
       <Header />
@@ -86,14 +85,13 @@ const Terms = () => {
             <h2>9. Contact Information</h2>
             <p>
               If you have any questions about these Terms of Service, please contact us at{' '}
-              <a href="/contact" className="legal-link">Contact Us</a>.
+              <Link to="/contact" className="legal-link">Contact Us</Link>.
             </p>
           </section>
         </div>
       </main>
       <Footer />
     </div>
-    </PageLoader>
   )
 }
 

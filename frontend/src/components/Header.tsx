@@ -1,10 +1,11 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { logo } from '../assets/images'
 import './Header.css'
 
 const Header = () => {
   const location = useLocation()
+  const navigate = useNavigate()
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup'
   const { user, logout, isAuthenticated } = useAuth()
 
@@ -12,8 +13,7 @@ const Header = () => {
 
   const scrollToSection = (id: string) => {
     if (location.pathname !== '/') {
-      // If not on home page, navigate to home first
-      window.location.href = `/#${id}`
+      navigate({ pathname: '/', hash: id })
       return
     }
     const element = document.getElementById(id)

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import apiClient from '../utils/api'
 import './Dashboard.css'
 import { useAuth } from '../context/AuthContext'
-import PageLoader from '../components/PageLoader'
 
 interface AdminSummary {
   users: number
@@ -37,7 +36,6 @@ const AdminDashboard = () => {
   if (!user) return null
 
   return (
-    <PageLoader>
     <div className="dashboard-main admin-dashboard">
       <header className="dashboard-header">
         <div className="header-nav">
@@ -77,7 +75,6 @@ const AdminDashboard = () => {
         )}
       </main>
     </div>
-    </PageLoader>
   )
 }
 

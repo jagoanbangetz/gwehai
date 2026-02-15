@@ -27,5 +27,10 @@ async function bootstrap() {
   const port = process.env.PORT || 3001;
   await app.listen(port);
   console.log(`🚀 Backend server running on http://localhost:${port}`);
+
+  const googleCallback = process.env.GOOGLE_CALLBACK_URL || `http://localhost:${port}/api/auth/google/callback`;
+  if (process.env.GOOGLE_CLIENT_ID) {
+    console.log(`📌 Google OAuth: Add this EXACT URL to Google Cloud Console → Credentials → Authorized redirect URIs:\n   ${googleCallback}`);
+  }
 }
 bootstrap();

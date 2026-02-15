@@ -27,10 +27,10 @@ const Footer = () => {
           </div>
           <div className="footer-column">
             <h4 className="footer-column-title">Product</h4>
-            <a href="#features" className="footer-link">Pentesting</a>
-            <a href="#chat" className="footer-link">AI Chat</a>
-            <a href="#" className="footer-link">API</a>
-            <a href="#reports" className="footer-link">Reports</a>
+            <Link to={{ pathname: '/', hash: 'features' }} className="footer-link">Pentesting</Link>
+            <Link to={{ pathname: '/', hash: 'chat' }} className="footer-link">AI Chat</Link>
+            <Link to="/" className="footer-link">API</Link>
+            <Link to={{ pathname: '/', hash: 'reports' }} className="footer-link">Reports</Link>
           </div>
           <div className="footer-column">
             <h4 className="footer-column-title">Legal</h4>

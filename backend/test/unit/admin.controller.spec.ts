@@ -4,36 +4,57 @@ describe('AdminController', () => {
   const repo = () => ({
     count: jest.fn(),
     find: jest.fn(),
+    findAndCount: jest.fn(),
     createQueryBuilder: jest.fn(),
+    delete: jest.fn(),
+    query: jest.fn(),
   });
 
+  const chain = (fn: string, resolved: any) => {
+    const c: any = {};
+    ['orderBy', 'take', 'skip', 'addSelect', 'select', 'groupBy', 'andWhere', 'leftJoinAndSelect', 'getMany', 'getManyAndCount', 'getRawMany', 'getRawOne'].forEach((m) => {
+      c[m] = jest.fn().mockReturnValue(m === fn ? Promise.resolve(resolved) : c);
+    });
+    return c;
+  };
+
   let controller: AdminController;
-  const userRepo = repo();
-  const modelRepo = repo();
-  const orderRepo = repo();
-  const reportRepo = repo();
-  const usageRepo = repo();
-  const messageRepo = repo();
-  const messagePartRepo = repo();
-  const messageFileRepo = repo();
-  const conversationRepo = repo();
-  const memoryRepo = repo();
-  const hacktivityRepo = repo();
+  const userRepo = repo() as any;
+  const modelRepo = repo() as any;
+  const orderRepo = repo() as any;
+  const reportRepo = repo() as any;
+  const usageRepo = repo() as any;
+  const messageRepo = repo() as any;
+  const messagePartRepo = repo() as any;
+  const messageFileRepo = repo() as any;
+  const conversationRepo = repo() as any;
+  const memoryRepo = repo() as any;
+  const hacktivityRepo = repo() as any;
+  const adminService = {
+    log: jest.fn().mockResolvedValue(undefined),
+    getClientIp: jest.fn().mockReturnValue('127.0.0.1'),
+    getAuditLogs: jest.fn().mockResolvedValue({ items: [], total: 0 }),
+  };
+  const gwehaiService = {
+    getActiveJobsForAdmin: jest.fn().mockReturnValue([]),
+  };
 
   beforeEach(() => {
     jest.resetAllMocks();
     controller = new AdminController(
-      userRepo as any,
-      modelRepo as any,
-      orderRepo as any,
-      reportRepo as any,
-      usageRepo as any,
-      messageRepo as any,
-      messagePartRepo as any,
-      messageFileRepo as any,
-      conversationRepo as any,
-      memoryRepo as any,
-      hacktivityRepo as any,
+      userRepo,
+      modelRepo,
+      orderRepo,
+      reportRepo,
+      usageRepo,
+      messageRepo,
+      messagePartRepo,
+      messageFileRepo,
+      conversationRepo,
+      memoryRepo,
+      hacktivityRepo,
+      adminService as any,
+      gwehaiService as any,
     );
   });
 
@@ -42,19 +63,33 @@ describe('AdminController', () => {
     modelRepo.count.mockResolvedValue(3);
     orderRepo.count.mockResolvedValue(4);
     reportRepo.count.mockResolvedValue(5);
+    conversationRepo.count.mockResolvedValue(6);
+    hacktivityRepo.count.mockResolvedValue(7);
+    gwehaiService.getActiveJobsForAdmin.mockReturnValue([{ job_id: 'j1', status: 'running' }]);
+    usageRepo.find.mockResolvedValue([]);
 
     const result = await controller.getDashboardSummary();
 
     expect(result.users).toBe(10);
     expect(result.admins).toBe(2);
     expect(result.aiAgents).toBe(3);
+    expect(result.payments).toBe(4);
+    expect(result.reports).toBe(5);
+    expect(result.conversations).toBe(6);
+    expect(result.hacktivityTotal).toBe(7);
+    expect(result.activeJobsCount).toBe(1);
+    expect(result.activeJobs).toHaveLength(1);
+    expect(result.recentActivity).toEqual([]);
   });
 
   it('lists users', async () => {
-    userRepo.find.mockResolvedValue([{ id: 'u1' }]);
+    const qb = chain('getMany', [{ id: 'u1', email: 'a@b.com' }]);
+    userRepo.createQueryBuilder.mockReturnValue(qb);
+
     const result = await controller.listUsers();
 
     expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('u1');
   });
 
   it('lists ai agents', async () => {
@@ -79,10 +114,10 @@ describe('AdminController', () => {
   });
 
   it('lists reports', async () => {
-    reportRepo.find.mockResolvedValue([{ id: 'r1' }]);
+    reportRepo.findAndCount.mockResolvedValue([[{ id: 'r1' }], 1]);
     const result = await controller.listAllReports();
 
-    expect(result).toHaveLength(1);
+    expect(result).toEqual({ items: [{ id: 'r1' }], total: 1 });
   });
 
   it('lists user activity', async () => {
@@ -118,5 +153,40 @@ describe('AdminController', () => {
     const result = await controller.getSettings({} as any);
     expect(result.environment).toBeDefined();
     expect(result.apiBaseUrl).toBeDefined();
+  });
+
+  it('returns health', async () => {
+    userRepo.query.mockResolvedValue([{ '?column?': 1 }]);
+    const result = await controller.getHealth();
+    expect(result.ok).toBe(true);
+    expect(result.database).toBe('connected');
+  });
+
+  it('returns audit logs', async () => {
+    adminService.getAuditLogs.mockResolvedValue({ items: [{ id: 'a1', action: 'export' }], total: 1 });
+    const result = await controller.getAuditLog();
+    expect(result.items).toHaveLength(1);
+    expect(result.total).toBe(1);
+  });
+
+  it('returns usage summary', async () => {
+    const qbUser = {
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn().mockResolvedValue([{ userId: 'u1', inputTokens: '100', outputTokens: '50', calls: '2' }]),
+    };
+    const qbTotal = {
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({ inputTokens: '500', outputTokens: '200', calls: '10' }),
+    };
+    usageRepo.createQueryBuilder.mockReturnValueOnce(qbUser).mockReturnValueOnce(qbTotal);
+
+    const result = await controller.getUsageSummary();
+    expect(result.byUser).toHaveLength(1);
+    expect(result.total).toEqual({ inputTokens: '500', outputTokens: '200', calls: '10' });
   });
 });

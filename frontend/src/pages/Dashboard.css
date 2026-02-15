@@ -1988,6 +1988,33 @@
   }
 }
 
+/* Simple conversation (no target): single-line "Replying..." indicator, no ThinkingBar/GwehLog */
+.chat-simple-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  color: oklch(0.72 0 0);
+  font-size: 0.9rem;
+}
+.chat-simple-indicator-text {
+  font-weight: 500;
+}
+.chat-simple-indicator-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.chat-simple-indicator-dots span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: oklch(0.72 0 0);
+  animation: loadingPulse 1.2s infinite;
+}
+.chat-simple-indicator-dots span:nth-child(2) { animation-delay: 0.2s; }
+.chat-simple-indicator-dots span:nth-child(3) { animation-delay: 0.4s; }
+
 .assistant-action-line {
   display: inline-flex;
   align-items: center;
@@ -2589,6 +2616,18 @@
   font-family: 'JetBrains Mono', monospace;
 }
 
+.upgrade-plan-features {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+  font-size: 0.9rem;
+  color: oklch(0.85 0 0);
+}
+
+.upgrade-plan-features li {
+  padding: 0.25rem 0;
+}
+
 .plan-price .price-per-point {
   font-size: 0.85rem;
   color: oklch(0.6 0 0);
@@ -2952,65 +2991,288 @@
   border-color: oklch(0.55 0.12 250 / 0.8);
 }
 
-/* Hacktivity modal */
-.hacktivity-row {
+/* Hacktivity modal – list and detail */
+.hacktivity-modal {
+  max-width: 960px;
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+}
+.hacktivity-modal .modal-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+}
+/* Override report-table 3-column widths so Hacktivity 5-column table displays correctly */
+.hacktivity-table th:first-child { width: auto; min-width: 100px; }
+.hacktivity-table th:nth-child(2) { width: auto; min-width: 90px; }
+.hacktivity-table th:nth-child(3) { width: auto; min-width: 120px; }
+.hacktivity-table th:nth-child(4) { width: auto; min-width: 80px; }
+.hacktivity-table th:nth-child(5) { width: 1%; white-space: nowrap; }
+.hacktivity-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  background: oklch(0.25 0.1 25 / 0.3);
+  border: 1px solid oklch(0.45 0.15 25 / 0.5);
+  border-radius: 8px;
+  color: oklch(0.9 0.05 25);
+  font-size: 0.9rem;
+}
+.hacktivity-retry-btn {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: oklch(0.4 0.1 25);
+  color: oklch(1 0 0);
+  border: none;
+  border-radius: 6px;
   cursor: pointer;
 }
-.hacktivity-row:hover {
-  background: oklch(0.18 0 0 / 0.6);
+.hacktivity-retry-btn:hover {
+  background: oklch(0.5 0.12 25);
 }
-.hacktivity-domain,
-.hacktivity-action {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.85rem;
+.hacktivity-modal-header {
+  flex-wrap: wrap;
+  gap: 8px;
 }
-.hacktivity-reasoning {
-  max-width: 200px;
+.hacktivity-modal-subtitle {
+  margin: 4px 0 0 0;
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: oklch(0.65 0 0);
+}
+.hacktivity-modal-body {
+  padding: 1.25rem 1.5rem;
+}
+.hacktivity-back-btn {
+  margin-right: 8px;
+}
+
+.hacktivity-table-wrap {
+  border-radius: 10px;
+  overflow: hidden;
+  overflow-x: auto;
+  border: 1px solid oklch(0.2 0 0 / 0.35);
+  min-height: 140px;
+  -webkit-overflow-scrolling: touch;
+}
+.hacktivity-table thead th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: oklch(0.6 0 0);
+  padding: 0.75rem 1rem;
+  font-weight: 600;
+}
+.hacktivity-table tbody td {
+  padding: 0.85rem 1rem;
+  font-size: 0.9rem;
+  vertical-align: middle;
+}
+.hacktivity-td-when {
+  color: oklch(0.7 0 0);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.hacktivity-td-action {
+  max-width: 180px;
+}
+.hacktivity-action-badge {
+  display: inline-block;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  background: oklch(0.22 0.02 260);
+  border: 1px solid oklch(0.3 0 0 / 0.4);
+  border-radius: 6px;
+  color: oklch(0.88 0 0);
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.hacktivity-td-target {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 0.85rem;
-  color: oklch(0.75 0 0);
+  color: oklch(0.85 0 0);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.hacktivity-detail {
-  padding: 0.5rem 0;
+.hacktivity-td-conv {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: oklch(0.65 0 0);
 }
-.hacktivity-detail-row {
-  margin: 0.5rem 0;
+.hacktivity-view-btn {
+  font-size: 0.85rem;
+  padding: 0.35rem 0.75rem;
+}
+.hacktivity-row {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.hacktivity-row:hover {
+  background: oklch(0.16 0 0 / 0.6);
+}
+
+.hacktivity-empty-cell {
+  padding: 2.5rem 1.5rem !important;
+  text-align: center;
+  color: oklch(0.65 0 0);
   font-size: 0.95rem;
 }
-.hacktivity-detail-row code {
+.hacktivity-empty-cell .hacktivity-empty-icon {
+  display: block;
+  font-size: 1.75rem;
+  margin-bottom: 0.5rem;
+  opacity: 0.7;
+}
+.hacktivity-empty-cell strong {
+  display: block;
+  color: oklch(0.8 0 0);
+  margin-bottom: 0.35rem;
+}
+.hacktivity-empty-hint {
+  display: block;
   font-size: 0.85rem;
-  background: oklch(0.2 0 0 / 0.5);
-  padding: 0.2rem 0.4rem;
+  color: oklch(0.6 0 0);
+  max-width: 320px;
+  margin: 0 auto;
+  line-height: 1.4;
+}
+
+.hacktivity-detail {
+  padding: 0.25rem 0;
+}
+.hacktivity-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 1.5rem;
+}
+.hacktivity-detail-card {
+  background: oklch(0.12 0 0 / 0.6);
+  border: 1px solid oklch(0.2 0 0 / 0.3);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hacktivity-detail-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: oklch(0.55 0 0);
+  font-weight: 600;
+}
+.hacktivity-detail-value {
+  font-size: 0.95rem;
+  color: oklch(0.92 0 0);
+}
+.hacktivity-detail-domain {
+  word-break: break-all;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.88rem;
+}
+.hacktivity-detail-code {
+  font-size: 0.85rem;
+  background: oklch(0.18 0 0 / 0.5);
+  padding: 2px 6px;
   border-radius: 4px;
 }
 .hacktivity-detail-section {
   margin-top: 1.25rem;
 }
-.hacktivity-detail-section h3 {
-  font-size: 0.9rem;
-  margin-bottom: 0.5rem;
-  color: oklch(0.8 0 0);
+.hacktivity-detail-section-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: oklch(0.85 0 0);
+  margin: 0 0 10px 0;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.hacktivity-detail-args {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 12px 14px;
+  background: oklch(0.1 0 0 / 0.6);
+  border: 1px solid oklch(0.2 0 0 / 0.25);
+  border-radius: 8px;
+}
+.hacktivity-detail-arg-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+.hacktivity-detail-arg-key {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: oklch(0.75 0 0);
+  min-width: 80px;
+}
+.hacktivity-detail-arg-val {
+  color: oklch(0.9 0 0);
+  word-break: break-word;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.82rem;
+}
+.hacktivity-detail-raw {
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: oklch(0.6 0 0);
+}
+.hacktivity-detail-raw summary {
+  cursor: pointer;
+  padding: 4px 0;
+}
+.hacktivity-detail-raw .hacktivity-detail-pre {
+  margin-top: 8px;
+}
+.hacktivity-detail-result-wrap {
+  max-height: 420px;
+  overflow-y: auto;
+  border-radius: 8px;
+  border: 1px solid oklch(0.2 0 0 / 0.3);
+  background: oklch(0.08 0 0 / 0.9);
+}
+.hacktivity-detail-result-wrap .hacktivity-detail-pre {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  max-height: none;
 }
 .hacktivity-detail-pre {
   background: oklch(0.12 0 0 / 0.9);
   border: 1px solid oklch(0.2 0 0 / 0.3);
   border-radius: 8px;
-  padding: 1rem;
-  overflow: auto;
-  max-height: 320px;
-  font-size: 0.8rem;
+  padding: 12px 14px;
+  font-size: 0.82rem;
+  overflow-x: auto;
   white-space: pre-wrap;
   word-break: break-word;
+  color: oklch(0.9 0 0);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  line-height: 1.45;
 }
 .hacktivity-detail-result {
-  max-height: 400px;
+  max-height: none;
 }
 
 /* Hacktivity toolbar (conversation filter) */
 .hacktivity-toolbar {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -3023,13 +3285,13 @@
   color: oklch(0.8 0 0);
 }
 .hacktivity-filter-select {
-  padding: 6px 10px;
-  font-size: 0.85rem;
+  padding: 8px 12px;
+  font-size: 0.9rem;
   background: oklch(0.18 0 0 / 0.9);
   border: 1px solid oklch(0.25 0 0);
-  border-radius: 6px;
+  border-radius: 8px;
   color: oklch(0.95 0 0);
-  min-width: 200px;
+  min-width: 220px;
   cursor: pointer;
 }
 .hacktivity-filter-select:hover,
@@ -3040,16 +3302,16 @@
 
 /* Hacktivity pagination */
 .hacktivity-pagination {
-  margin-top: 12px;
+  margin-top: 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
 }
 .hacktivity-pagination-info {
-  font-size: 0.85rem;
-  color: oklch(0.7 0 0);
+  font-size: 0.88rem;
+  color: oklch(0.68 0 0);
 }
 .hacktivity-pagination-buttons {
   display: flex;
@@ -3248,6 +3510,119 @@
   flex-shrink: 0;
 }
 
+/* Current Pentest Modal */
+.current-pentest-modal {
+  max-width: 480px;
+}
+
+.current-pentest-hint {
+  font-size: 13px;
+  color: oklch(0.7 0 0);
+  margin: 0 0 1rem 0;
+}
+
+.current-pentest-loading {
+  padding: 1.5rem;
+  text-align: center;
+  color: oklch(0.75 0 0);
+}
+
+.current-pentest-empty,
+.current-pentest-card {
+  padding: 0.5rem 0;
+}
+
+.current-pentest-empty p {
+  margin: 0 0 0.5rem 0;
+  color: oklch(0.85 0 0);
+}
+
+.current-pentest-empty-hint {
+  font-size: 13px;
+  color: oklch(0.6 0 0) !important;
+  margin-bottom: 1rem !important;
+}
+
+.pentest-runner-link-btn,
+.pentest-conversation-btn {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  margin-right: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.pentest-runner-link-btn {
+  background: oklch(0.35 0.08 250);
+  color: oklch(0.9 0.1 250);
+}
+
+.pentest-runner-link-btn:hover {
+  background: oklch(0.4 0.1 250);
+}
+
+.pentest-conversation-btn {
+  background: oklch(0.25 0.02 260);
+  color: oklch(0.9 0 0);
+  border: 1px solid oklch(0.35 0 0 / 0.5);
+}
+
+.pentest-conversation-btn:hover {
+  background: oklch(0.3 0 0 / 0.5);
+}
+
+.current-pentest-row {
+  margin-bottom: 0.75rem;
+}
+
+.current-pentest-label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: oklch(0.55 0 0);
+  margin-bottom: 0.25rem;
+}
+
+.current-pentest-status {
+  font-weight: 600;
+}
+
+.current-pentest-status--running {
+  color: oklch(0.75 0.15 145);
+}
+
+.current-pentest-status--completed {
+  color: oklch(0.7 0.15 145);
+}
+
+.current-pentest-status--failed,
+.current-pentest-status--stopped {
+  color: oklch(0.65 0.2 25);
+}
+
+.current-pentest-job-id {
+  font-size: 12px;
+  word-break: break-all;
+  color: oklch(0.75 0 0);
+}
+
+.current-pentest-message {
+  font-size: 13px;
+  color: oklch(0.8 0 0);
+  display: block;
+}
+
+.current-pentest-actions {
+  margin-top: 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 /* Plan Modal */
 .plan-modal {
   max-width: 800px;
@@ -3407,6 +3782,20 @@
     max-height: 95vh;
   }
 
+  .modal-header {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 1rem 1.25rem;
+  }
+
+  .modal-title {
+    font-size: 1.1rem;
+  }
+
+  .modal-body {
+    padding: 1rem 1.25rem;
+  }
+
   .upgrade-plans-grid {
     grid-template-columns: 1fr;
   }
@@ -3424,6 +3813,122 @@
 
   .usage-stats {
     grid-template-columns: 1fr;
+  }
+
+  /* Hacktivity modal – mobile */
+  .hacktivity-modal-body {
+    padding: 1rem 1rem;
+    min-height: 180px;
+  }
+
+  .hacktivity-modal-subtitle {
+    font-size: 0.8rem;
+  }
+
+  .hacktivity-error-banner {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+  }
+
+  .hacktivity-toolbar {
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+
+  .hacktivity-filter-label {
+    flex-wrap: wrap;
+  }
+
+  .hacktivity-filter-select {
+    min-width: 100%;
+    max-width: 100%;
+  }
+
+  .hacktivity-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    min-height: 120px;
+  }
+
+  .hacktivity-table thead th {
+    padding: 0.6rem 0.5rem;
+    font-size: 0.7rem;
+  }
+
+  .hacktivity-table tbody td {
+    padding: 0.6rem 0.5rem;
+    font-size: 0.8rem;
+  }
+
+  .hacktivity-action-badge {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.4rem;
+  }
+
+  .hacktivity-pagination {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .hacktivity-pagination-info {
+    text-align: center;
+  }
+
+  .hacktivity-pagination-buttons {
+    justify-content: center;
+  }
+
+  .hacktivity-detail-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    margin-bottom: 1rem;
+  }
+
+  .hacktivity-detail-card {
+    padding: 10px 12px;
+  }
+
+  .hacktivity-detail-section-title {
+    font-size: 0.8rem;
+  }
+
+  .hacktivity-detail-args,
+  .hacktivity-detail-result-wrap {
+    padding: 10px 12px;
+  }
+
+  .hacktivity-detail-pre {
+    font-size: 0.75rem;
+    padding: 10px 12px;
+  }
+
+  /* Current Pentest modal – mobile */
+  .current-pentest-modal .modal-body {
+    padding: 1rem;
+  }
+
+  .current-pentest-actions {
+    flex-direction: column;
+  }
+
+  .pentest-runner-link-btn,
+  .pentest-conversation-btn {
+    width: 100%;
+    margin-right: 0;
+  }
+
+  /* Plan modal – mobile */
+  .plan-modal .modal-body {
+    padding: 1rem;
+  }
+
+  .plan-card {
+    padding: 1rem;
   }
 }
 

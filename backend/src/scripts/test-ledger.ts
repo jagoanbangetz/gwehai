@@ -84,7 +84,7 @@ async function testLedgerMath() {
       userId: testUser.id,
       creditPackId: pack.id,
       status: CreditOrderStatus.COMPLETED,
-      provider: 'stripe' as any,
+      provider: 'manual' as any,
       idempotencyKey: `test-${Date.now()}`,
       amountCents: pack.priceCents,
       pointsGranted: pack.points,

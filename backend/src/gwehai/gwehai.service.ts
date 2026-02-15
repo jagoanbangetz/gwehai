@@ -3,12 +3,30 @@ import { randomUUID } from 'crypto';
 import { ChatService } from '../chat/chat.service';
 import { getAgentLabel } from '../chat/agent-names';
 import { PENTEST_SYSTEM_PROMPT } from '../prompt/pentest.system-prompt';
+import { PlanResolutionService } from '../plans/plan-resolution.service';
+import { PlanUsageService } from '../plans/plan-usage.service';
+import { validateScanStart } from '../plans/plan-limits.validation';
+import { getPlanPayload } from '../config/plans.config';
+import type { PlanId } from '../config/plans.config';
+import { WORKER_SLOT_TTL_MS } from '../config/plan-billing.config';
+
+/** In-memory worker slot with TTL. TODO: replace with Redis SETNX lock when Redis is available. */
+interface WorkerSlot {
+  jobId: string;
+  expiresAt: number;
+}
 
 @Injectable()
 export class GwehAIService {
   private readonly jobs = new Map<string, LocalAIJob>();
+  /** In-memory per-user worker slots (jobId + expiresAt). Expired slots are pruned on check. */
+  private readonly workerSlots = new Map<string, WorkerSlot[]>();
 
-  constructor(private readonly chatService: ChatService) {}
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly planResolution: PlanResolutionService,
+    private readonly planUsage: PlanUsageService,
+  ) {}
 
   /**
    * Create a local chat job and persist the conversation
@@ -36,8 +54,31 @@ export class GwehAIService {
     const message = this.extractUserMessage(payload);
     const conversationId = payload.conversation_id;
 
-    const jobId = randomUUID();
+    const planId: PlanId = await this.planResolution.getUserPlan(userId);
+    const def = this.planResolution.getPlanDefinition(planId);
+    const limits = def.limits;
+
+    // Enforce workers concurrency (in-memory with TTL; TODO: Redis SETNX when available)
     const now = Date.now();
+    let slots = this.workerSlots.get(userId) ?? [];
+    slots = slots.filter((s) => s.expiresAt > now);
+    this.workerSlots.set(userId, slots);
+    const sessionsToday = await this.planUsage.getSessionsStartedToday(userId);
+    validateScanStart(planId, limits, {
+      currentWorkerCount: slots.length,
+      sessionsStartedToday: sessionsToday,
+    });
+    await this.planUsage.recordSessionStart(userId);
+
+    const jobId = randomUUID();
+    slots = this.workerSlots.get(userId) ?? [];
+    slots.push({ jobId, expiresAt: now + WORKER_SLOT_TTL_MS });
+    this.workerSlots.set(userId, slots);
+
+    const releaseWorker = () => {
+      const list = this.workerSlots.get(userId) ?? [];
+      this.workerSlots.set(userId, list.filter((s) => s.jobId !== jobId));
+    };
 
     const job: LocalAIJob = {
       id: jobId,
@@ -57,16 +98,21 @@ export class GwehAIService {
     this.jobs.set(jobId, job);
 
     // Run agent in background: LLM → append events to job.events; stream endpoint polls and yields SSE.
-    this.runAgentInBackground(jobId, userId, message, conversationId).catch((err) => {
-      const job = this.jobs.get(jobId);
-      if (job) {
-        job.status = 'failed';
-        job.error = err?.message || String(err);
-        job.events.push({ type: 'error', data: { message: job.error } });
-        job.events.push({ type: 'done', data: { job_id: jobId, conversation_id: job.conversationId } });
-        this.chatService.setConversationRunStatus(job.conversationId || conversationId, 'error').catch(() => {});
-      }
-    });
+    this.runAgentInBackground(jobId, userId, message, conversationId)
+      .catch((err) => {
+        const job = this.jobs.get(jobId);
+        if (job) {
+          job.status = 'failed';
+          job.error = err?.message || String(err);
+          job.events.push({ type: 'error', data: { message: job.error } });
+          job.events.push({ type: 'done', data: { job_id: jobId, conversation_id: job.conversationId } });
+          this.chatService.setConversationRunStatus(job.conversationId || conversationId, 'error').catch(() => {});
+        }
+      })
+      .finally(releaseWorker);
+
+    const planPayload = getPlanPayload(planId);
+    const usage = await this.planUsage.getUsage(userId, planId, undefined);
 
     return {
       job_id: jobId,
@@ -74,12 +120,25 @@ export class GwehAIService {
       conversation_id: undefined,
       status: job.status,
       message: 'Job created',
+      plan: planPayload.plan,
+      limits_summary: planPayload.limits_summary,
+      usage,
     };
   }
 
   /**
-   * Agent loop (background): call processMessageWithTools so the LLM can use tools (memory_search, exec, etc.).
-   * Events (status, tool_start, tool_log, tool_end, message_delta, message_done, done) are pushed to job.events;
+   * True if the user message indicates a target host (URL or "pentest <host>"). Otherwise we use simple security Q&A.
+   */
+  private looksLikeTargetRequest(message: string): boolean {
+    const trimmed = message.trim();
+    if (/https?:\/\//i.test(trimmed)) return true;
+    if (/pentest\s+\S+/i.test(trimmed)) return true;
+    return false;
+  }
+
+  /**
+   * Agent loop (background): if no target host, use processMessageSimple (direct security Q&A); otherwise processMessageWithTools.
+   * Events (status, message_delta, message_done, done) or full tool events are pushed to job.events;
    * stream endpoint polls and yields SSE so the user sees what the agent is doing step by step.
    */
   private async runAgentInBackground(
@@ -102,16 +161,26 @@ export class GwehAIService {
     const abortSignal = job.abortController?.signal;
 
     try {
-      const result = await this.chatService.processMessageWithTools(
-        userId,
-        message,
-        conversationId,
-        jobId,
-        pushEvent,
-        { index: 1, label: getAgentLabel(1) },
-        undefined,
-        { emitDoneEvent: true, abortSignal },
-      );
+      const useSimple = !this.looksLikeTargetRequest(message);
+      const result = useSimple
+        ? await this.chatService.processMessageSimple(
+            userId,
+            message,
+            conversationId,
+            jobId,
+            pushEvent,
+            { emitDoneEvent: true, abortSignal },
+          )
+        : await this.chatService.processMessageWithTools(
+            userId,
+            message,
+            conversationId,
+            jobId,
+            pushEvent,
+            { index: 1, label: getAgentLabel(1) },
+            undefined,
+            { emitDoneEvent: true, abortSignal },
+          );
 
       job.conversationId = result.conversationId;
       job.messageId = result.messageId;
@@ -154,6 +223,8 @@ export class GwehAIService {
     return {
       job_id: job.id,
       status: job.status,
+      user_message: job.userMessage,
+      conversation_id: job.conversationId || undefined,
     };
   }
 
@@ -193,6 +264,39 @@ export class GwehAIService {
       throw new HttpException('Job not found', HttpStatus.NOT_FOUND);
     }
     return job;
+  }
+
+  /**
+   * Admin-only: snapshot of all in-memory jobs (active and recent) for monitoring.
+   */
+  getActiveJobsForAdmin(): Array<{
+    job_id: string;
+    userId: string;
+    conversationId: string;
+    status: string;
+    createdAt: number;
+    userMessage: string;
+  }> {
+    const list: Array<{
+      job_id: string;
+      userId: string;
+      conversationId: string;
+      status: string;
+      createdAt: number;
+      userMessage: string;
+    }> = [];
+    this.jobs.forEach((job) => {
+      list.push({
+        job_id: job.id,
+        userId: job.userId,
+        conversationId: job.conversationId || '',
+        status: job.status,
+        createdAt: job.createdAt,
+        userMessage: (job.userMessage || '').slice(0, 200),
+      });
+    });
+    list.sort((a, b) => b.createdAt - a.createdAt);
+    return list;
   }
 
   /**

@@ -91,9 +91,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   type="button"
                   id="settings-google"
                   className="settings-modal__btn-secondary"
-                  onClick={() => { window.location.href = '/api/auth/google' }}
+                  onClick={() => {
+                    const apiBase = import.meta.env.VITE_API_URL || ''
+                    window.location.href = `${apiBase}/api/auth/google`.replace(/([^:]\/)\/+/g, '$1')
+                  }}
                 >
-                  {(user as any)?.googleId ? 'Google Account Connected' : 'Connect Google Account'}
+                  {user?.googleId ? 'Google Account Connected' : 'Connect Google Account'}
                 </button>
               </div>
               <div className="settings-modal__field">

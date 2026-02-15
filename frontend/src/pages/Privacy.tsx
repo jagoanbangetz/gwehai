@@ -3,11 +3,9 @@ import Header from '../components/Header'
 import Footer from '../components/Footer'
 import AnimatedBackground from '../components/AnimatedBackground'
 import './Legal.css'
-import PageLoader from '../components/PageLoader'
 
 const Privacy = () => {
   return (
-    <PageLoader>
     <div className="legal-page dark-theme">
       <AnimatedBackground variant="full" intensity="low" />
       <Header />
@@ -103,7 +101,6 @@ const Privacy = () => {
       </main>
       <Footer />
     </div>
-    </PageLoader>
   )
 }
 

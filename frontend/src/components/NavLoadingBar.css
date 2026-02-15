@@ -1,0 +1,32 @@
+.nav-loading-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 9999;
+  background: oklch(0.12 0 0);
+  overflow: hidden;
+}
+
+.nav-loading-bar-fill {
+  height: 100%;
+  width: 40%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    oklch(0.6 0.2 250),
+    oklch(0.75 0.15 260),
+    transparent
+  );
+  animation: nav-loading-slide 0.5s ease-in-out;
+}
+
+@keyframes nav-loading-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}

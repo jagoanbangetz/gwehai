@@ -60,10 +60,10 @@ export class CreditOrder {
   provider: PaymentProvider;
 
   @Column({ nullable: true })
-  providerPaymentIntentId: string; // Stripe payment_intent ID, etc.
+  providerPaymentIntentId: string; // External provider payment intent ID
 
   @Column({ nullable: true })
-  providerChargeId: string; // Stripe charge ID, etc.
+  providerChargeId: string; // External provider charge ID
 
   @Column({ unique: true })
   idempotencyKey: string; // Prevent duplicate processing

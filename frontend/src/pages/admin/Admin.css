@@ -1,0 +1,246 @@
+/* Admin layout – secure, minimal */
+.admin-layout {
+  display: flex;
+  min-height: 100vh;
+  background: oklch(0.06 0 0);
+  color: oklch(0.95 0 0);
+}
+
+.admin-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: oklch(0.09 0 0);
+  border-right: 1px solid oklch(0.2 0 0 / 0.4);
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 0;
+}
+
+.admin-sidebar-header {
+  padding: 0 1rem 1rem;
+  border-bottom: 1px solid oklch(0.2 0 0 / 0.3);
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-sidebar-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.admin-sidebar-badge {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: oklch(0.6 0.15 145);
+  font-weight: 700;
+}
+
+.admin-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 0.5rem;
+}
+
+.admin-nav-item {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  color: oklch(0.75 0 0);
+  text-decoration: none;
+  font-size: 0.9rem;
+  border-radius: 6px;
+  margin-bottom: 2px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.admin-nav-item:hover {
+  background: oklch(0.15 0 0 / 0.5);
+  color: oklch(0.95 0 0);
+}
+
+.admin-nav-item.active {
+  background: oklch(0.22 0.02 260);
+  color: oklch(1 0 0);
+  font-weight: 600;
+}
+
+.admin-sidebar-footer {
+  padding: 1rem;
+  border-top: 1px solid oklch(0.2 0 0 / 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.admin-user-email {
+  font-size: 0.75rem;
+  color: oklch(0.6 0 0);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-logout,
+.admin-back-app {
+  font-size: 0.85rem;
+  padding: 0.4rem 0;
+  background: transparent;
+  border: none;
+  color: oklch(0.7 0 0);
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+}
+
+.admin-logout:hover,
+.admin-back-app:hover {
+  color: oklch(0.95 0 0);
+}
+
+.admin-main {
+  flex: 1;
+  min-width: 0;
+  padding: 1.5rem 2rem;
+  overflow-y: auto;
+}
+
+.admin-page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 1rem 0;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.admin-card {
+  background: oklch(0.1 0 0 / 0.6);
+  border: 1px solid oklch(0.2 0 0 / 0.35);
+  border-radius: 10px;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.admin-table th {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  background: oklch(0.12 0 0 / 0.8);
+  color: oklch(0.65 0 0);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.admin-table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid oklch(0.2 0 0 / 0.2);
+  color: oklch(0.9 0 0);
+}
+
+.admin-table tr:hover td {
+  background: oklch(0.12 0 0 / 0.4);
+}
+
+.admin-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.admin-stat-card {
+  background: oklch(0.1 0 0 / 0.6);
+  border: 1px solid oklch(0.2 0 0 / 0.35);
+  border-radius: 10px;
+  padding: 1rem;
+}
+
+.admin-stat-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: oklch(0.6 0 0);
+  margin-bottom: 0.25rem;
+}
+
+.admin-stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  color: oklch(0.95 0 0);
+}
+
+.admin-error {
+  color: oklch(0.7 0.2 25);
+  padding: 1rem;
+  background: oklch(0.2 0.1 25 / 0.2);
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.admin-loading {
+  color: oklch(0.65 0 0);
+  padding: 1rem;
+}
+
+@media (max-width: 768px) {
+  .admin-layout {
+    flex-direction: column;
+  }
+
+  .admin-sidebar {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .admin-sidebar-header {
+    width: 100%;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .admin-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    flex: none;
+  }
+
+  .admin-nav-item {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.8rem;
+  }
+
+  .admin-sidebar-footer {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    padding-top: 0.75rem;
+  }
+
+  .admin-main {
+    padding: 1rem;
+  }
+
+  .admin-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

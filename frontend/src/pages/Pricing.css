@@ -33,6 +33,48 @@
   line-height: 1.6;
 }
 
+.pricing-footnote {
+  font-size: 0.9rem;
+  color: oklch(0.55 0 0);
+  margin-top: 0.75rem;
+  font-style: italic;
+}
+
+.price-period {
+  font-size: 1.25rem;
+  color: oklch(0.7 0 0);
+  font-weight: 500;
+  margin-left: 0.15rem;
+}
+
+.pack-features-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pack-features-list .pack-feature {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.pack-limits {
+  font-size: 0.85rem;
+  color: oklch(0.6 0 0);
+  margin-bottom: 1.5rem;
+  line-height: 1.4;
+}
+
+.pack-limits .limits-label {
+  font-weight: 600;
+  margin-right: 0.35rem;
+}
+
 .credit-packs-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));

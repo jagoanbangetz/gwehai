@@ -47,11 +47,11 @@ export class PaymentsService {
       return existing; // Idempotent: return existing order
     }
 
-    // Create new order
+    // Create new order (provider MANUAL when no external payment gateway)
     const order = this.orderRepo.create({
       userId,
       creditPackId: pack.id,
-      provider: PaymentProvider.STRIPE, // Default, can be changed
+      provider: PaymentProvider.MANUAL,
       idempotencyKey: key,
       amountCents: pack.priceCents,
       pointsGranted: pack.points,

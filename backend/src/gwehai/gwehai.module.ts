@@ -6,6 +6,7 @@ import { GwehAIService } from './gwehai.service';
 import { GwehAISSEGuard } from './gwehai-sse.guard';
 import { AuthModule } from '../auth/auth.module';
 import { ChatModule } from '../chat/chat.module';
+import { PlansModule } from '../plans/plans.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { ChatModule } from '../chat/chat.module';
     }),
     AuthModule, // Import AuthModule to use AuthService for user validation
     ChatModule,
+    PlansModule,
   ],
   controllers: [GwehAIController],
   providers: [GwehAIService, GwehAISSEGuard],

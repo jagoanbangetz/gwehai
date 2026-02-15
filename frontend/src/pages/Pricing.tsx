@@ -1,69 +1,32 @@
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
 import AnimatedBackground from '../components/AnimatedBackground'
+import { PLAN_TIERS, PLAN_FOOTNOTE, formatWorkersLabel } from '../config/plans'
 import './Pricing.css'
-import PageLoader from '../components/PageLoader'
-
-interface CreditPack {
-  points: number
-  price: number
-  savings?: string
-  popular?: boolean
-  free?: boolean
-}
 
 const Pricing = () => {
+  const navigate = useNavigate()
   const { isAuthenticated } = useAuth()
 
-  const creditPacks: CreditPack[] = [
-    {
-      points: 10,
-      price: 0,
-      free: true,
-    },
-    {
-      points: 100,
-      price: 20,
-    },
-    {
-      points: 200,
-      price: 35,
-      savings: 'Save $5',
-    },
-    {
-      points: 500,
-      price: 70,
-      savings: 'Save $30',
-      popular: true,
-    },
-    {
-      points: 600,
-      price: 100,
-      savings: 'Save $20',
-    },
-  ]
-
-  const handlePurchase = (points: number, price: number, isFree: boolean = false) => {
+  const handleSelectPlan = (_planId: string, priceMonthly: number) => {
     if (!isAuthenticated) {
-      window.location.href = '/signup'
+      navigate('/signup')
     } else {
-      if (isFree) {
-        // In real app, this would grant free points via API
-        alert(`Claiming ${points} free points...`)
-      } else {
-        // In real app, this would redirect to payment page
-        alert(`Redirecting to purchase ${points} points for $${price}...`)
+      if (priceMonthly === 0) {
+        return // already on Free
       }
+      // In real app: redirect to checkout or subscription page
+      navigate('/dashboard')
     }
   }
 
   const handleEnterprise = () => {
-    window.location.href = '/contact'
+    navigate('/contact')
   }
 
   return (
-    <PageLoader>
     <>
       <Header />
       <div className="pricing-page">
@@ -72,67 +35,67 @@ const Pricing = () => {
           <div className="pricing-header">
             <h1 className="pricing-title">Pricing</h1>
             <p className="pricing-subtitle">
-              Purchase credits to use GwehAI for security testing and analysis
+              Choose a plan that fits your security testing and analysis needs
             </p>
+            <p className="pricing-footnote">{PLAN_FOOTNOTE}</p>
           </div>
 
-          <div className="credit-packs-grid">
-            {creditPacks.map((pack, index) => (
-              <div key={index} className={`credit-pack-card ${pack.popular ? 'popular' : ''}`}>
-                {pack.popular && (
+          <div className="credit-packs-grid plan-tiers-grid">
+            {PLAN_TIERS.map((tier) => (
+              <div key={tier.id} className={`credit-pack-card ${tier.popular ? 'popular' : ''}`}>
+                {tier.popular && (
                   <div className="popular-badge">
                     <span>Most Popular</span>
                   </div>
                 )}
-                
+
                 <div className="pack-header">
                   <div className="pack-points">
-                    <span className="points-amount">{pack.points}</span>
-                    <span className="points-label">Points</span>
+                    <span className="points-amount">{tier.name}</span>
+                    <span className="points-label">{tier.id}</span>
                   </div>
-                  {pack.savings && (
-                    <div className="pack-savings">{pack.savings}</div>
-                  )}
                 </div>
 
                 <div className="pack-price">
-                  {pack.free ? (
+                  {tier.priceMonthly === 0 ? (
                     <span className="price-amount free">Free</span>
                   ) : (
                     <>
                       <span className="price-symbol">$</span>
-                      <span className="price-amount">{pack.price}</span>
+                      <span className="price-amount">{tier.priceMonthly}</span>
+                      <span className="price-period">/mo</span>
                     </>
                   )}
                 </div>
 
-                {!pack.free && (
+                {tier.priceMonthly > 0 && (
                   <div className="pack-value">
-                    ${(pack.price / pack.points).toFixed(2)} per point
+                    Billed monthly • Cancel anytime
                   </div>
                 )}
 
-                <button
-                  className={`pack-purchase-button ${pack.free ? 'free-button' : ''}`}
-                  onClick={() => handlePurchase(pack.points, pack.price, pack.free)}
-                >
-                  {pack.free ? 'Get Free Points' : 'Purchase'}
-                </button>
+                <ul className="pack-features-list">
+                  {tier.features.map((feature, i) => (
+                    <li key={i} className="pack-feature">
+                      <span className="feature-icon">✓</span>
+                      <span className="feature-text">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
 
-                <div className="pack-features">
-                  <div className="pack-feature">
-                    <span className="feature-icon">✓</span>
-                    <span className="feature-text">Use for AI chat messages</span>
-                  </div>
-                  <div className="pack-feature">
-                    <span className="feature-icon">✓</span>
-                    <span className="feature-text">Use for security analysis</span>
-                  </div>
-                  <div className="pack-feature">
-                    <span className="feature-icon">✓</span>
-                    <span className="feature-text">No expiration date</span>
-                  </div>
+                <div className="pack-limits">
+                  <span className="limits-label">Limits:</span>
+                  <span className="limits-value">
+                    {formatWorkersLabel(tier.limitsSummary.workers)} • {tier.limitsSummary.scans} • {tier.limitsSummary.steps}
+                  </span>
                 </div>
+
+                <button
+                  className={`pack-purchase-button ${tier.priceMonthly === 0 ? 'free-button' : ''}`}
+                  onClick={() => handleSelectPlan(tier.id, tier.priceMonthly)}
+                >
+                  {tier.priceMonthly === 0 ? 'Current Plan' : 'Get ' + tier.name}
+                </button>
               </div>
             ))}
           </div>
@@ -146,7 +109,7 @@ const Pricing = () => {
               <div className="enterprise-features">
                 <div className="enterprise-feature">
                   <span className="feature-icon">→</span>
-                  <span>Custom point packages</span>
+                  <span>Unlimited workers &amp; scans</span>
                 </div>
                 <div className="enterprise-feature">
                   <span className="feature-icon">→</span>
@@ -177,7 +140,6 @@ const Pricing = () => {
       </div>
       <Footer />
     </>
-    </PageLoader>
   )
 }
 

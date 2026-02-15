@@ -35,6 +35,7 @@ import { PlansModule } from './plans/plans.module';
 import { GwehAIModule } from './gwehai/gwehai.module';
 import { ToolsModule } from './tools/tools.module';
 import { PentestJobsModule } from './pentest-jobs/pentest-jobs.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { PentestJobsModule } from './pentest-jobs/pentest-jobs.module';
       ConversationMemory,
       Hacktivity,
     ]),
+    MailModule,
     ChatModule,
     AuthModule,
     PointsModule,

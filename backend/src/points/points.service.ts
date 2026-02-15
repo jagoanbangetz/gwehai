@@ -5,6 +5,7 @@ import { User } from '../entities/user.entity';
 import { UserPointBalance } from '../entities/user-point-balance.entity';
 import { PointLedger, PointLedgerType, PointLedgerReason } from '../entities/point-ledger.entity';
 import { Subscription } from '../entities/subscription.entity';
+import { POINTS_ENABLED } from '../config/plan-billing.config';
 
 @Injectable()
 export class PointsService {
@@ -17,6 +18,11 @@ export class PointsService {
     private subscriptionRepo: Repository<Subscription>,
     private dataSource: DataSource,
   ) {}
+
+  /** When false, plan-based quotas are the source of truth; no point deductions run. */
+  isPointsEnabled(): boolean {
+    return POINTS_ENABLED;
+  }
 
   /**
    * Get current point balance for a user (including subscription allowance)
@@ -103,7 +109,8 @@ export class PointsService {
   }
 
   /**
-   * Spend points from a user (ACID-safe, with balance check)
+   * Spend points from a user (ACID-safe, with balance check).
+   * When POINTS_ENABLED=false, no deduction is executed (plan-based quotas are used instead).
    */
   async spendPoints(
     userId: string,
@@ -112,7 +119,10 @@ export class PointsService {
     refTable?: string,
     refId?: string,
     metadata?: Record<string, any>,
-  ): Promise<PointLedger> {
+  ): Promise<PointLedger | null> {
+    if (!POINTS_ENABLED) {
+      return Promise.resolve(null);
+    }
     const normalizedAmount = this.normalizePoints(amount);
     if (normalizedAmount <= 0) {
       throw new BadRequestException('Amount must be positive');

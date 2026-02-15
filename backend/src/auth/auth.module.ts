@@ -8,15 +8,18 @@ import { AuthController } from './auth.controller';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { User } from '../entities/user.entity';
+import { VerificationCode } from '../entities/verification-code.entity';
+import { PendingSignup } from '../entities/pending-signup.entity';
 import { PointsModule } from '../points/points.module';
+import { MailModule } from '../mail/mail.module';
 import { RolesGuard } from './guards/roles.guard';
-import { APP_GUARD, Reflector } from '@nestjs/core';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User]),
+    TypeOrmModule.forFeature([User, VerificationCode, PendingSignup]),
     PassportModule,
     PointsModule,
+    MailModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({

@@ -55,6 +55,13 @@ export class User {
   @Column({ nullable: true })
   defaultModelId: string;
 
+  @Column({ nullable: true })
+  lastLoginIp: string;
+
+  /** Plan ID: FREE | PRO | PRO_PLUS | ULTRA. Resolved in one place (PlanService.getUserPlan). Default FREE if null. */
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  planId: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

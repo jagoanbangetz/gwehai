@@ -8,7 +8,6 @@ import { ToastContainer, Toast } from '../components/Toast'
 import { getModelIcon, isProModel } from '../utils/modelIcons'
 import { gwehaiClient, GwehAIEvent } from '../utils/gwehaiApi'
 import MarkdownMessage from '../components/MarkdownMessage'
-import PageLoader from '../components/PageLoader'
 import DashboardLayout from '../components/DashboardLayout'
 import ProfileFooter from '../components/ProfileFooter'
 import SettingsModal from '../components/SettingsModal'
@@ -19,6 +18,7 @@ import ThinkingBar from '../components/ThinkingBar'
 import { GwehLogRenderer } from '../components/GwehLog'
 import type { LogEvent, LogPhase } from '../components/GwehLog'
 import { useMediaQuery } from '../hooks/useMediaQuery'
+import { PLAN_TIERS, formatWorkersLabel } from '../config/plans'
 
 interface Tool {
   id: string
@@ -156,6 +156,25 @@ interface CurrentPlan {
   }
 }
 
+/** Plan-based response from GET /plans/me (source of truth for quota UI) */
+interface MyPlanResponse {
+  planId: string
+  plan: {
+    id: string
+    marketing_title: string
+    marketing_footnote: string
+  }
+  limits_summary: {
+    workers: string
+    scans: string
+    steps: string
+  }
+  usage?: {
+    session: { steps_used: number; steps_remaining: number | null; tokens_used: number }
+    day: { tokens_used: number; tokens_remaining: number | null }
+  }
+}
+
 /** Map DB conversation + messages to ChatHistory entry */
 function conversationToChatHistory(
   conv: {
@@ -189,7 +208,7 @@ function conversationToChatHistory(
 }
 
 const Dashboard = () => {
-  const { user, isAuthenticated, logout } = useAuth()
+  const { user, isAuthenticated, logout, refreshUser } = useAuth()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [messages, setMessages] = useState<Message[]>([])
@@ -218,9 +237,14 @@ const Dashboard = () => {
   const [hacktivityPageSize] = useState(20)
   const [hacktivityTotal, setHacktivityTotal] = useState(0)
   const [isLoadingHacktivity, setIsLoadingHacktivity] = useState(false)
+  const [hacktivityLoadError, setHacktivityLoadError] = useState<string | null>(null)
   const [selectedHacktivityId, setSelectedHacktivityId] = useState<string | null>(null)
   const [selectedHacktivity, setSelectedHacktivity] = useState<HacktivityRow | null>(null)
   const [showPlanModal, setShowPlanModal] = useState(false)
+  const [showCurrentPentestModal, setShowCurrentPentestModal] = useState(false)
+  const [currentPentestStatus, setCurrentPentestStatus] = useState<{ job_id: string; status: string; user_message?: string; conversation_id?: string } | null>(null)
+  const [currentPentestLoading, setCurrentPentestLoading] = useState(false)
+  const [currentPentestError, setCurrentPentestError] = useState<string | null>(null)
   const [helpMessages, setHelpMessages] = useState<Message[]>([])
   const [helpInput, setHelpInput] = useState('')
   const [isHelpLoading, setIsHelpLoading] = useState(false)
@@ -244,6 +268,7 @@ const Dashboard = () => {
   const [_selectedFindingId, setSelectedFindingId] = useState<string | null>(null)
   const [selectedFinding, setSelectedFinding] = useState<FindingRow | null>(null)
   const [currentPlan, setCurrentPlan] = useState<CurrentPlan | null>(null)
+  const [myPlan, setMyPlan] = useState<MyPlanResponse | null>(null)
   const [pointsBalance, setPointsBalance] = useState<number | null>(null)
   const [isLoadingPlan, setIsLoadingPlan] = useState(false)
   const [currentJobId, setCurrentJobId] = useState<string | null>(null)
@@ -256,6 +281,7 @@ const Dashboard = () => {
   const [currentStep, setCurrentStep] = useState<string | null>(null)
   const [activityLog, setActivityLog] = useState<string[]>([])
   const [logEvents, setLogEvents] = useState<LogEvent[]>([])
+  const [isSimpleConversation, setIsSimpleConversation] = useState(false)
   const [pentestChecklistProgress, setPentestChecklistProgress] = useState<{ phase: string; checklist: Record<string, boolean> } | null>(null)
   const messageToolsSnapshot = useMemo(() => messageTools, [messageTools])
   /** Mobile: <1024px — hamburger + drawer. Desktop: persistent sidebar + chevron collapse. */
@@ -310,6 +336,29 @@ const Dashboard = () => {
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id))
   }
+
+  /** Show success notification when arriving from login / register / verified */
+  const hasShownAuthToastRef = useRef(false)
+  useEffect(() => {
+    const toastType = searchParams.get('toast')
+    if (!toastType || hasShownAuthToastRef.current) return
+    const messages: Record<string, string> = {
+      login: "Welcome back! You're logged in.",
+      google: "Signed in with Google successfully!",
+      register: 'Account created successfully!',
+      verified: "Account verified! You're all set.",
+    }
+    const msg = messages[toastType]
+    if (msg) {
+      hasShownAuthToastRef.current = true
+      showToast(msg, 'success', 4000)
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('toast')
+        return next
+      }, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
 
   const loadReports = async () => {
     try {
@@ -378,6 +427,7 @@ const Dashboard = () => {
   const loadHacktivity = async (page: number = 1, conversationId: string | null = null) => {
     try {
       setIsLoadingHacktivity(true)
+      setHacktivityLoadError(null)
       const params = new URLSearchParams()
       params.set('limit', String(hacktivityPageSize))
       params.set('offset', String((page - 1) * hacktivityPageSize))
@@ -391,7 +441,10 @@ const Dashboard = () => {
       setHacktivityPage(page)
     } catch (error: any) {
       console.error('Failed to load Hacktivity', error)
-      showToast(error.response?.data?.message || 'Failed to load activity.', 'error')
+      setHacktivityLoadError(error.response?.data?.message || error?.message || 'Failed to load activity.')
+      setHacktivityList([])
+      setHacktivityTotal(0)
+      showToast('Could not load Hacktivity. Check your connection.', 'error')
     } finally {
       setIsLoadingHacktivity(false)
     }
@@ -414,6 +467,21 @@ const Dashboard = () => {
     setSelectedHacktivity(null)
     setSelectedHacktivityConversationId(null)
     setHacktivityPage(1)
+    setHacktivityLoadError(null)
+  }
+
+  /** Derive a short action label from toolArgs for list view (e.g. "exec", "memory_search", "curl"). */
+  const getHacktivityActionLabel = (toolArgs: Record<string, unknown> | null): string => {
+    if (!toolArgs || typeof toolArgs !== 'object') return '—'
+    const name = (toolArgs.name ?? toolArgs.tool ?? toolArgs.command ?? toolArgs.path) as string | undefined
+    if (typeof name === 'string' && name.length > 0) {
+      const s = name.trim()
+      if (s.length > 24) return s.slice(0, 22) + '…'
+      return s
+    }
+    const firstKey = Object.keys(toolArgs)[0]
+    if (firstKey) return firstKey.length > 24 ? firstKey.slice(0, 22) + '…' : firstKey
+    return '—'
   }
 
   const hacktivityTotalPages = Math.max(1, Math.ceil(hacktivityTotal / hacktivityPageSize))
@@ -421,11 +489,13 @@ const Dashboard = () => {
   const loadPlan = async () => {
     try {
       setIsLoadingPlan(true)
-      const [planRes, balanceRes] = await Promise.all([
-        apiClient.get('/plans/current'),
-        apiClient.get('/points/balance'),
+      const [meRes, currentRes, balanceRes] = await Promise.all([
+        apiClient.get('/plans/me').catch(() => ({ data: null })),
+        apiClient.get('/plans/current').catch(() => ({ data: null })),
+        apiClient.get('/points/balance').catch(() => ({ data: { balance: null } })),
       ])
-      setCurrentPlan(planRes.data || null)
+      setMyPlan(meRes.data || null)
+      setCurrentPlan(currentRes.data || null)
       setPointsBalance(balanceRes.data?.balance ?? null)
     } catch (error: any) {
       console.error('Failed to load plan info:', error)
@@ -525,7 +595,8 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (showHacktivityModal) {
-      loadHacktivityConversations()
+      setHacktivityLoadError(null)
+      loadHacktivityConversations().catch(() => {})
       setSelectedHacktivityConversationId(null)
       setHacktivityPage(1)
       loadHacktivity(1, null)
@@ -537,6 +608,40 @@ const Dashboard = () => {
       loadPlan()
     }
   }, [showPlanModal])
+
+  const loadCurrentPentestStatus = useCallback(async (jobId: string) => {
+    setCurrentPentestLoading(true)
+    setCurrentPentestError(null)
+    try {
+      const data = await gwehaiClient.getJobStatus(jobId)
+      setCurrentPentestStatus(data)
+    } catch (e: any) {
+      setCurrentPentestStatus(null)
+      setCurrentPentestError(e?.message || 'Job not found (it may have finished or the server restarted).')
+    } finally {
+      setCurrentPentestLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!showCurrentPentestModal) return
+    const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('gwehai_current_pentest_job_id') : null
+    if (!stored) {
+      setCurrentPentestStatus(null)
+      setCurrentPentestError(null)
+      setCurrentPentestLoading(false)
+      return
+    }
+    loadCurrentPentestStatus(stored)
+  }, [showCurrentPentestModal, loadCurrentPentestStatus])
+
+  useEffect(() => {
+    if (!showCurrentPentestModal || !currentPentestStatus || currentPentestStatus.status !== 'running') return
+    const interval = setInterval(() => {
+      loadCurrentPentestStatus(currentPentestStatus.job_id)
+    }, 4000)
+    return () => clearInterval(interval)
+  }, [showCurrentPentestModal, currentPentestStatus?.job_id, currentPentestStatus?.status, loadCurrentPentestStatus])
 
   // When switching to mobile: close drawer and expand chat so UI is usable
   useEffect(() => {
@@ -573,6 +678,21 @@ const Dashboard = () => {
         defaultLanguage: profile.defaultLanguage || 'en',
         defaultModelId: profile.defaultModelId || '',
       })
+      // Sync profile (e.g. googleId) into stored user so Settings shows "Google Account Connected"
+      const stored = localStorage.getItem('scout_user')
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored)
+          const updated = {
+            ...parsed,
+            googleId: profile.googleId ?? parsed.googleId,
+            role: profile.role ?? parsed.role,
+            avatarUrl: profile.avatarUrl ?? parsed.avatarUrl,
+          }
+          localStorage.setItem('scout_user', JSON.stringify(updated))
+          refreshUser()
+        } catch (_) {}
+      }
     } catch (error) {
       console.error('Failed to load user profile:', error)
     }
@@ -1386,6 +1506,7 @@ const Dashboard = () => {
     setCurrentStep(null)
     setActivityLog([])
     setLogEvents([])
+    setIsSimpleConversation(false)
     if (currentConversationId) {
       setConversationRunStatus(prev => ({ ...prev, [currentConversationId]: 'running' }))
     }
@@ -1403,6 +1524,7 @@ const Dashboard = () => {
       )
       const jobId = jobResponse.job_id
       setCurrentJobId(jobId)
+      try { localStorage.setItem('gwehai_current_pentest_job_id', jobId) } catch (_) {}
       const convId = jobResponse.conversation_id ?? undefined
       if (convId) {
         setCurrentConversationId(convId)
@@ -1822,6 +1944,10 @@ const Dashboard = () => {
       }
 
       case 'status': {
+        // Simple mode: no target host, just Q&A — show only a simple "Replying..." indicator (no ThinkingBar / GwehLog).
+        if (event.data.simple_mode === true) {
+          setIsSimpleConversation(true)
+        }
         // Status messages: planning, running tools, per-tool description; when multi-agent, prefix with agent_label (Agent 1, Agent 2, ...)
         const statusMessage = event.data.message || ''
         const agentLabel = event.data.agent_label as string | undefined
@@ -1832,9 +1958,17 @@ const Dashboard = () => {
         let messageId = currentAssistantMessageIdRef.current
         // Any status means the backend is actively working; ensure loading UI is on.
         setIsLoading(true)
+        // In simple mode, skip activity log and GwehLog — we show only a simple "Replying..." indicator.
+        const inSimpleMode = event.data.simple_mode === true
         let eventType: string | undefined
 
-        if (normalized.includes('planning the plan')) {
+        if (inSimpleMode) {
+          eventType = 'content'
+          messageId = lastCompletedAssistantMessageIdRef.current || addAssistantMessage('content')
+          pendingAssistantMessageIdRef.current = messageId
+          setCurrentStep(null)
+          // Don't appendActivityStep so no EXECUTION/REASONING log blocks
+        } else if (normalized.includes('planning the plan')) {
           eventType = 'planning'
           setCurrentStep(displayMessage)
           appendActivityStep(statusMessage, agentLabel)
@@ -1914,6 +2048,7 @@ const Dashboard = () => {
 
         sendInProgressRef.current = false
         setIsLoading(false)
+        setIsSimpleConversation(false)
         // Keep currentStep so UI shows last real activity (e.g. "Running: dirsearch..."), not generic "Running tools..."
         streamingMessageRef.current = null
         const messageId = currentAssistantMessageIdRef.current || addAssistantMessage('error')
@@ -1965,10 +2100,12 @@ const Dashboard = () => {
         setCurrentStep(null)
         appendActivityStep('Done')
         streamingMessageRef.current = null
+        setIsSimpleConversation(false)
         if (event.data.conversation_id) {
           const cid = event.data.conversation_id
           setCurrentConversationId(cid)
           setConversationRunStatus(prev => ({ ...prev, [cid]: 'finished' }))
+          try { localStorage.setItem('gwehai_current_pentest_conversation_id', cid) } catch (_) {}
           // Link current view to the conversation the agent used (fixes "spawn creates another conversation" confusion)
           setCurrentChatId(cid)
           refetchChatHistory()
@@ -2019,7 +2156,7 @@ const Dashboard = () => {
     return null
   }
 
-  const planLabel = currentPlan?.plan?.name || currentPlan?.plan?.code || 'Free'
+  const planLabel = myPlan?.plan?.marketing_title || currentPlan?.plan?.name || currentPlan?.plan?.code || 'Free'
 
   const sidebarHeaderContent = (
     <>
@@ -2097,6 +2234,15 @@ const Dashboard = () => {
             </svg>
           </span>
           <span className="nav-text">Plan</span>
+        </button>
+        <button className="nav-item" onClick={() => setShowCurrentPentestModal(true)} title="Current Pentest – monitor running scan status">
+          <span className="nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+          </span>
+          <span className="nav-text">Current Pentest</span>
         </button>
         {showSearch && (
           <div className="sidebar-search">
@@ -2242,7 +2388,6 @@ const Dashboard = () => {
   )
 
   return (
-    <PageLoader>
       <div className="dashboard">
         <ToastContainer toasts={toasts} onClose={removeToast} />
         <DashboardLayout
@@ -2413,8 +2558,16 @@ const Dashboard = () => {
                     <div className="message-content">
                       <div className="message-bubble">
                         <div className="message-text">
-                        {/* ChatGPT-style thinking bar above assistant output when streaming */}
+                        {/* When simple conversation (no target): just "Replying...". Otherwise full ThinkingBar + GwehLog. */}
                         {message.role === 'assistant' && (isStreamingThisMessage || (isLoading && !message.content)) && (
+                          isSimpleConversation ? (
+                            <div className="chat-simple-indicator">
+                              <span className="chat-simple-indicator-text">Replying...</span>
+                              <span className="chat-simple-indicator-dots">
+                                <span></span><span></span><span></span>
+                              </span>
+                            </div>
+                          ) : (
                           <>
                             <ThinkingBar
                               currentStep={currentStep}
@@ -2426,6 +2579,7 @@ const Dashboard = () => {
                               <GwehLogRenderer events={logEvents} compact copyableBlocks className="chat-gweh-log" />
                             )}
                           </>
+                          )
                         )}
                         {message.eventType === 'planning' && !message.content ? null : message.eventType === 'thinking' && !message.content ? null : (
                           <>
@@ -2517,16 +2671,27 @@ const Dashboard = () => {
                   <div className="chat-message assistant chat-loading-dots" aria-hidden>
                     <div className="message-content">
                       <div className="message-bubble">
-                        <ThinkingBar currentStep={currentStep} steps={activityLog} isStreaming checklistProgress={pentestChecklistProgress} />
-                        {logEvents.length > 0 && (
-                          <GwehLogRenderer events={logEvents} compact copyableBlocks className="chat-gweh-log" />
+                        {isSimpleConversation ? (
+                          <div className="chat-simple-indicator">
+                            <span className="chat-simple-indicator-text">Replying...</span>
+                            <span className="chat-simple-indicator-dots">
+                              <span></span><span></span><span></span>
+                            </span>
+                          </div>
+                        ) : (
+                          <>
+                            <ThinkingBar currentStep={currentStep} steps={activityLog} isStreaming checklistProgress={pentestChecklistProgress} />
+                            {logEvents.length > 0 && (
+                              <GwehLogRenderer events={logEvents} compact copyableBlocks className="chat-gweh-log" />
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
                   </div>
                 )}
-                {/* Show checklist bar for pentest chats when not streaming so user can expand to see progress */}
-                {!isLoading && pentestChecklistProgress && (
+                {/* Show checklist bar for pentest chats when not streaming so user can expand to see progress (skip when simple conversation). */}
+                {!isLoading && pentestChecklistProgress && !isSimpleConversation && (
                   <div className="chat-message assistant" aria-hidden>
                     <div className="message-content">
                       <div className="message-bubble">
@@ -2562,28 +2727,25 @@ const Dashboard = () => {
             </div>
             <div className="modal-body">
               <div className="upgrade-plans-grid">
-                {[
-                  { points: 100, price: 20, name: 'Starter Pack' },
-                  { points: 200, price: 35, name: 'Pro Pack', save: 5 },
-                  { points: 500, price: 70, name: 'Expert Pack', save: 30, popular: true },
-                  { points: 600, price: 100, name: 'Elite Pack', save: 20 },
-                ].map((pack, index) => (
-                  <div key={index} className={`upgrade-plan-card ${pack.popular ? 'popular' : ''}`}>
-                    {pack.popular && <div className="popular-badge">Most Popular</div>}
+                {PLAN_TIERS.filter((t) => t.id !== 'FREE').map((tier) => (
+                  <div key={tier.id} className={`upgrade-plan-card ${tier.popular ? 'popular' : ''}`}>
+                    {tier.popular && <div className="popular-badge">Most Popular</div>}
                     <div className="plan-header">
-                      <h3>{pack.name}</h3>
-                      {pack.save && <div className="save-badge">Save ${pack.save}</div>}
+                      <h3>{tier.name}</h3>
                     </div>
                     <div className="plan-price">
-                      <span className="price">${pack.price}</span>
-                      <span className="points">for {pack.points} points</span>
-                      <span className="price-per-point">${(pack.price / pack.points).toFixed(2)} per point</span>
+                      <span className="price">{tier.priceMonthly === 0 ? 'Free' : `$${tier.priceMonthly}`}</span>
+                      <span className="points">{tier.priceMonthly > 0 ? '/mo' : ''} {formatWorkersLabel(tier.limitsSummary.workers)} • {tier.limitsSummary.scans} • {tier.limitsSummary.steps}</span>
                     </div>
+                    <ul className="upgrade-plan-features">
+                      {tier.features.slice(0, 3).map((f, i) => <li key={i}>{f}</li>)}
+                    </ul>
                     <button className="plan-button" onClick={() => {
-                      showToast(`Redirecting to purchase ${pack.points} points for $${pack.price}...`, 'info')
+                      showToast(`Redirecting to upgrade to ${tier.name}...`, 'info')
                       setShowUpgradeModal(false)
+                      navigate('/pricing')
                     }}>
-                      Buy Now
+                      {tier.priceMonthly === 0 ? 'Current' : 'Get ' + tier.name}
                     </button>
                   </div>
                 ))}
@@ -2601,7 +2763,7 @@ const Dashboard = () => {
                     <li>Custom Integrations</li>
                   </ul>
                   <button className="plan-button" onClick={() => {
-                    window.location.href = '/contact'
+                    navigate('/contact')
                     setShowUpgradeModal(false)
                   }}>
                     Contact Us
@@ -2635,7 +2797,7 @@ const Dashboard = () => {
           icon: getModelIcon(model.provider || '', model.name || model.displayName),
           tag: isProModel(model.name || model.displayName) ? 'Pro' : undefined,
         }))}
-        emailReadOnly={!!(user as any)?.googleId}
+        emailReadOnly={!!user?.googleId}
       />
 
       {/* Help Modal */}
@@ -2960,21 +3122,26 @@ const Dashboard = () => {
       {showHacktivityModal && (
         <div className="modal-overlay" onClick={closeHacktivityModal}>
           <div className="modal-content report-modal hacktivity-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">
-                {selectedHacktivity ? 'AI action detail' : 'Hacktivity'}
-              </h2>
+            <div className="modal-header hacktivity-modal-header">
+              <div>
+                <h2 className="modal-title">
+                  {selectedHacktivity ? 'Action detail' : 'Hacktivity'}
+                </h2>
+                {!selectedHacktivity && (
+                  <p className="hacktivity-modal-subtitle">AI actions from your pentests — tools run, commands, and results.</p>
+                )}
+              </div>
               <div className="modal-header-actions">
                 {selectedHacktivity && (
                   <button
                     type="button"
-                    className="report-back-btn"
+                    className="report-back-btn hacktivity-back-btn"
                     onClick={() => {
                       setSelectedHacktivityId(null)
                       setSelectedHacktivity(null)
                     }}
                   >
-                    ← Back
+                    ← Back to list
                   </button>
                 )}
                 <button className="modal-close" onClick={closeHacktivityModal}>
@@ -2985,34 +3152,68 @@ const Dashboard = () => {
                 </button>
               </div>
             </div>
-            <div className="modal-body">
+            <div className="modal-body hacktivity-modal-body">
               {selectedHacktivity ? (
                 <div className="hacktivity-detail">
-                  {selectedHacktivity.domain && (
-                    <p className="hacktivity-detail-row"><strong>Domain:</strong> {selectedHacktivity.domain}</p>
-                  )}
-                  {selectedHacktivity.conversationId && (
-                    <p className="hacktivity-detail-row"><strong>Conversation:</strong> <code>{selectedHacktivity.conversationId.slice(0, 8)}…</code></p>
-                  )}
-                  <p className="hacktivity-detail-row"><strong>Time:</strong> {formatReportTime(selectedHacktivity.createdAt)}</p>
+                  <div className="hacktivity-detail-grid">
+                    <div className="hacktivity-detail-card">
+                      <span className="hacktivity-detail-label">When</span>
+                      <span className="hacktivity-detail-value">{formatReportTime(selectedHacktivity.createdAt)}</span>
+                    </div>
+                    {selectedHacktivity.domain && (
+                      <div className="hacktivity-detail-card">
+                        <span className="hacktivity-detail-label">Target / domain</span>
+                        <span className="hacktivity-detail-value hacktivity-detail-domain" title={selectedHacktivity.domain}>{selectedHacktivity.domain}</span>
+                      </div>
+                    )}
+                    {selectedHacktivity.conversationId && (
+                      <div className="hacktivity-detail-card">
+                        <span className="hacktivity-detail-label">Conversation</span>
+                        <code className="hacktivity-detail-value hacktivity-detail-code" title={selectedHacktivity.conversationId}>{selectedHacktivity.conversationId.slice(0, 8)}…</code>
+                      </div>
+                    )}
+                  </div>
                   {selectedHacktivity.toolArgs && Object.keys(selectedHacktivity.toolArgs).length > 0 && (
                     <section className="hacktivity-detail-section">
-                      <h3>Arguments</h3>
-                      <pre className="hacktivity-detail-pre">{JSON.stringify(selectedHacktivity.toolArgs, null, 2)}</pre>
+                      <h3 className="hacktivity-detail-section-title">What the AI did (arguments)</h3>
+                      <div className="hacktivity-detail-args">
+                        {Object.entries(selectedHacktivity.toolArgs).map(([k, v]) => (
+                          <div key={k} className="hacktivity-detail-arg-row">
+                            <span className="hacktivity-detail-arg-key">{k}</span>
+                            <span className="hacktivity-detail-arg-val">
+                              {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <details className="hacktivity-detail-raw">
+                        <summary>View raw JSON</summary>
+                        <pre className="hacktivity-detail-pre">{JSON.stringify(selectedHacktivity.toolArgs, null, 2)}</pre>
+                      </details>
                     </section>
                   )}
                   {selectedHacktivity.result != null && (
                     <section className="hacktivity-detail-section">
-                      <h3>Result</h3>
-                      <pre className="hacktivity-detail-pre hacktivity-detail-result">{selectedHacktivity.result}</pre>
+                      <h3 className="hacktivity-detail-section-title">Result</h3>
+                      <div className="hacktivity-detail-result-wrap">
+                        <pre className="hacktivity-detail-pre hacktivity-detail-result">{selectedHacktivity.result}</pre>
+                      </div>
                     </section>
                   )}
                 </div>
               ) : (
                 <>
+                  {hacktivityLoadError && (
+                    <div className="hacktivity-error-banner">
+                      <span>{hacktivityLoadError}</span>
+                      <button type="button" className="hacktivity-retry-btn" onClick={() => loadHacktivity(hacktivityPage, selectedHacktivityConversationId)}>
+                        Retry
+                      </button>
+                    </div>
+                  )}
                   <div className="hacktivity-toolbar">
                     <label className="hacktivity-filter-label">
-                      Conversation:
+                      Filter by conversation
                       <select
                         className="hacktivity-filter-select"
                         value={selectedHacktivityConversationId ?? ''}
@@ -3032,24 +3233,32 @@ const Dashboard = () => {
                       </select>
                     </label>
                   </div>
-                  <div className="report-table-container">
-                    <table className="report-table">
+                  <div className="report-table-container hacktivity-table-wrap">
+                    <table className="report-table hacktivity-table">
                       <thead>
                         <tr>
-                          <th>Time</th>
-                          <th>Conversation</th>
-                          <th>Domain</th>
+                          <th className="hacktivity-th-when">When</th>
+                          <th className="hacktivity-th-action">Action</th>
+                          <th className="hacktivity-th-target">Target / domain</th>
+                          <th className="hacktivity-th-conv">Conversation</th>
                           <th></th>
                         </tr>
                       </thead>
                       <tbody>
                         {isLoadingHacktivity ? (
                           <tr>
-                            <td colSpan={4} className="report-loading-cell">Loading activity...</td>
+                            <td colSpan={5} className="report-loading-cell hacktivity-empty-cell">
+                              <span className="hacktivity-empty-icon">⋯</span>
+                              Loading activity…
+                            </td>
                           </tr>
                         ) : hacktivityList.length === 0 ? (
                           <tr>
-                            <td colSpan={4} className="report-empty-cell">No AI activity yet. Run a pentest or chat to see actions here.</td>
+                            <td colSpan={5} className="report-empty-cell hacktivity-empty-cell">
+                              <span className="hacktivity-empty-icon">⚡</span>
+                              <strong>No actions yet</strong>
+                              <span className="hacktivity-empty-hint">Run a pentest or chat with a target URL to see AI tools and commands here.</span>
+                            </td>
                           </tr>
                         ) : (
                           hacktivityList.map((row) => (
@@ -3061,15 +3270,20 @@ const Dashboard = () => {
                               tabIndex={0}
                               onKeyDown={(e) => e.key === 'Enter' && loadHacktivityDetail(row.id)}
                             >
-                              <td className="report-time">{formatReportTime(row.createdAt)}</td>
-                              <td className="report-conversation-id" title={row.conversationId ?? ''}>
+                              <td className="hacktivity-td-when">{formatReportTime(row.createdAt)}</td>
+                              <td className="hacktivity-td-action">
+                                <span className="hacktivity-action-badge" title={getHacktivityActionLabel(row.toolArgs)}>
+                                  {getHacktivityActionLabel(row.toolArgs)}
+                                </span>
+                              </td>
+                              <td className="hacktivity-td-target" title={row.domain ?? ''}>
+                                {row.domain ? (row.domain.length > 36 ? `${row.domain.slice(0, 36)}…` : row.domain) : '—'}
+                              </td>
+                              <td className="hacktivity-td-conv" title={row.conversationId ?? ''}>
                                 {row.conversationId ? `${row.conversationId.slice(0, 8)}…` : '—'}
                               </td>
-                              <td className="hacktivity-domain" title={row.domain ?? ''}>
-                                {row.domain ? (row.domain.length > 32 ? `${row.domain.slice(0, 32)}…` : row.domain) : '—'}
-                              </td>
                               <td className="report-actions">
-                                <button type="button" className="report-detail-btn" onClick={(e) => { e.stopPropagation(); loadHacktivityDetail(row.id) }}>Detail</button>
+                                <button type="button" className="report-detail-btn hacktivity-view-btn" onClick={(e) => { e.stopPropagation(); loadHacktivityDetail(row.id) }}>View</button>
                               </td>
                             </tr>
                           ))
@@ -3080,7 +3294,7 @@ const Dashboard = () => {
                   {hacktivityTotal > 0 && (
                     <div className="hacktivity-pagination">
                       <span className="hacktivity-pagination-info">
-                        Page {hacktivityPage} of {hacktivityTotalPages} ({hacktivityTotal} total)
+                        Page {hacktivityPage} of {hacktivityTotalPages} · {hacktivityTotal} total actions
                       </span>
                       <div className="hacktivity-pagination-buttons">
                         <button
@@ -3137,15 +3351,34 @@ const Dashboard = () => {
                   <div className="plan-card">
                     <div className="plan-loading">Loading plan...</div>
                   </div>
+                ) : myPlan ? (
+                  <div className="plan-card">
+                    <div className="plan-card-header">
+                      <span className="plan-name">{myPlan.plan.marketing_title}</span>
+                      <span className="plan-badge">{myPlan.planId}</span>
+                    </div>
+                    <div className="plan-details">
+                      <div className="plan-detail-item">
+                        <span className="detail-label">Limits:</span>
+                        <span className="detail-value">
+                          {formatWorkersLabel(myPlan.limits_summary.workers)} • {myPlan.limits_summary.scans} • {myPlan.limits_summary.steps}
+                        </span>
+                      </div>
+                      <div className="plan-detail-item">
+                        <span className="detail-label">Note:</span>
+                        <span className="detail-value">{myPlan.plan.marketing_footnote}</span>
+                      </div>
+                    </div>
+                  </div>
                 ) : !currentPlan ? (
                   <div className="plan-card">
                     <div className="plan-card-header">
-                      <span className="plan-name">No active plan</span>
+                      <span className="plan-name">Free</span>
                     </div>
                     <div className="plan-details">
                       <div className="plan-detail-item">
                         <span className="detail-label">Status:</span>
-                        <span className="detail-value">You are currently on the free tier.</span>
+                        <span className="detail-value">You are on the free tier.</span>
                       </div>
                     </div>
                   </div>
@@ -3158,22 +3391,12 @@ const Dashboard = () => {
                     <div className="plan-details">
                       <div className="plan-detail-item">
                         <span className="detail-label">Points:</span>
-                        <span className="detail-value">
-                          {currentPlan.pointsGranted} total
-                        </span>
+                        <span className="detail-value">{currentPlan.pointsGranted} total</span>
                       </div>
                       <div className="plan-detail-item">
                         <span className="detail-label">Price:</span>
                         <span className="detail-value">
-                          {currentPlan.plan?.monthlyPriceUsd != null
-                            ? `$${currentPlan.plan.monthlyPriceUsd}`
-                            : 'Custom'}
-                        </span>
-                      </div>
-                      <div className="plan-detail-item">
-                        <span className="detail-label">Status:</span>
-                        <span className={`detail-value ${currentPlan.status === 'active' ? 'active' : ''}`}>
-                          {currentPlan.status}
+                          {currentPlan.plan?.monthlyPriceUsd != null ? `$${currentPlan.plan.monthlyPriceUsd}` : 'Custom'}
                         </span>
                       </div>
                     </div>
@@ -3182,67 +3405,44 @@ const Dashboard = () => {
               </div>
 
               <div className="usage-section">
-                <h3 className="plan-section-title">Usage Statistics</h3>
+                <h3 className="plan-section-title">Usage</h3>
                 <div className="usage-stats">
-                  <div className="usage-stat-card">
-                    <div className="stat-label">Wallet Points</div>
-                    <div className="stat-value">
-                      {pointsBalance != null ? pointsBalance : '—'}
+                  {myPlan?.usage ? (
+                    <>
+                      <div className="usage-stat-card">
+                        <div className="stat-label">Steps this session</div>
+                        <div className="stat-value">
+                          {myPlan.usage.session.steps_used}
+                          {myPlan.usage.session.steps_remaining != null ? ` / ${myPlan.usage.session.steps_used + myPlan.usage.session.steps_remaining}` : ''}
+                        </div>
+                      </div>
+                      <div className="usage-stat-card">
+                        <div className="stat-label">Tokens today</div>
+                        <div className="stat-value">
+                          {myPlan.usage.day.tokens_used}
+                          {myPlan.usage.day.tokens_remaining != null ? ` / ${myPlan.usage.day.tokens_used + myPlan.usage.day.tokens_remaining}` : ''}
+                        </div>
+                      </div>
+                    </>
+                  ) : null}
+                  {pointsBalance != null && (
+                    <div className="usage-stat-card">
+                      <div className="stat-label">Wallet Points</div>
+                      <div className="stat-value">{pointsBalance}</div>
                     </div>
-                  </div>
-                  <div className="usage-stat-card">
-                    <div className="stat-label">Points Used</div>
-                    <div className="stat-value">
-                      {currentPlan
-                        ? `${currentPlan.pointsUsed} / ${currentPlan.pointsGranted || currentPlan.pointsUsed}`
-                        : '0 / 0'}
-                    </div>
-                    <div className="stat-progress">
-                      <div
-                        className="stat-progress-bar"
-                        style={{
-                          width: currentPlan && currentPlan.pointsGranted
-                            ? `${Math.min(
-                                100,
-                                Math.round(
-                                  (currentPlan.pointsUsed / currentPlan.pointsGranted) * 100,
-                                ),
-                              )}%`
-                            : '0%',
-                        }}
-                      ></div>
-                    </div>
-                    <div className="stat-percentage">
-                      {currentPlan && currentPlan.pointsGranted
-                        ? `${Math.min(
-                            100,
-                            Math.round(
-                              (currentPlan.pointsUsed / currentPlan.pointsGranted) * 100,
-                            ),
-                          )}%`
-                        : '0%'}
-                    </div>
-                  </div>
-                  <div className="usage-stat-card">
-                    <div className="stat-label">Points Remaining</div>
-                    <div className="stat-value">
-                      {currentPlan && currentPlan.pointsGranted
-                        ? Math.max(currentPlan.pointsGranted - currentPlan.pointsUsed, 0)
-                        : 0}
-                    </div>
-                  </div>
-                  <div className="usage-stat-card">
-                    <div className="stat-label">Total Messages</div>
-                    <div className="stat-value">
-                      {currentPlan ? currentPlan.messagesSent : 0}
-                    </div>
-                  </div>
-                  <div className="usage-stat-card">
-                    <div className="stat-label">Reports Generated</div>
-                    <div className="stat-value">
-                      {currentPlan ? currentPlan.reportsGenerated : 0}
-                    </div>
-                  </div>
+                  )}
+                  {currentPlan && (
+                    <>
+                      <div className="usage-stat-card">
+                        <div className="stat-label">Messages</div>
+                        <div className="stat-value">{currentPlan.messagesSent}</div>
+                      </div>
+                      <div className="usage-stat-card">
+                        <div className="stat-label">Reports</div>
+                        <div className="stat-value">{currentPlan.reportsGenerated}</div>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -3259,8 +3459,80 @@ const Dashboard = () => {
         </div>
       )}
 
+      {/* Current Pentest Modal – monitor running scan status */}
+      {showCurrentPentestModal && (
+        <div className="modal-overlay" onClick={() => setShowCurrentPentestModal(false)}>
+          <div className="modal-content current-pentest-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Current Pentest</h2>
+              <button className="modal-close" onClick={() => setShowCurrentPentestModal(false)}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <p className="current-pentest-hint">Monitor what testing is currently running and whether it has finished or is still scanning.</p>
+              {currentPentestLoading ? (
+                <div className="current-pentest-loading">Loading status…</div>
+              ) : currentPentestError ? (
+                <div className="current-pentest-empty">
+                  <p>{currentPentestError}</p>
+                  <p className="current-pentest-empty-hint">No active pentest to show. Start one from chat (e.g. paste a target URL) or from <strong>Pentest Runner</strong>.</p>
+                  <button type="button" className="pentest-runner-link-btn" onClick={() => { setShowCurrentPentestModal(false); navigate('/agent/pentest-runner') }}>
+                    Open Pentest Runner
+                  </button>
+                </div>
+              ) : !currentPentestStatus ? (
+                <div className="current-pentest-empty">
+                  <p>No active pentest.</p>
+                  <p className="current-pentest-empty-hint">Start one from chat (e.g. paste a target URL) or from <strong>Pentest Runner</strong>.</p>
+                  <button type="button" className="pentest-runner-link-btn" onClick={() => { setShowCurrentPentestModal(false); navigate('/agent/pentest-runner') }}>
+                    Open Pentest Runner
+                  </button>
+                </div>
+              ) : (
+                <div className="current-pentest-card">
+                  <div className="current-pentest-row">
+                    <span className="current-pentest-label">Status</span>
+                    <span className={`current-pentest-status current-pentest-status--${currentPentestStatus.status}`}>
+                      {currentPentestStatus.status === 'running' ? 'Still scanning' : currentPentestStatus.status === 'completed' ? 'Finished' : currentPentestStatus.status}
+                    </span>
+                  </div>
+                  <div className="current-pentest-row">
+                    <span className="current-pentest-label">Job ID</span>
+                    <code className="current-pentest-job-id">{currentPentestStatus.job_id}</code>
+                  </div>
+                  {currentPentestStatus.user_message && (
+                    <div className="current-pentest-row">
+                      <span className="current-pentest-label">Target / request</span>
+                      <span className="current-pentest-message">{currentPentestStatus.user_message.substring(0, 120)}{currentPentestStatus.user_message.length > 120 ? '…' : ''}</span>
+                    </div>
+                  )}
+                  <div className="current-pentest-actions">
+                    <button type="button" className="pentest-runner-link-btn" onClick={() => { setShowCurrentPentestModal(false); navigate('/agent/pentest-runner') }}>
+                      Open in Runner
+                    </button>
+                    {currentPentestStatus.conversation_id && (
+                      <button type="button" className="pentest-conversation-btn" onClick={() => {
+                        setCurrentChatId(currentPentestStatus!.conversation_id!)
+                        setCurrentConversationId(currentPentestStatus!.conversation_id!)
+                        refetchChatHistory()
+                        setShowCurrentPentestModal(false)
+                      }}>
+                        Open conversation
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       </div>
-    </PageLoader>
   )
 }
 

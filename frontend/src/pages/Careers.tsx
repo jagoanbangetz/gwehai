@@ -2,7 +2,6 @@ import { Link } from 'react-router-dom'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
 import AnimatedBackground from '../components/AnimatedBackground'
-import PageLoader from '../components/PageLoader'
 import './Careers.css'
 
 const Careers = () => {
@@ -46,7 +45,6 @@ const Careers = () => {
   ]
 
   return (
-    <PageLoader>
     <div className="careers-page dark-theme">
       <AnimatedBackground variant="full" intensity="low" />
       <Header />
@@ -165,7 +163,6 @@ const Careers = () => {
       </main>
       <Footer />
     </div>
-    </PageLoader>
   )
 }
 

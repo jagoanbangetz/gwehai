@@ -11,13 +11,17 @@ import { UsageEvent } from '../entities/usage-event.entity';
 import { PointsService } from '../points/points.service';
 import { PointLedgerReason } from '../entities/point-ledger.entity';
 import { LlmService } from '../llm/llm.service';
-import { PENTEST_SYSTEM_PROMPT } from '../prompt/pentest.system-prompt';
+import { PENTEST_SYSTEM_PROMPT, SIMPLE_SECURITY_SYSTEM_PROMPT } from '../prompt/pentest.system-prompt';
 import { PENTEST_TOOL_DEFS } from '../prompt/pentest-tools.def';
 import { LlmMessage, LlmToolCall } from '../llm/llm.types';
 import { ToolsService } from '../tools/tools.service';
 import { ReportsService } from '../reports/reports.service';
 import { HacktivityService } from '../hacktivity/hacktivity.service';
 import { getAgentLabel } from './agent-names';
+import { PlanResolutionService } from '../plans/plan-resolution.service';
+import { PlanUsageService } from '../plans/plan-usage.service';
+import { validateStep } from '../plans/plan-limits.validation';
+import { getPlanPayload } from '../config/plans.config';
 
 /** Small delay so SSE client receives events over time and frontend typing effect can run */
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -160,6 +164,8 @@ export class ChatService {
     private toolsService: ToolsService,
     private reportsService: ReportsService,
     private hacktivityService: HacktivityService,
+    private planResolution: PlanResolutionService,
+    private planUsage: PlanUsageService,
     private dataSource: DataSource,
   ) {}
 
@@ -419,6 +425,136 @@ export class ChatService {
   }
 
   /**
+   * Simple security Q&A when the user did not give a target host. No tools, no memory; direct LLM chat.
+   * Streams reply via message_delta / message_done and saves the assistant message.
+   */
+  async processMessageSimple(
+    userId: string,
+    message: string,
+    conversationId: string | undefined,
+    jobId: string,
+    pushEvent: (ev: { type: string; data: Record<string, any> }) => void,
+    options?: { emitDoneEvent?: boolean; abortSignal?: AbortSignal },
+  ): Promise<{ conversationId: string; messageId: string; response: string }> {
+    const result = await this.dataSource.transaction(async (manager) => {
+      const conversation = await this.getOrCreateConversation(userId, conversationId);
+      const model = await manager.findOne(Model, {
+        where: { id: conversation.modelId },
+      });
+      if (!model || !model.isActive) {
+        throw new NotFoundException('Model not found or inactive');
+      }
+
+      const inputTokens = Math.ceil(message.length / 4);
+      const outputTokens = 500;
+      const fixedCostPoints = this.getFixedCostPoints(model);
+      const costPoints =
+        fixedCostPoints !== null
+          ? fixedCostPoints
+          : (Number(model.pointsPer1kInputTokens) * inputTokens) / 1000 +
+            (Number(model.pointsPer1kOutputTokens) * outputTokens) / 1000;
+      const finalCostPoints =
+        fixedCostPoints !== null
+          ? this.normalizePoints(costPoints)
+          : Math.max(1, Math.ceil(costPoints));
+
+      await this.pointsService.spendPoints(
+        userId,
+        finalCostPoints,
+        PointLedgerReason.CHAT_USAGE,
+        'usage_events',
+        null,
+        { modelId: model.id, conversationId: conversation.id },
+      );
+
+      const userMessage = manager.create(Message, {
+        conversationId: conversation.id,
+        role: MessageRole.USER,
+        content: message,
+      });
+      await manager.save(userMessage);
+
+      const userMessagePart = manager.create(MessagePart, {
+        messageId: userMessage.id,
+        type: 'text' as any,
+        content: message,
+        order: 0,
+      });
+      await manager.save(userMessagePart);
+
+      const assistantMessage = manager.create(Message, {
+        conversationId: conversation.id,
+        role: MessageRole.ASSISTANT,
+        content: '',
+      });
+      await manager.save(assistantMessage);
+
+      const assistantMessagePart = manager.create(MessagePart, {
+        messageId: assistantMessage.id,
+        type: 'text' as any,
+        content: '',
+        order: 0,
+      });
+      await manager.save(assistantMessagePart);
+
+      if (!conversation.title || conversation.title === 'New Conversation') {
+        conversation.title = message.substring(0, 50);
+        await manager.save(conversation);
+      }
+
+      return {
+        conversationId: conversation.id,
+        messageId: assistantMessage.id,
+        model,
+      };
+    });
+
+    const { conversationId: cid, messageId: mid, model } = result;
+    await this.setConversationRunStatus(cid, 'running');
+
+    const push = (ev: { type: string; data: Record<string, any> }) => pushEvent({ type: ev.type, data: ev.data });
+    const emitDoneEvent = options?.emitDoneEvent !== false;
+    const abortSignal = options?.abortSignal;
+
+    push({ type: 'status', data: { message: 'Replying...', simple_mode: true } });
+    if (abortSignal?.aborted) {
+      await this.setConversationRunStatus(cid, 'stopped');
+      throw new Error('Request was cancelled');
+    }
+
+    const messages: LlmMessage[] = [
+      { role: 'system', content: SIMPLE_SECURITY_SYSTEM_PROMPT },
+      { role: 'user', content: message },
+    ];
+    const response = await this.llmService.generate(model, messages);
+    const content = response?.content?.trim()
+      ? response.content.trim()
+      : this.generateLocalResponse(message);
+
+    if (abortSignal?.aborted) {
+      await this.setConversationRunStatus(cid, 'stopped');
+      throw new Error('Request was cancelled');
+    }
+
+    const CHUNK_SIZE = 80;
+    for (let i = 0; i < content.length; i += CHUNK_SIZE) {
+      const delta = content.slice(i, i + CHUNK_SIZE);
+      push({ type: 'message_delta', data: { message_id: mid, delta } });
+    }
+    push({ type: 'message_done', data: { message_id: mid, content } });
+
+    await this.messageRepo.update(mid, { content });
+    await this.messagePartRepo.update({ messageId: mid }, { content });
+
+    await this.setConversationRunStatus(cid, 'finished');
+    if (emitDoneEvent) {
+      push({ type: 'done', data: { job_id: jobId, conversation_id: cid } });
+    }
+
+    return { conversationId: cid, messageId: mid, response: content };
+  }
+
+  /**
    * Process message with tool loop: LLM with tools ? execute tool_calls ? stream events ? repeat until done.
    * pushEvent is called for status, reasoning, tool_start, tool_log, tool_end, message_delta, message_done, done.
    * When agentInfo is set, every event includes agent_index and agent_label so the UI can show "Agent 1", "Agent 2", etc.
@@ -510,6 +646,10 @@ export class ChatService {
     const { conversationId: cid, messageId: mid, model } = result;
     await this.setConversationRunStatus(cid, 'running');
 
+    const planId = await this.planResolution.getUserPlan(userId);
+    const planDef = this.planResolution.getPlanDefinition(planId);
+    const limits = planDef.limits;
+
     const push = (ev: { type: string; data: Record<string, any> }) => {
       const data = { ...ev.data };
       if (agentInfo) {
@@ -540,12 +680,30 @@ export class ChatService {
     const MAX_TURNS = 100;
     let turn = 0;
     let finalContent = '';
+    let lastStepAt = 0;
 
     while (turn < MAX_TURNS) {
       if (abortSignal?.aborted) {
         throw new Error('Request was cancelled');
       }
       turn++;
+
+      // Plan enforcement: steps_per_session and cooldown (centralized in plan-limits.validation)
+      validateStep(planId, limits, {
+        stepNumber: turn,
+        lastStepAtMs: lastStepAt,
+      });
+      if (turn === 1) {
+        const payload = getPlanPayload(planId);
+        const usage = await this.planUsage.getUsage(userId, planId, cid);
+        push({
+          type: 'plan_info',
+          data: { plan: payload.plan, limits_summary: payload.limits_summary, usage },
+        });
+      }
+
+      lastStepAt = Date.now();
+
       // Turn 1: require tools so the agent starts with tools. After that, model chooses tools or text freely.
       const toolChoice = turn === 1 ? ('required' as const) : undefined;
 
@@ -619,11 +777,16 @@ export class ChatService {
             },
           });
         }
+        const tokensThisTurn =
+          Math.ceil((response.content?.length || 0) / 4) + 500 + (response.tool_calls?.length || 0) * 200;
+        await this.planUsage.recordStep(userId, cid, tokensThisTurn);
         push({ type: 'status', data: { message: 'Planning next plan...' } });
         continue;
       }
 
       finalContent = response.content || '';
+      const tokensFinalTurn = Math.ceil((response.content?.length || 0) / 4) + 500;
+      await this.planUsage.recordStep(userId, cid, tokensFinalTurn);
       break;
     }
 

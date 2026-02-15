@@ -39,10 +39,4 @@ describe('PaymentsController', () => {
 
     expect(result).toHaveLength(1);
   });
-
-  it('accepts stripe webhook', async () => {
-    const result = await controller.stripeWebhook({ type: 'payment_intent.succeeded', data: { object: {} } });
-
-    expect(result.received).toBe(true);
-  });
 });

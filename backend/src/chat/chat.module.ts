@@ -13,6 +13,7 @@ import { LlmModule } from '../llm/llm.module';
 import { ToolsModule } from '../tools/tools.module';
 import { ReportsModule } from '../reports/reports.module';
 import { HacktivityModule } from '../hacktivity/hacktivity.module';
+import { PlansModule } from '../plans/plans.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { HacktivityModule } from '../hacktivity/hacktivity.module';
     ToolsModule,
     ReportsModule,
     HacktivityModule,
+    PlansModule,
   ],
   controllers: [ChatController],
   providers: [ChatService],
