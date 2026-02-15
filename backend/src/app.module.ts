@@ -27,7 +27,9 @@ import { Plan } from './entities/plan.entity';
 import { UserPlan } from './entities/user-plan.entity';
 import { PlanUsageDaily } from './entities/plan-usage-daily.entity';
 import { ConversationMemory } from './entities/conversation-memory.entity';
+import { Hacktivity } from './entities/hacktivity.entity';
 import { AdminModule } from './admin/admin.module';
+import { HacktivityModule } from './hacktivity/hacktivity.module';
 import { ReportsModule } from './reports/reports.module';
 import { PlansModule } from './plans/plans.module';
 import { GwehAIModule } from './gwehai/gwehai.module';
@@ -64,6 +66,7 @@ import { PentestJobsModule } from './pentest-jobs/pentest-jobs.module';
       UserPlan,
       PlanUsageDaily,
       ConversationMemory,
+      Hacktivity,
     ]),
     ChatModule,
     AuthModule,
@@ -76,6 +79,7 @@ import { PentestJobsModule } from './pentest-jobs/pentest-jobs.module';
     GwehAIModule,
     ToolsModule,
     PentestJobsModule,
+    HacktivityModule,
   ],
   controllers: [AppController],
   providers: [AppService],

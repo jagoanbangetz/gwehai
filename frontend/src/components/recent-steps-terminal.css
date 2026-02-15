@@ -1,0 +1,164 @@
+/* RecentStepsTerminal – Ubuntu-style terminal UI */
+
+.recent-steps-terminal {
+  display: flex;
+  flex-direction: column;
+  background: #111;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  min-height: 200px;
+  max-height: 50vh;
+  flex-shrink: 0;
+}
+
+.recent-steps-terminal__header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.35);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.recent-steps-terminal__traffic {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.recent-steps-terminal__traffic--spacer {
+  visibility: hidden;
+}
+
+.recent-steps-terminal__traffic-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.recent-steps-terminal__traffic-dot--red {
+  background: #ff5f56;
+}
+
+.recent-steps-terminal__traffic-dot--yellow {
+  background: #ffbd2e;
+}
+
+.recent-steps-terminal__traffic-dot--green {
+  background: #27c93f;
+}
+
+.recent-steps-terminal__title {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6);
+  font-family: system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 8px;
+}
+
+.recent-steps-terminal__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px 14px;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.85);
+  min-height: 0;
+}
+
+/* Custom subtle scrollbar */
+.recent-steps-terminal__body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.recent-steps-terminal__body::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}
+
+.recent-steps-terminal__body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+}
+
+.recent-steps-terminal__body::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.recent-steps-terminal__section-label {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.35);
+  margin-bottom: 10px;
+  text-transform: uppercase;
+}
+
+.recent-steps-terminal__line {
+  margin-bottom: 2px;
+  word-break: break-word;
+}
+
+/* Running / in progress → red */
+.recent-steps-terminal__line--running {
+  color: rgba(255, 120, 100, 0.95);
+}
+
+/* Finished → green */
+.recent-steps-terminal__line--finished {
+  color: rgba(120, 220, 120, 0.95);
+}
+
+.recent-steps-terminal--embedded .recent-steps-terminal__body {
+  padding: 0;
+  border: none;
+  background: transparent;
+  max-height: 50vh;
+}
+
+.recent-steps-terminal--embedded {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  min-height: 0;
+}
+
+.recent-steps-terminal__prompt {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.recent-steps-terminal__prompt-char {
+  flex-shrink: 0;
+}
+
+.recent-steps-terminal__cursor {
+  display: inline-block;
+  width: 0.6em;
+  height: 1em;
+  background: rgba(255, 255, 255, 0.8);
+  animation: recent-steps-terminal-blink 1s step-end infinite;
+  vertical-align: text-bottom;
+}
+
+@keyframes recent-steps-terminal-blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}

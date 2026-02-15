@@ -18,8 +18,6 @@ export interface DashboardLayoutProps {
   sidebarFooter: React.ReactNode
   mainContent: React.ReactNode
   userEmail?: string | null
-  onReportClick: () => void
-  onPlanClick: () => void
 }
 
 /**
@@ -41,8 +39,6 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   sidebarFooter,
   mainContent,
   userEmail,
-  onReportClick,
-  onPlanClick,
 }) => {
   const sidebarWidth = sidebarCollapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH_EXPANDED
   const showFloatingRestore = !isMobile && chatCollapsed && onChatCollapseToggle
@@ -72,8 +68,6 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({
           <AppTopBar
             onMenuClick={() => onSidebarToggle()}
             isMenuOpen={isSidebarOpen}
-            onReportClick={onReportClick}
-            onPlanClick={onPlanClick}
             onProfileClick={() => onSidebarToggle(true)}
             userEmail={userEmail}
             mobileLayout={isMobile}

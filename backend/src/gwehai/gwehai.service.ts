@@ -51,6 +51,7 @@ export class GwehAIService {
       systemPrompt: PENTEST_SYSTEM_PROMPT,
       userMessage: message,
       events: [],
+      abortController: new AbortController(),
     };
 
     this.jobs.set(jobId, job);
@@ -98,6 +99,8 @@ export class GwehAIService {
       if (j) j.events.push(ev);
     };
 
+    const abortSignal = job.abortController?.signal;
+
     try {
       const result = await this.chatService.processMessageWithTools(
         userId,
@@ -107,6 +110,7 @@ export class GwehAIService {
         pushEvent,
         { index: 1, label: getAgentLabel(1) },
         undefined,
+        { emitDoneEvent: true, abortSignal },
       );
 
       job.conversationId = result.conversationId;
@@ -160,6 +164,7 @@ export class GwehAIService {
     const job = this.getJob(jobId, userId);
     job.status = 'stopped';
     job.updatedAt = Date.now();
+    job.abortController?.abort();
     await this.chatService.setConversationRunStatus(job.conversationId, 'stopped');
     return { job_id: job.id, status: job.status };
   }
@@ -255,4 +260,6 @@ interface LocalAIJob {
   error?: string;
   /** Events appended by the agent; stream endpoint polls and yields SSE */
   events: JobStreamEvent[];
+  /** When aborted, main and all sub-agents stop scanning */
+  abortController?: AbortController;
 }

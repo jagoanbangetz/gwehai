@@ -1,5 +1,11 @@
 import React, { useState } from 'react'
+import RecentStepsTerminal from './RecentStepsTerminal'
 import './ThinkingBar.css'
+
+export interface ChecklistProgress {
+  phase: string
+  checklist: Record<string, boolean>
+}
 
 export interface ThinkingBarProps {
   /** Current step label (e.g. "Running: curl...") */
@@ -8,20 +14,33 @@ export interface ThinkingBarProps {
   steps?: string[]
   /** True when streaming; bar is visible and can show "Thinking..." */
   isStreaming?: boolean
+  /** Pentest checklist progress (phase + section completion) to show in expanded view */
+  checklistProgress?: ChecklistProgress | null
   /** Optional class name */
   className?: string
+}
+
+const CHECKLIST_LABELS: Record<string, string> = {
+  recon: 'Recon',
+  input_handling: 'Input handling',
+  auth_session: 'Auth & session',
+  access_control: 'Access control',
+  business_logic: 'Business logic',
+  other: 'Other',
 }
 
 const ThinkingBar: React.FC<ThinkingBarProps> = ({
   currentStep = null,
   steps = [],
   isStreaming = false,
+  checklistProgress = null,
   className = '',
 }) => {
   const [expanded, setExpanded] = useState(false)
-  const displayStep = currentStep || (isStreaming ? 'Thinking...' : '')
+  const hasChecklist = checklistProgress && Object.keys(checklistProgress.checklist ?? {}).length > 0
+  const displayStep = currentStep || (isStreaming ? 'Thinking...' : (hasChecklist ? 'Checklist' : ''))
   const hasSteps = steps.length > 0
-  const showBar = isStreaming || displayStep || hasSteps
+  const showBar = isStreaming || displayStep || hasSteps || hasChecklist
 
   if (!showBar) return null
 
@@ -32,7 +51,7 @@ const ThinkingBar: React.FC<ThinkingBarProps> = ({
         className="thinking-bar__trigger"
         onClick={() => setExpanded((e) => !e)}
         aria-expanded={expanded}
-        aria-label={expanded ? 'Collapse steps' : 'Expand recent steps'}
+        aria-label={expanded ? 'Collapse steps' : 'Expand recent steps and checklist'}
       >
         <span className="thinking-bar__dots" aria-hidden>
           <span /><span /><span />
@@ -44,16 +63,52 @@ const ThinkingBar: React.FC<ThinkingBarProps> = ({
           </svg>
         </span>
       </button>
-      {expanded && hasSteps && (
+      {expanded && (hasChecklist || hasSteps) && (
         <div className="thinking-bar__content">
-          <div className="thinking-bar__steps-label">Recent steps</div>
-          <ul className="thinking-bar__steps">
-            {steps.slice(-16).map((step, i) => (
-              <li key={`${i}-${step}`} className="thinking-bar__step">
-                {step}
-              </li>
-            ))}
-          </ul>
+          <div className="thinking-bar-terminal">
+            <header className="thinking-bar-terminal__header">
+              <div className="thinking-bar-terminal__traffic">
+                <span className="thinking-bar-terminal__dot thinking-bar-terminal__dot--red" aria-hidden />
+                <span className="thinking-bar-terminal__dot thinking-bar-terminal__dot--yellow" aria-hidden />
+                <span className="thinking-bar-terminal__dot thinking-bar-terminal__dot--green" aria-hidden />
+              </div>
+              <div className="thinking-bar-terminal__title">Checklist</div>
+              <div className="thinking-bar-terminal__traffic thinking-bar-terminal__traffic--spacer" aria-hidden />
+            </header>
+            <div className="thinking-bar-terminal__body">
+              {hasChecklist && (
+                <>
+                  <div className="thinking-bar-terminal__section-label">CHECKLIST PROGRESS</div>
+                  <div className="thinking-bar-terminal__phase">Phase: {checklistProgress!.phase}</div>
+                  <div className="thinking-bar-terminal__checklist-items">
+                    {Object.entries(checklistProgress!.checklist).map(([key, done]) => (
+                      <span
+                        key={key}
+                        className={`thinking-bar-terminal__checklist-item ${done ? 'thinking-bar-terminal__checklist-item--done' : 'thinking-bar-terminal__checklist-item--pending'}`}
+                        title={done ? 'Done' : 'Pending'}
+                      >
+                        {done ? '✓' : '○'} {CHECKLIST_LABELS[key] ?? key}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+              {hasSteps && (
+                <>
+                  <div className="thinking-bar-terminal__section-label thinking-bar-terminal__section-label--steps">
+                    [Nexus] Checklist
+                  </div>
+                  <RecentStepsTerminal
+                    title=""
+                    steps={steps.slice(-16)}
+                    height="50vh"
+                    isStreaming={isStreaming}
+                    embedded
+                  />
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

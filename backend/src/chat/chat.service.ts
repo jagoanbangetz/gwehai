@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, Repository, IsNull } from 'typeorm';
 import { Conversation } from '../entities/conversation.entity';
 import { ConversationMemory } from '../entities/conversation-memory.entity';
 import { Message, MessageRole } from '../entities/message.entity';
@@ -16,6 +16,7 @@ import { PENTEST_TOOL_DEFS } from '../prompt/pentest-tools.def';
 import { LlmMessage, LlmToolCall } from '../llm/llm.types';
 import { ToolsService } from '../tools/tools.service';
 import { ReportsService } from '../reports/reports.service';
+import { HacktivityService } from '../hacktivity/hacktivity.service';
 import { getAgentLabel } from './agent-names';
 
 /** Small delay so SSE client receives events over time and frontend typing effect can run */
@@ -158,8 +159,52 @@ export class ChatService {
     private llmService: LlmService,
     private toolsService: ToolsService,
     private reportsService: ReportsService,
+    private hacktivityService: HacktivityService,
     private dataSource: DataSource,
   ) {}
+
+  /** Tracks main-agent done + pending sub-agents per parent conversation so we only set "finished" and push "done" when all work is complete. */
+  private readonly pendingSubAgentsByParent = new Map<string, { mainDone: boolean; pending: number }>();
+
+  /** Mark main agent done for cid; if no pending sub-agents, set runStatus finished and optionally push done. */
+  private async tryMarkMainDoneAndMaybeFinish(
+    cid: string,
+    emitDoneEvent: boolean,
+    push: (ev: { type: string; data: Record<string, any> }) => void,
+    jobId: string,
+  ): Promise<void> {
+    let state = this.pendingSubAgentsByParent.get(cid);
+    if (!state) state = { mainDone: false, pending: 0 };
+    state.mainDone = true;
+    this.pendingSubAgentsByParent.set(cid, state);
+    if (state.pending === 0) {
+      this.pendingSubAgentsByParent.delete(cid);
+      await this.setConversationRunStatus(cid, 'finished');
+      if (emitDoneEvent) {
+        push({ type: 'done', data: { job_id: jobId, conversation_id: cid } });
+      }
+    }
+  }
+
+  /** Called when a sub-agent (wait_for_reply: false) completes; decrements pending and may set finished + push done. */
+  private async tryFinishParentAfterSubAgent(
+    parentCid: string,
+    jobId: string,
+    push: (ev: { type: string; data: Record<string, any> }) => void,
+  ): Promise<void> {
+    const state = this.pendingSubAgentsByParent.get(parentCid);
+    if (!state) return;
+    state.pending = Math.max(0, state.pending - 1);
+    if (state.mainDone && state.pending <= 0) {
+      this.pendingSubAgentsByParent.delete(parentCid);
+      const conv = await this.conversationRepo.findOne({ where: { id: parentCid }, select: ['runStatus'] });
+      if (conv?.runStatus === 'stopped') return;
+      await this.setConversationRunStatus(parentCid, 'finished');
+      push({ type: 'done', data: { job_id: jobId, conversation_id: parentCid } });
+    } else {
+      this.pendingSubAgentsByParent.set(parentCid, state);
+    }
+  }
 
   private readonly securityKnowledge = {
     'sql injection': {
@@ -387,7 +432,7 @@ export class ChatService {
     pushEvent: (ev: { type: string; data: Record<string, any> }) => void,
     agentInfo?: { index: number; label: string },
     memoryScopeIdOverride?: string,
-    options?: { emitDoneEvent?: boolean },
+    options?: { emitDoneEvent?: boolean; abortSignal?: AbortSignal },
   ): Promise<{ conversationId: string; messageId: string; response: string }> {
     const result = await this.dataSource.transaction(async (manager) => {
       const conversation = await this.getOrCreateConversation(userId, conversationId);
@@ -482,6 +527,7 @@ export class ChatService {
     const nextAgentIndexRef = { current: 2 };
     const memoryScopeId = memoryScopeIdOverride ?? cid;
     const emitDoneEvent = options?.emitDoneEvent !== false;
+    const abortSignal = options?.abortSignal;
 
     push({ type: 'status', data: { message: 'Planning the plan...' } });
 
@@ -496,6 +542,9 @@ export class ChatService {
     let finalContent = '';
 
     while (turn < MAX_TURNS) {
+      if (abortSignal?.aborted) {
+        throw new Error('Request was cancelled');
+      }
       turn++;
       // Turn 1: require tools so the agent starts with tools. After that, model chooses tools or text freely.
       const toolChoice = turn === 1 ? ('required' as const) : undefined;
@@ -526,6 +575,9 @@ export class ChatService {
         });
 
         for (const tc of response.tool_calls) {
+          if (abortSignal?.aborted) {
+            throw new Error('Request was cancelled');
+          }
           let args: Record<string, any> = {};
           try {
             args = typeof tc.arguments === 'string' ? JSON.parse(tc.arguments) : tc.arguments || {};
@@ -538,15 +590,33 @@ export class ChatService {
 
           let toolResult: string;
           try {
-            toolResult = await this.runTool(tc.name, args, jobId, cid, userId, push, memoryScopeId, nextAgentIndexRef);
+            toolResult = await this.runTool(tc.name, args, jobId, cid, userId, push, memoryScopeId, nextAgentIndexRef, abortSignal);
           } catch (err: any) {
             toolResult = `Error: ${err?.message || String(err)}`;
+          }
+
+          if (userId) {
+            const domain = this.extractDomainFromArgs(args);
+            this.hacktivityService.create(userId, {
+              conversationId: cid ?? null,
+              domain: domain ?? null,
+              result: toolResult,
+              toolArgs: args,
+            }).catch((err) => console.warn('[Hacktivity] log failed', err?.message));
           }
 
           messages.push({
             role: 'tool',
             tool_call_id: tc.id,
             content: clipTextPreserveHeadTail(toolResult, MAX_CONTEXT_CHARS_PER_ROLE.tool),
+          });
+          // Emit tool output so pentest Runner page (and any listener) can show scanner/exec output live.
+          push({
+            type: 'tool_log',
+            data: {
+              tool: tc.name,
+              output: clipTextPreserveHeadTail(toolResult, 4000),
+            },
           });
         }
         push({ type: 'status', data: { message: 'Planning next plan...' } });
@@ -603,11 +673,7 @@ export class ChatService {
       await manager.update(Message, { id: mid }, { content: contentToStore });
       await manager.update(MessagePart, { messageId: mid }, { content: contentToStore });
     });
-    await this.setConversationRunStatus(cid, 'finished');
-
-    if (emitDoneEvent) {
-      push({ type: 'done', data: { job_id: jobId, conversation_id: cid } });
-    }
+    await this.tryMarkMainDoneAndMaybeFinish(cid, !!emitDoneEvent, push, jobId);
     return { conversationId: cid, messageId: mid, response: contentToStore };
   }
 
@@ -665,6 +731,20 @@ export class ChatService {
     return singleLine.length > maxLen ? `${singleLine.slice(0, maxLen)}...` : singleLine;
   }
 
+  /** Extract domain/target from tool args for Hacktivity (target, url, or from command). */
+  private extractDomainFromArgs(args: Record<string, any>): string | null {
+    const target = (args.target ?? '').toString().trim();
+    if (target) return target;
+    const url = (args.url ?? '').toString().trim();
+    if (url) return url;
+    const cmd = (args.command ?? '').toString().trim();
+    if (cmd) {
+      const urlLike = cmd.match(/https?:\/\/[^\s]+/);
+      if (urlLike) return urlLike[0];
+    }
+    return null;
+  }
+
   /** One-line description for reasoning event before each tool (Cursor-style "I will run: ..."). */
   private formatToolReasoning(name: string, args: Record<string, any>): string {
     const q = (args.query ?? '').toString().trim();
@@ -688,6 +768,14 @@ export class ChatService {
         return (args.detail as string)?.trim()
           ? `Saving finding: ${String(args.detail).slice(0, maxLen)}${String(args.detail).length > maxLen ? '...' : ''}`
           : 'Saving finding to report...';
+      case 'add_skill':
+        return (args.name as string)?.trim()
+          ? `Adding skill: ${String(args.name).slice(0, maxLen)}`
+          : 'Adding skill...';
+      case 'git_search':
+        return (args.query as string)?.trim()
+          ? `Searching GitHub: ${String(args.query).slice(0, maxLen)}`
+          : 'Searching GitHub...';
       case 'agents_list':
         return 'Listing allowed agent roles...';
       case 'sessions_list':
@@ -720,7 +808,11 @@ export class ChatService {
     pushEvent?: (ev: { type: string; data: Record<string, any> }) => void,
     memoryScopeId?: string,
     nextAgentIndexRef?: { current: number },
+    abortSignal?: AbortSignal,
   ): Promise<string> {
+    if (abortSignal?.aborted) {
+      return JSON.stringify({ error: 'Job stopped by user' });
+    }
     const scopeId = memoryScopeId ?? conversationId ?? jobId;
     switch (name) {
       case 'memory_search': {
@@ -731,7 +823,7 @@ export class ChatService {
         );
         const payload: { results: any[]; hint?: string } = { results };
         if (results.length === 0) {
-          payload.hint = 'No prior notes in this conversation yet. Memory is stored in the database. Use write_file (path: main or daily/website/YYYY-MM-DD, e.g. daily/target.com/2026-02-10, append: true) to save notes.';
+          payload.hint = 'No notes yet for this conversation. Use write_file (path: main or daily/website/YYYY-MM-DD, append: true) to save notes.';
         }
         return JSON.stringify(payload, null, 2);
       }
@@ -743,7 +835,7 @@ export class ChatService {
           scopeId,
         );
         if (!text || !text.trim()) {
-          return '(empty) No content for this path yet. Conversation memory is in the database; use write_file (path: main or daily/website/YYYY-MM-DD) to save notes.';
+          return '(empty) No content for this path yet. Use write_file (path: main or daily/website/YYYY-MM-DD, append: true) to save notes.';
         }
         return text;
       }
@@ -795,6 +887,19 @@ export class ChatService {
         });
         return JSON.stringify({ ok: true, report_id: report.id, message: 'Finding saved to database' });
       }
+      case 'add_skill': {
+        const name = String(args.name ?? '').trim();
+        const content = String(args.content ?? '').trim();
+        const description = args.description != null ? String(args.description) : undefined;
+        const out = await this.toolsService.addSkill(name, content, description);
+        return JSON.stringify(out);
+      }
+      case 'git_search': {
+        const query = String(args.query ?? '').trim();
+        const apiUrl = args.api_url != null ? String(args.api_url) : undefined;
+        const out = await this.toolsService.gitSearch(query, apiUrl);
+        return JSON.stringify(out);
+      }
       case 'agents_list': {
         const roles = [...ChatService.ALLOWED_AGENT_ROLES];
         return JSON.stringify({ roles, hint: 'Use sessions_spawn with role to create a sub-agent (recon, exploit, general).' });
@@ -823,6 +928,14 @@ export class ChatService {
         const waitForReply = args.wait_for_reply !== false;
         const subIndex = nextAgentIndexRef ? nextAgentIndexRef.current++ : 2;
         const subLabel = getAgentLabel(subIndex);
+        let onSubAgentDone: (() => Promise<void>) | undefined;
+        if (!waitForReply && conversationId && pushEvent) {
+          let state = this.pendingSubAgentsByParent.get(conversationId);
+          if (!state) state = { mainDone: false, pending: 0 };
+          state.pending++;
+          this.pendingSubAgentsByParent.set(conversationId, state);
+          onSubAgentDone = () => this.tryFinishParentAfterSubAgent(conversationId!, jobId, pushEvent!);
+        }
         const result = await this.sendToSession(
           userId,
           conversationId,
@@ -833,6 +946,8 @@ export class ChatService {
           subLabel,
           subIndex,
           scopeId,
+          onSubAgentDone,
+          abortSignal,
         );
         return JSON.stringify(result);
       }
@@ -1011,6 +1126,8 @@ export class ChatService {
     subAgentLabel?: string,
     subAgentIndex?: number,
     parentMemoryScope?: string,
+    onSubAgentDone?: () => void | Promise<void>,
+    abortSignal?: AbortSignal,
   ): Promise<{ ok: true; message?: string } | { ok: true; reply: string }> {
     const conversation = await this.conversationRepo.findOne({
       where: { id: toConversationId, userId },
@@ -1056,7 +1173,7 @@ export class ChatService {
         push,
         agentInfo,
         parentMemoryScope ?? currentConversationId,
-        { emitDoneEvent: false },
+        { emitDoneEvent: false, abortSignal },
       );
       if (agentInfo) {
         push({
@@ -1097,15 +1214,16 @@ export class ChatService {
       push,
       agentInfo,
       parentMemoryScope ?? currentConversationId,
-      { emitDoneEvent: false },
-    ).then(() => {
+      { emitDoneEvent: false, abortSignal },
+    ).then(async () => {
       if (agentInfo) {
         push({
           type: 'status',
           data: { message: "I'm done with my work. Please continue with the next step." },
         });
       }
-    }).catch((err: any) => {
+      await onSubAgentDone?.();
+    }).catch(async (err: any) => {
       if (mainPushEvent && agentInfo) {
         mainPushEvent({
           type: 'error',
@@ -1116,6 +1234,7 @@ export class ChatService {
           },
         });
       }
+      await onSubAgentDone?.();
     });
     return { ok: true, message: 'Message sent (sub-agent running in background)' };
   }
@@ -1186,11 +1305,11 @@ export class ChatService {
   }
 
   /**
-   * Get user conversations
+   * Get user conversations (root only: exclude sub-agent sessions so sidebar shows one entry per run).
    */
   async getUserConversations(userId: string): Promise<Conversation[]> {
     return await this.conversationRepo.find({
-      where: { userId },
+      where: { userId, parentConversationId: IsNull() },
       order: { updatedAt: 'DESC' },
       relations: ['messages'],
     });

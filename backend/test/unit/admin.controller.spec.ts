@@ -14,6 +14,11 @@ describe('AdminController', () => {
   const reportRepo = repo();
   const usageRepo = repo();
   const messageRepo = repo();
+  const messagePartRepo = repo();
+  const messageFileRepo = repo();
+  const conversationRepo = repo();
+  const memoryRepo = repo();
+  const hacktivityRepo = repo();
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -24,6 +29,11 @@ describe('AdminController', () => {
       reportRepo as any,
       usageRepo as any,
       messageRepo as any,
+      messagePartRepo as any,
+      messageFileRepo as any,
+      conversationRepo as any,
+      memoryRepo as any,
+      hacktivityRepo as any,
     );
   });
 

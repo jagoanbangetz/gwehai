@@ -1,0 +1,131 @@
+/* GwehLogRenderer – terminal-style log card with CONSISTENT SIZE.
+   Container does NOT shrink/grow with content; content scrolls internally. */
+
+.gweh-log {
+  box-sizing: border-box;
+  width: 100%;
+  /* max-width and height set via inline style (default 820px, clamp(260px, 45vh, 520px)) */
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  background: #0d0d0d;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 0;
+  color: rgba(255, 255, 255, 0.88);
+  overflow: hidden;
+}
+
+.gweh-log--compact {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* Internal scroll area – content scrolls here; container size stays fixed */
+.gweh-log-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 14px 16px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.gweh-log--compact .gweh-log-scroll {
+  padding: 10px 12px;
+}
+
+.gweh-log-empty {
+  color: rgba(255, 255, 255, 0.4);
+  font-style: italic;
+}
+
+/* Block = one phase section */
+.gweh-log-block {
+  margin-bottom: 14px;
+}
+
+.gweh-log-block:last-child {
+  margin-bottom: 0;
+}
+
+.gweh-log--compact .gweh-log-block {
+  margin-bottom: 10px;
+}
+
+.gweh-log-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  white-space: nowrap;
+}
+
+.gweh-log--compact .gweh-log-block-header {
+  margin-bottom: 4px;
+}
+
+.gweh-log-block-title {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gweh-log-block-copy {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-family: inherit;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.gweh-log-block-copy:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.gweh-log-block-body {
+  padding-left: 2px;
+}
+
+/* Each line: → message – can wrap; long URLs/words don't blow layout */
+.gweh-log-line {
+  color: rgba(255, 255, 255, 0.82);
+  margin-bottom: 2px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  animation: gweh-log-line-enter 0.2s ease-out;
+}
+
+.gweh-log-line:last-child {
+  margin-bottom: 0;
+}
+
+.gweh-log--compact .gweh-log-line {
+  margin-bottom: 1px;
+}
+
+@keyframes gweh-log-line-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

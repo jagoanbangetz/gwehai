@@ -27,7 +27,9 @@
     "db:down": "cd .. && docker-compose down",
     "db:logs": "cd .. && docker-compose logs -f postgres",
     "db:status": "cd .. && docker-compose ps",
-    "db:seed": "ts-node src/scripts/seed-points.ts 999999"
+    "db:seed": "ts-node src/scripts/seed-points.ts 999999",
+    "db:delete-all-data": "ts-node src/scripts/delete-all-data.ts",
+    "db:delete-all-data:confirm": "ts-node src/scripts/delete-all-data.ts --confirm"
   },
   "dependencies": {
     "@mariozechner/pi-ai": "0.52.8",

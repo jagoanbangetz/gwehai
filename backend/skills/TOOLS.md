@@ -155,7 +155,7 @@ When the backend runs **exec** inside the **gwehai-pentest-tools** container, th
 | **Network** | nmap, masscan* | port_scan (e.g. nmap -sV -p 80,443 &lt;host&gt;) |
 | **DNS / info** | dig, whois | subdomain_enum, domain info |
 | **HTTP** | curl | fetch_url, headers, GET/POST |
-| **Recon / scan** | nikto, nuclei, subfinder, httpx, naabu | Web server scan; vuln scanning (nuclei); subdomains, HTTP probe, port discovery |
+| **Recon / scan** | nikto, nuclei, subfinder, httpx, naabu | Web server scan; vuln scanning (nuclei; templates at /opt/nuclei-templates); subdomains, HTTP probe, port discovery |
 | **Fuzzing** | **ffuf** | Fuzzing params/paths (use ffuf; wfuzz is not in the image) |
 | **Dir brute** | gobuster* or ffuf | Directory/path enumeration (dirsearch not in image) |
 | **SQLi** | sqlmap | verify_sqli (e.g. sqlmap -u "URL" --level=1 --risk=1 --batch) |
@@ -179,7 +179,7 @@ You **do** use these real tools; the agent calls them via **exec** (or your wrap
 | | **gobuster** | dir_brute | If available in image. |
 | | **sqlmap** | verify_sqli | **Allowlist only**: e.g. `--level=1 --risk=1`, no `--os-cmd` / `--file-write`. Target URL in scope. |
 | | **nikto** | (recon) | Web server scan; URL in scope; run with safe options only. |
-| | **nuclei** | (vuln scan) | Template-based scanning; target in scope. |
+| | **nuclei** | (vuln scan) | Template-based scanning; community templates at **/opt/nuclei-templates** — use `nuclei -t /opt/nuclei-templates -u <target>`. Target in scope. |
 | **Network / HTTP** | **curl** | fetch_url / http_request | GET/POST/HEAD; URL in scope. Prefer your own fetch_url that checks scope. |
 | | **netcat** | (network) | Optional; allowlist args only (e.g. banner grab); target in scope. |
 | | **traceroute** | (network) | Route tracing; host in scope. |

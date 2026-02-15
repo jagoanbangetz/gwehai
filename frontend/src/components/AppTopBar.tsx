@@ -4,8 +4,6 @@ import './AppTopBar.css'
 export interface AppTopBarProps {
   onMenuClick: () => void
   isMenuOpen?: boolean
-  onReportClick: () => void
-  onPlanClick: () => void
   onProfileClick: () => void
   userEmail?: string | null
   /** Show hamburger + mobile title + icon buttons (true on mobile/tablet) */
@@ -19,8 +17,6 @@ export interface AppTopBarProps {
 const AppTopBar: React.FC<AppTopBarProps> = ({
   onMenuClick,
   isMenuOpen = false,
-  onReportClick,
-  onPlanClick,
   onProfileClick,
   userEmail,
   mobileLayout = false,
@@ -47,24 +43,13 @@ const AppTopBar: React.FC<AppTopBarProps> = ({
       )}
 
       <div className="app-topbar-title">
-        {mobileLayout ? (
-          <>
-            <span className="app-topbar-title-text">GwehAI</span>
-            <span className="app-topbar-title-chevron" aria-hidden>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M6 9l6 6 6-6" />
-              </svg>
-            </span>
-          </>
-        ) : (
-          <nav className="app-topbar-nav">
-            <button type="button" className="app-topbar-link" onClick={onReportClick}>
-              Report
-            </button>
-            <button type="button" className="app-topbar-link" onClick={onPlanClick}>
-              Plan
-            </button>
-          </nav>
+        <span className="app-topbar-title-text">GwehAI</span>
+        {mobileLayout && (
+          <span className="app-topbar-title-chevron" aria-hidden>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </span>
         )}
       </div>
 

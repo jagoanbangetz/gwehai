@@ -12,6 +12,7 @@ import { PointsModule } from '../points/points.module';
 import { LlmModule } from '../llm/llm.module';
 import { ToolsModule } from '../tools/tools.module';
 import { ReportsModule } from '../reports/reports.module';
+import { HacktivityModule } from '../hacktivity/hacktivity.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { ReportsModule } from '../reports/reports.module';
     LlmModule,
     ToolsModule,
     ReportsModule,
+    HacktivityModule,
   ],
   controllers: [ChatController],
   providers: [ChatService],

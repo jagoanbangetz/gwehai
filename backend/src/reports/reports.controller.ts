@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards, Req, Post, Body } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards, Req, Post, Body } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Request } from 'express';
@@ -9,11 +9,16 @@ import { ReportStatus } from '../entities/report.entity';
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
-  /** List reports grouped by conversation (conversationId, website, findingsCount) for the Report menu. */
+  /** List reports: flat (groupBy=parent) or tree (format=tree with agents as children). */
   @Get()
-  async listReports(@Req() req: Request) {
+  async listReports(@Req() req: Request, @Query('groupBy') groupBy?: string, @Query('format') format?: string) {
     const user = req.user as any;
-    return this.reportsService.listGroupedByConversation(user.id);
+    if (format === 'tree') {
+      return this.reportsService.listReportsTree(user.id);
+    }
+    return this.reportsService.listGroupedByConversation(user.id, {
+      groupByParent: groupBy === 'parent',
+    });
   }
 
   /** List all findings for one conversation (for "Detail" on a report row). */
@@ -24,6 +29,16 @@ export class ReportsController {
   ) {
     const user = req.user as any;
     return this.reportsService.listFindingsByConversation(user.id, conversationId);
+  }
+
+  /** List all findings for a run (main + sub-agent conversations). Use when list was loaded with groupBy=parent. */
+  @Get('by-run/:rootConversationId')
+  async listFindingsByRun(
+    @Req() req: Request,
+    @Param('rootConversationId') rootConversationId: string,
+  ) {
+    const user = req.user as any;
+    return this.reportsService.listFindingsByRun(user.id, rootConversationId);
   }
 
   @Get(':id')

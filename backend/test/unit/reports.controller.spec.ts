@@ -23,9 +23,9 @@ describe('ReportsController', () => {
       ];
       (reportsService.listGroupedByConversation as jest.Mock).mockResolvedValue(grouped);
 
-      const result = await controller.listReports({ user: { id: 'u1' } } as any);
+      const result = await controller.listReports({ user: { id: 'u1' } } as any, undefined, undefined);
 
-      expect(reportsService.listGroupedByConversation).toHaveBeenCalledWith('u1');
+      expect(reportsService.listGroupedByConversation).toHaveBeenCalledWith('u1', { groupByParent: false });
       expect(result).toEqual(grouped);
       expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({ conversationId: 'c1', website: 'https://example.com', findingsCount: 3 });

@@ -333,6 +333,12 @@ export class ToolsService {
       ['whereis', { requiresTarget: false }],
       ['tesseract', { requiresTarget: false }],
       ['xclip', { requiresTarget: false }],
+      // Install tools (run in container: apt-get, pip, npm). Use for installing missing pentest tools.
+      ['apt-get', { requiresTarget: false }],
+      ['apt', { requiresTarget: false }],
+      ['pip', { requiresTarget: false }],
+      ['pip3', { requiresTarget: false }],
+      ['npm', { requiresTarget: false }],
     ]);
   }
 
@@ -415,6 +421,98 @@ export class ToolsService {
       return path.resolve(configured);
     }
     return path.resolve(process.cwd(), 'skills');
+  }
+
+  /**
+   * Add a new skill under skills/custom/<name>/SKILL.md. Uses the same path resolution as memory_get so the skill can be loaded later.
+   * Only allows creating under custom/ so core skills are not overwritten. Name is sanitized to a safe slug.
+   */
+  async addSkill(
+    name: string,
+    content: string,
+    description?: string,
+  ): Promise<{ ok: true; path: string; message: string }> {
+    if (!name || !content) {
+      throw new BadRequestException('name and content are required for add_skill');
+    }
+    const slug = name
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9_-]/g, '');
+    if (!slug) {
+      throw new BadRequestException('name must contain at least one alphanumeric character');
+    }
+    const relativePath = `skills/custom/${slug}/SKILL.md`;
+    const fullPath = this.resolveSkillsPath(relativePath);
+    const customDir = path.resolve(this.getWorkspaceRoot(), 'skills', 'custom');
+    if (!fullPath.startsWith(customDir)) {
+      throw new BadRequestException('add_skill path must be under skills/custom/');
+    }
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    const header = description
+      ? `---
+description: "${description.replace(/"/g, '\\"')}"
+---
+\n`
+      : '';
+    await fs.writeFile(fullPath, header + content.trimEnd() + '\n', 'utf8');
+    return {
+      ok: true,
+      path: relativePath,
+      message: `Skill created. Load it with memory_get(path: "${relativePath}").`,
+    };
+  }
+
+  /**
+   * Search GitHub/code via GitSearch API (e.g. wordlists, payloads, tools, examples).
+   * Uses gitsearch-backend (e.g. gitsearchai.com) by default; optional api_url override.
+   */
+  async gitSearch(query: string, apiUrl?: string): Promise<{ results: unknown[]; raw?: string; error?: string }> {
+    if (!query || !query.trim()) {
+      throw new BadRequestException('query is required for git_search');
+    }
+    const url =
+      apiUrl?.trim() ||
+      this.configService.get<string>('GIT_SEARCH_API_URL') ||
+      'https://gitsearch-backend-werv.onrender.com/api/search';
+    const body = JSON.stringify({ query: query.trim() });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          accept: '*/*',
+          'accept-language': 'en-US,en;q=0.9',
+          'content-type': 'application/json',
+          origin: 'https://www.gitsearchai.com',
+          referer: 'https://www.gitsearchai.com/',
+          'user-agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36',
+          'x-session-auth': 'false',
+          'x-session-id': `gwehai-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+        },
+        body,
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      const raw = await res.text();
+      if (!res.ok) {
+        return { results: [], raw: raw.slice(0, 2000), error: `HTTP ${res.status}` };
+      }
+      try {
+        const data = JSON.parse(raw);
+        const results = Array.isArray(data) ? data : data?.results ?? data?.data ?? data?.items ?? (data ? [data] : []);
+        return { results };
+      } catch {
+        return { results: [], raw: raw.slice(0, 2000) };
+      }
+    } catch (err: unknown) {
+      clearTimeout(timeout);
+      const message = err instanceof Error ? err.message : String(err);
+      return { results: [], error: message };
+    }
   }
 
   /** Run a script in the payload sandbox (for craft_payload tool). */

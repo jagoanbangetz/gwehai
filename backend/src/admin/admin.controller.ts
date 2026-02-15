@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, UseGuards, Req } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -10,6 +10,11 @@ import { CreditOrder } from '../entities/credit-order.entity';
 import { Report } from '../entities/report.entity';
 import { UsageEvent } from '../entities/usage-event.entity';
 import { Message } from '../entities/message.entity';
+import { MessagePart } from '../entities/message-part.entity';
+import { MessageFile } from '../entities/message-file.entity';
+import { Conversation } from '../entities/conversation.entity';
+import { ConversationMemory } from '../entities/conversation-memory.entity';
+import { Hacktivity } from '../entities/hacktivity.entity';
 import { Request } from 'express';
 
 @Controller('admin')
@@ -29,6 +34,16 @@ export class AdminController {
     private readonly usageRepo: Repository<UsageEvent>,
     @InjectRepository(Message)
     private readonly messageRepo: Repository<Message>,
+    @InjectRepository(MessagePart)
+    private readonly messagePartRepo: Repository<MessagePart>,
+    @InjectRepository(MessageFile)
+    private readonly messageFileRepo: Repository<MessageFile>,
+    @InjectRepository(Conversation)
+    private readonly conversationRepo: Repository<Conversation>,
+    @InjectRepository(ConversationMemory)
+    private readonly memoryRepo: Repository<ConversationMemory>,
+    @InjectRepository(Hacktivity)
+    private readonly hacktivityRepo: Repository<Hacktivity>,
   ) {}
 
   @Get('dashboard')
@@ -128,6 +143,34 @@ export class AdminController {
     return {
       environment: process.env.NODE_ENV || 'development',
       apiBaseUrl: process.env.API_BASE_URL || '/api',
+    };
+  }
+
+  /**
+   * Delete all chat (conversations, messages, parts, files, memory) and all reports (findings) and hacktivity.
+   * Order respects foreign keys. Admin only.
+   */
+  @Post('wipe-chat-and-reports')
+  async wipeChatAndReports() {
+    const deletedParts = await this.messagePartRepo.delete({});
+    const deletedFiles = await this.messageFileRepo.delete({});
+    const deletedMessages = await this.messageRepo.delete({});
+    const deletedMemory = await this.memoryRepo.delete({});
+    const deletedHacktivity = await this.hacktivityRepo.delete({});
+    const deletedReports = await this.reportRepo.delete({});
+    const deletedConversations = await this.conversationRepo.delete({});
+
+    return {
+      message: 'All chat and report data deleted.',
+      deleted: {
+        messageParts: deletedParts.affected ?? 0,
+        messageFiles: deletedFiles.affected ?? 0,
+        messages: deletedMessages.affected ?? 0,
+        conversationMemory: deletedMemory.affected ?? 0,
+        hacktivity: deletedHacktivity.affected ?? 0,
+        reports: deletedReports.affected ?? 0,
+        conversations: deletedConversations.affected ?? 0,
+      },
     };
   }
 }

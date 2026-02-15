@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Report, ReportStatus } from '../entities/report.entity';
 import { Conversation } from '../entities/conversation.entity';
 
@@ -129,26 +129,40 @@ export class ReportsService {
     return this.reportRepo.save(report);
   }
 
-  /** List reports grouped by conversation: one row per conversation with website, findings count, start/end times. */
-  async listGroupedByConversation(userId: string): Promise<
+  /**
+   * List reports grouped by conversation (or by parent run when groupByParent).
+   * When groupByParent: one row per "run" (main conversation); sub-agent findings are rolled up so one run = one row.
+   */
+  async listGroupedByConversation(
+    userId: string,
+    options?: { groupByParent?: boolean },
+  ): Promise<
     { conversationId: string; website: string; findingsCount: number; createdAt: string; runStatus: string; startedAt: string | null; finishedAt: string | null }[]
   > {
-    const rows = await this.reportRepo
+    const groupByParent = options?.groupByParent === true;
+    const rootExpr = groupByParent ? 'COALESCE(c."parentConversationId", c.id)' : 'r."conversationId"';
+
+    const qb = this.reportRepo
       .createQueryBuilder('r')
-      .select('r.conversationId', 'conversationId')
+      .select(rootExpr, 'conversationId')
       .addSelect('MAX(r.target)', 'website')
       .addSelect('COUNT(r.id)', 'findingsCount')
       .addSelect('MAX(r.createdAt)', 'createdAt')
-      .addSelect('COALESCE(c."runStatus", \'finished\')', 'runStatus')
+      .addSelect('COALESCE(MAX(CASE WHEN c."parentConversationId" IS NULL THEN c."runStatus" END), \'finished\')', 'runStatus')
       .addSelect('MIN(c."createdAt")', 'startedAt')
       .addSelect('MAX(c."updatedAt")', 'finishedAt')
       .leftJoin(Conversation, 'c', 'c.id = r.conversationId')
       .where('r.userId = :userId', { userId })
-      .andWhere('r.conversationId IS NOT NULL')
-      .groupBy('r.conversationId')
-      .addGroupBy('c."runStatus"')
-      .orderBy('MAX(r.createdAt)', 'DESC')
-      .getRawMany();
+      .andWhere('r.conversationId IS NOT NULL');
+
+    if (groupByParent) {
+      qb.groupBy(rootExpr);
+    } else {
+      qb.groupBy('r.conversationId').addGroupBy('c."runStatus"');
+    }
+    qb.orderBy('MAX(r.createdAt)', 'DESC');
+
+    const rows = await qb.getRawMany();
     return rows.map((r) => ({
       conversationId: r.conversationId,
       website: r.website || '—',
@@ -157,6 +171,84 @@ export class ReportsService {
       runStatus: String(r.runStatus || 'finished'),
       startedAt: r.startedAt instanceof Date ? r.startedAt.toISOString() : (r.startedAt ? String(r.startedAt) : null),
       finishedAt: r.finishedAt instanceof Date ? r.finishedAt.toISOString() : (r.finishedAt ? String(r.finishedAt) : null),
+    }));
+  }
+
+  /** List all findings for a "run": main conversation + all sub-agent conversations (when groupByParent was used). */
+  async listFindingsByRun(userId: string, rootConversationId: string) {
+    const convs = await this.reportRepo.manager.find(Conversation, {
+      where: [
+        { id: rootConversationId, userId },
+        { parentConversationId: rootConversationId, userId },
+      ],
+      select: ['id'],
+    });
+    const ids = convs.map((c) => c.id).filter(Boolean);
+    if (ids.length === 0) return [];
+    return this.reportRepo.find({
+      where: { userId, status: ReportStatus.COMPLETED, conversationId: ids.length === 1 ? ids[0] : In(ids) },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  /** List reports as tree: runs with agents (children) and findings count per agent. */
+  async listReportsTree(
+    userId: string,
+  ): Promise<
+    {
+      conversationId: string;
+      website: string;
+      findingsCount: number;
+      createdAt: string;
+      runStatus: string;
+      startedAt: string | null;
+      finishedAt: string | null;
+      agents: { conversationId: string; agentRole: string | null; findingsCount: number }[];
+    }[]
+  > {
+    const runs = await this.listGroupedByConversation(userId, { groupByParent: true });
+    const out: {
+      conversationId: string;
+      website: string;
+      findingsCount: number;
+      createdAt: string;
+      runStatus: string;
+      startedAt: string | null;
+      finishedAt: string | null;
+      agents: { conversationId: string; agentRole: string | null; findingsCount: number }[];
+    }[] = [];
+    for (const run of runs) {
+      const agents = await this.getRunAgents(userId, run.conversationId);
+      out.push({
+        ...run,
+        agents,
+      });
+    }
+    return out;
+  }
+
+  /** Per-run agents (main + sub-agents) with findings count. */
+  private async getRunAgents(
+    userId: string,
+    rootConversationId: string,
+  ): Promise<{ conversationId: string; agentRole: string | null; findingsCount: number }[]> {
+    const rows = await this.reportRepo
+      .createQueryBuilder('r')
+      .select('c.id', 'conversationId')
+      .addSelect('c.agentRole', 'agentRole')
+      .addSelect('COUNT(r.id)', 'findingsCount')
+      .innerJoin(Conversation, 'c', 'c.id = r.conversationId')
+      .where('r.userId = :userId', { userId })
+      .andWhere('r.status = :status', { status: ReportStatus.COMPLETED })
+      .andWhere('(c.id = :root OR c.parentConversationId = :root)', { root: rootConversationId })
+      .groupBy('c.id')
+      .addGroupBy('c.agentRole')
+      .orderBy('COUNT(r.id)', 'DESC')
+      .getRawMany();
+    return rows.map((r) => ({
+      conversationId: r.conversationId,
+      agentRole: r.agentRole ?? null,
+      findingsCount: Number(r.findingsCount),
     }));
   }
 

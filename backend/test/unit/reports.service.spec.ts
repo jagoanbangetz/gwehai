@@ -22,7 +22,9 @@ describe('ReportsService', () => {
     addSelect: jest.fn(),
     where: jest.fn(),
     andWhere: jest.fn(),
+    leftJoin: jest.fn(),
     groupBy: jest.fn(),
+    addGroupBy: jest.fn(),
     orderBy: jest.fn(),
     getRawMany: jest.fn(),
   };
@@ -33,7 +35,9 @@ describe('ReportsService', () => {
     mockQueryBuilder.addSelect.mockReturnValue(mockQueryBuilder);
     mockQueryBuilder.where.mockReturnValue(mockQueryBuilder);
     mockQueryBuilder.andWhere.mockReturnValue(mockQueryBuilder);
+    mockQueryBuilder.leftJoin.mockReturnValue(mockQueryBuilder);
     mockQueryBuilder.groupBy.mockReturnValue(mockQueryBuilder);
+    mockQueryBuilder.addGroupBy.mockReturnValue(mockQueryBuilder);
     mockQueryBuilder.orderBy.mockReturnValue(mockQueryBuilder);
     mockReportRepo.createQueryBuilder.mockReturnValue(mockQueryBuilder);
 
@@ -160,7 +164,7 @@ describe('ReportsService', () => {
           detail: 'XSS',
           poc: null,
           target: null,
-          metadata: null,
+          status: ReportStatus.COMPLETED,
         }),
       );
     });

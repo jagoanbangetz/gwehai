@@ -86,6 +86,10 @@
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.thinking-bar__content > .recent-steps-terminal {
+  margin-top: 12px;
+}
+
 .thinking-bar__steps-label {
   font-size: 11px;
   font-weight: 600;
@@ -93,6 +97,37 @@
   letter-spacing: 0.05em;
   color: rgba(255, 255, 255, 0.5);
   margin: 10px 0 6px;
+}
+
+.thinking-bar__steps-label:not(:first-child) {
+  margin-top: 14px;
+}
+
+.thinking-bar__checklist {
+  margin-bottom: 4px;
+}
+
+.thinking-bar__phase {
+  display: block;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 8px;
+}
+
+.thinking-bar__checklist-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.thinking-bar__checklist-item {
+  white-space: nowrap;
+}
+
+.thinking-bar__checklist-item--done {
+  color: rgba(120, 200, 120, 0.95);
 }
 
 .thinking-bar__steps {
@@ -109,4 +144,120 @@
 
 .thinking-bar__step:last-child {
   margin-bottom: 0;
+}
+
+/* Terminal-style checklist (matches image: Checklist window with CHECKLIST PROGRESS + [Nexus] Checklist) */
+.thinking-bar-terminal {
+  display: flex;
+  flex-direction: column;
+  background: #0d0d0d;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-top: 10px;
+  min-height: 120px;
+}
+
+.thinking-bar-terminal__header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.thinking-bar-terminal__traffic {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.thinking-bar-terminal__traffic--spacer {
+  visibility: hidden;
+}
+
+.thinking-bar-terminal__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.thinking-bar-terminal__dot--red {
+  background: #ff5f56;
+}
+
+.thinking-bar-terminal__dot--yellow {
+  background: #ffbd2e;
+}
+
+.thinking-bar-terminal__dot--green {
+  background: #27c93f;
+}
+
+.thinking-bar-terminal__title {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.65);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 8px;
+}
+
+.thinking-bar-terminal__body {
+  flex: 1;
+  padding: 12px 14px 14px;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.85);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.thinking-bar-terminal__section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.45);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.thinking-bar-terminal__section-label--steps {
+  margin-top: 14px;
+  margin-bottom: 8px;
+}
+
+.thinking-bar-terminal__phase {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 10px;
+}
+
+.thinking-bar-terminal__checklist-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-size: 12px;
+}
+
+.thinking-bar-terminal__checklist-item {
+  white-space: nowrap;
+}
+
+/* Pending = not running yet → red */
+.thinking-bar-terminal__checklist-item--pending {
+  color: rgba(255, 120, 100, 0.95);
+}
+
+/* Done = finished → green */
+.thinking-bar-terminal__checklist-item--done {
+  color: rgba(120, 220, 120, 0.95);
 }

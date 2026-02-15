@@ -74,11 +74,10 @@ describe('ToolsService', () => {
       expect(results[1]).toMatchObject({ path: 'daily/2026-02-08', snippet: 'beta match' });
     });
 
-    it('memorySearch without jobId returns empty array', async () => {
-      const results = await service.memorySearch('beta', 10);
-
+    it('memorySearch without jobId throws BadRequestException', async () => {
+      await expect(service.memorySearch('beta', 10)).rejects.toThrow(BadRequestException);
+      await expect(service.memorySearch('beta', 10)).rejects.toThrow(/Conversation context|jobId/);
       expect(memoryRepo.findOne).not.toHaveBeenCalled();
-      expect(results).toEqual([]);
     });
 
     it('memoryGet for main with jobId returns content from database', async () => {
@@ -104,11 +103,10 @@ describe('ToolsService', () => {
       expect(content).toBe('two\nthree');
     });
 
-    it('memoryGet for main without jobId returns empty string', async () => {
-      const content = await service.memoryGet('main');
-
+    it('memoryGet for main without jobId throws BadRequestException', async () => {
+      await expect(service.memoryGet('main')).rejects.toThrow(BadRequestException);
+      await expect(service.memoryGet('main')).rejects.toThrow(/Conversation context|jobId/);
       expect(memoryRepo.findOne).not.toHaveBeenCalled();
-      expect(content).toBe('');
     });
 
     it('memoryGet for daily path with jobId returns content from database', async () => {
@@ -155,7 +153,7 @@ describe('ToolsService', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
       await expect(
         service.writeFile('main', 'hello', false),
-      ).rejects.toThrow(/Conversation context is required|Memory is stored in the database/);
+      ).rejects.toThrow(/Conversation context|jobId|Memory is stored/);
 
       expect(memoryRepo.create).not.toHaveBeenCalled();
       expect(memoryRepo.save).not.toHaveBeenCalled();

@@ -32,6 +32,7 @@ Use during **Recon** / early mapping phases.
 | **skills/check-host/SKILL.md** | Check-host — distributed ping/http/tcp/dns checks from multiple global nodes. |
 | **skills/subdomain-finder/SKILL.md** | Subdomain finder — parse C99 scan pages and summarize subdomains/IPs. |
 | **skills/waf-bypass/SKILL.md** | WAF bypass — explanation and minimal PoC when WAF blocks traffic. |
+| **skills/git-search/SKILL.md** | Git search — find wordlists, payloads, tools, and examples on GitHub via **git_search** (e.g. "wordlist ffuf", "sqli payloads"). |
 
 ---
 
@@ -94,10 +95,22 @@ Use for confirming findings, burp-style workflows, and utilities.
 
 ---
 
+## 6. Install & Extend
+
+Use when tools are missing or you need a reusable procedure not in the built-in skills.
+
+| Path | Purpose |
+|------|---------|
+| **skills/install-tools/SKILL.md** | Install missing tools — use **exec** with apt-get, pip, pip3, npm when a required tool is not available in the environment. |
+| **skills/add-skill/SKILL.md** | Add a new skill — use **add_skill** to create skills/custom/&lt;name&gt;/SKILL.md so you can load it later with memory_get. |
+
+---
+
 ## How to load
 
 - **Full pentest flow:** `memory_get(path: "skills/WEB_CHECKLIST.md")` to start the orchestrator, then let it load skills per stage/phase.
 - **Single skill:** `memory_get(path: "skills/<name>/SKILL.md")` when you need a focused checklist (e.g. `skills/sqli/SKILL.md`).
+- **Custom skill (you added):** `memory_get(path: "skills/custom/<name>/SKILL.md")` after **add_skill** (e.g. `skills/custom/graphql-checks/SKILL.md`).
 - **Index (this file):** `memory_get(path: "skills/SKILLS_INDEX.md")` to see available skills and categories.
 
 ---

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { logo } from '../assets/images'
@@ -16,6 +16,8 @@ import ChatLayout from '../components/ChatLayout'
 import MessagesArea, { type MessagesAreaRef } from '../components/MessagesArea'
 import Composer from '../components/Composer'
 import ThinkingBar from '../components/ThinkingBar'
+import { GwehLogRenderer } from '../components/GwehLog'
+import type { LogEvent, LogPhase } from '../components/GwehLog'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 
 interface Tool {
@@ -75,6 +77,11 @@ interface ReportGroupRow {
   finishedAt?: string | null
 }
 
+/** Tree row: run with agents (children) */
+interface ReportTreeRow extends ReportGroupRow {
+  agents?: { conversationId: string; agentRole: string | null; findingsCount: number }[]
+}
+
 /** Format ISO date string for display (e.g. "Feb 10, 2026 14:30") */
 function formatReportTime(iso: string | null | undefined): string {
   if (!iso) return '—'
@@ -112,6 +119,23 @@ interface FindingRow {
   target: string | null
   metadata?: { title?: string; severity?: string }
   createdAt: string
+}
+
+/** One AI activity row for Hacktivity table */
+interface HacktivityRow {
+  id: string
+  conversationId: string | null
+  domain: string | null
+  result: string | null
+  toolArgs: Record<string, unknown> | null
+  createdAt: string
+}
+
+/** Conversation with hacktivity count (for filter dropdown) */
+interface HacktivityConversationRow {
+  conversationId: string
+  title: string | null
+  count: number
 }
 
 interface CurrentPlan {
@@ -186,6 +210,16 @@ const Dashboard = () => {
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [showHelpModal, setShowHelpModal] = useState(false)
   const [showReportModal, setShowReportModal] = useState(false)
+  const [showHacktivityModal, setShowHacktivityModal] = useState(false)
+  const [hacktivityList, setHacktivityList] = useState<HacktivityRow[]>([])
+  const [hacktivityConversations, setHacktivityConversations] = useState<HacktivityConversationRow[]>([])
+  const [selectedHacktivityConversationId, setSelectedHacktivityConversationId] = useState<string | null>(null)
+  const [hacktivityPage, setHacktivityPage] = useState(1)
+  const [hacktivityPageSize] = useState(20)
+  const [hacktivityTotal, setHacktivityTotal] = useState(0)
+  const [isLoadingHacktivity, setIsLoadingHacktivity] = useState(false)
+  const [selectedHacktivityId, setSelectedHacktivityId] = useState<string | null>(null)
+  const [selectedHacktivity, setSelectedHacktivity] = useState<HacktivityRow | null>(null)
   const [showPlanModal, setShowPlanModal] = useState(false)
   const [helpMessages, setHelpMessages] = useState<Message[]>([])
   const [helpInput, setHelpInput] = useState('')
@@ -201,8 +235,9 @@ const Dashboard = () => {
   const [toasts, setToasts] = useState<Toast[]>([])
   const [isVoiceRecording, setIsVoiceRecording] = useState(false)
   const [voiceTranscript, setVoiceTranscript] = useState('')
-  const [reports, setReports] = useState<ReportGroupRow[]>([])
+  const [reports, setReports] = useState<ReportTreeRow[]>([])
   const [isLoadingReports, setIsLoadingReports] = useState(false)
+  const [expandedReportIds, setExpandedReportIds] = useState<Set<string>>(new Set())
   const [reportDetailConversationId, setReportDetailConversationId] = useState<string | null>(null)
   const [reportFindings, setReportFindings] = useState<FindingRow[]>([])
   const [reportFindingsLoading, setReportFindingsLoading] = useState(false)
@@ -220,6 +255,8 @@ const Dashboard = () => {
   const [currentAssistantMessageId, setCurrentAssistantMessageId] = useState<string | null>(null)
   const [currentStep, setCurrentStep] = useState<string | null>(null)
   const [activityLog, setActivityLog] = useState<string[]>([])
+  const [logEvents, setLogEvents] = useState<LogEvent[]>([])
+  const [pentestChecklistProgress, setPentestChecklistProgress] = useState<{ phase: string; checklist: Record<string, boolean> } | null>(null)
   const messageToolsSnapshot = useMemo(() => messageTools, [messageTools])
   /** Mobile: <1024px — hamburger + drawer. Desktop: persistent sidebar + chevron collapse. */
   const isMobile = useMediaQuery('(max-width: 1023px)')
@@ -241,6 +278,9 @@ const Dashboard = () => {
   const initialDataLoadDoneRef = useRef(false)
   const initialDataLoadUserIdRef = useRef<string | undefined>(undefined)
   const sendInProgressRef = useRef(false)
+  const pentestJobStreamAbortRef = useRef<AbortController | null>(null)
+  /** When true, ignore all incoming SSE events so activity really stops when user clicks Stop. */
+  const stopRequestedRef = useRef(false)
 
   /** Refetch chat list from DB (e.g. after sending a message so sidebar shows the conversation). */
   const refetchChatHistory = async () => {
@@ -274,12 +314,12 @@ const Dashboard = () => {
   const loadReports = async () => {
     try {
       setIsLoadingReports(true)
-      const res = await apiClient.get('/reports')
+      const res = await apiClient.get('/reports?format=tree')
       const rows = res.data || []
       setReports(rows)
       setConversationRunStatus(prev => {
         const next = { ...prev }
-        for (const r of rows as ReportGroupRow[]) {
+        for (const r of rows as ReportTreeRow[]) {
           const status = String(r.runStatus || '').toLowerCase()
           if (status === 'running' || status === 'finished' || status === 'error' || status === 'stopped') {
             next[r.conversationId] = status
@@ -298,7 +338,7 @@ const Dashboard = () => {
   const loadFindingsForConversation = async (conversationId: string) => {
     try {
       setReportFindingsLoading(true)
-      const res = await apiClient.get(`/reports/by-conversation/${conversationId}`)
+      const res = await apiClient.get(`/reports/by-run/${conversationId}`)
       setReportFindings(res.data || [])
     } catch (error: any) {
       console.error('Failed to load findings:', error)
@@ -325,6 +365,58 @@ const Dashboard = () => {
     setSelectedFindingId(null)
     setSelectedFinding(null)
   }
+
+  const loadHacktivityConversations = async () => {
+    try {
+      const res = await apiClient.get('/hacktivity/conversations')
+      setHacktivityConversations(Array.isArray(res.data) ? res.data : [])
+    } catch (error: any) {
+      console.error('Failed to load Hacktivity conversations', error)
+    }
+  }
+
+  const loadHacktivity = async (page: number = 1, conversationId: string | null = null) => {
+    try {
+      setIsLoadingHacktivity(true)
+      const params = new URLSearchParams()
+      params.set('limit', String(hacktivityPageSize))
+      params.set('offset', String((page - 1) * hacktivityPageSize))
+      if (conversationId) params.set('conversationId', conversationId)
+      const res = await apiClient.get(`/hacktivity?${params.toString()}`)
+      const data = res.data || {}
+      const items = Array.isArray(data.items) ? data.items : []
+      const total = typeof data.total === 'number' ? data.total : 0
+      setHacktivityList(items)
+      setHacktivityTotal(total)
+      setHacktivityPage(page)
+    } catch (error: any) {
+      console.error('Failed to load Hacktivity', error)
+      showToast(error.response?.data?.message || 'Failed to load activity.', 'error')
+    } finally {
+      setIsLoadingHacktivity(false)
+    }
+  }
+
+  const loadHacktivityDetail = async (id: string) => {
+    try {
+      const res = await apiClient.get(`/hacktivity/${id}`)
+      setSelectedHacktivity(res.data)
+      setSelectedHacktivityId(id)
+    } catch (error: any) {
+      console.error('Failed to load activity detail', error)
+      showToast(error.response?.data?.message || 'Failed to load detail.', 'error')
+    }
+  }
+
+  const closeHacktivityModal = () => {
+    setShowHacktivityModal(false)
+    setSelectedHacktivityId(null)
+    setSelectedHacktivity(null)
+    setSelectedHacktivityConversationId(null)
+    setHacktivityPage(1)
+  }
+
+  const hacktivityTotalPages = Math.max(1, Math.ceil(hacktivityTotal / hacktivityPageSize))
 
   const loadPlan = async () => {
     try {
@@ -430,6 +522,15 @@ const Dashboard = () => {
       loadReports()
     }
   }, [showReportModal])
+
+  useEffect(() => {
+    if (showHacktivityModal) {
+      loadHacktivityConversations()
+      setSelectedHacktivityConversationId(null)
+      setHacktivityPage(1)
+      loadHacktivity(1, null)
+    }
+  }, [showHacktivityModal])
 
   useEffect(() => {
     if (showPlanModal) {
@@ -655,17 +756,120 @@ const Dashboard = () => {
     }
   }, [messages, currentChatId, user?.id])
 
+  // Active pentest job for current view: either the running job or the opened chat's linked job.
+  const activePentestJobId = currentJobId ?? (currentChatId ? chatHistory.find((c) => c.id === currentChatId)?.jobId : null) ?? null
+
+  // Fetch pentest job summary (phase + checklist) when viewing a pentest conversation; clear when leaving.
+  const fetchPentestChecklistProgress = useCallback(async (jobId: string) => {
+    try {
+      const { data } = await apiClient.get<{ phase?: string; checklist?: Record<string, boolean> }>(`/pentest-jobs/${jobId}`)
+      setPentestChecklistProgress({
+        phase: data.phase ?? 'recon',
+        checklist: data.checklist ?? {},
+      })
+    } catch {
+      setPentestChecklistProgress(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!activePentestJobId) {
+      setPentestChecklistProgress(null)
+      return
+    }
+    fetchPentestChecklistProgress(activePentestJobId)
+  }, [activePentestJobId, fetchPentestChecklistProgress])
+
+  // When user opens a pentest-linked conversation, auto-connect to job events SSE so tools log streams in the chat.
+  useEffect(() => {
+    const chat = currentChatId ? chatHistory.find((c) => c.id === currentChatId) : null
+    const jobId = chat?.jobId ?? null
+    if (!jobId || !user?.id) {
+      pentestJobStreamAbortRef.current?.abort()
+      pentestJobStreamAbortRef.current = null
+      return
+    }
+    const ac = new AbortController()
+    pentestJobStreamAbortRef.current = ac
+    const baseUrl = apiClient.defaults.baseURL || '/api'
+    const token =
+      (() => {
+        try {
+          const u = localStorage.getItem('scout_user')
+          if (!u) return null
+          const d = JSON.parse(u)
+          return d?.token ?? d?.access_token ?? null
+        } catch {
+          return null
+        }
+      })() ?? ''
+    const url = `${baseUrl}/pentest-jobs/${jobId}/events/stream`
+    fetch(url, {
+      signal: ac.signal,
+      headers: { Accept: 'text/event-stream', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      credentials: 'include',
+    })
+      .then(async (res) => {
+        if (!res.ok || !res.body) return
+        const reader = res.body.getReader()
+        const dec = new TextDecoder()
+        let buf = ''
+        while (!ac.signal.aborted) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buf += dec.decode(value, { stream: true })
+          const parts = buf.split('\n\n')
+          buf = parts.pop() ?? ''
+          for (const block of parts) {
+            let eventType = ''
+            let dataStr = ''
+            for (const line of block.split('\n')) {
+              if (line.startsWith('event: ')) eventType = line.slice(7).trim()
+              if (line.startsWith('data: ')) dataStr = line.slice(6)
+            }
+            if (!dataStr) continue
+            try {
+              const data = JSON.parse(dataStr)
+              if (eventType === 'job_event') {
+                const msg = data.message ?? (data.kind === 'tool' ? '(tool output)' : '')
+                if (msg) setActivityLog((prev) => [...prev.slice(-99), msg])
+                if (data.kind === 'state') fetchPentestChecklistProgress(jobId)
+              }
+              if (eventType === 'job_finished' && data.status) {
+                setConversationRunStatus((prev) => ({
+                  ...prev,
+                  ...(currentChatId ? { [currentChatId]: String(data.status) } : {}),
+                }))
+              }
+            } catch {
+              /* ignore parse errors */
+            }
+          }
+        }
+      })
+      .catch((err) => {
+        if (err?.name === 'AbortError') return
+        console.warn('Pentest job events stream error:', err)
+      })
+    return () => {
+      ac.abort()
+      pentestJobStreamAbortRef.current = null
+    }
+  }, [currentChatId, chatHistory, user?.id, fetchPentestChecklistProgress])
 
   const handleNewChat = () => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close()
       eventSourceRef.current = null
     }
+    pentestJobStreamAbortRef.current?.abort()
+    pentestJobStreamAbortRef.current = null
     setSearchParams({})
     setMessages([])
     setCurrentChatId(null)
     setCurrentConversationId(null)
     setCurrentJobId(null)
+    setPentestChecklistProgress(null)
     setTools({})
     setMessageTools({})
     setMessageToolState({})
@@ -1112,27 +1316,39 @@ const Dashboard = () => {
 
   const handleStopJob = async () => {
     if (!currentJobId) return
+    // 1) Stop all activity immediately: ignore any further SSE events
+    stopRequestedRef.current = true
+    // 2) Close chat SSE so no more events are received
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
+    }
+    // 3) Abort pentest job events stream (stops live tool log updates)
+    pentestJobStreamAbortRef.current?.abort()
+    pentestJobStreamAbortRef.current = null
     try {
       await gwehaiClient.stopJob(currentJobId)
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
-        eventSourceRef.current = null
-      }
-      setCurrentJobId(null)
-      setIsLoading(false)
-      sendInProgressRef.current = false
-      setCurrentStep(null)
-      setActivityLog(prev => [...prev.slice(-49), 'Text: Stopped by user'])
-      setMessages(prev => {
-        const last = prev[prev.length - 1]
-        if (last?.role === 'assistant' && last.isStreaming)
-          return prev.map((m, i) => i === prev.length - 1 ? { ...m, isStreaming: false, content: (m.content || '') + '\n\n_Pentest stopped._' } : m)
-        return prev
-      })
-      showToast('Pentest stopped.', 'info')
     } catch (_e) {
       showToast('Failed to stop job.', 'error')
     }
+    // 4) Clear all running state so UI shows stopped
+    setCurrentJobId(null)
+    setIsLoading(false)
+    sendInProgressRef.current = false
+    setCurrentStep(null)
+    streamingMessageRef.current = null
+    currentAssistantMessageIdRef.current = null
+    if (currentConversationId) {
+      setConversationRunStatus((prev) => ({ ...prev, [currentConversationId]: 'stopped' }))
+    }
+    setActivityLog((prev) => [...prev.slice(-49), 'Text: Stopped by user'])
+    setMessages((prev) => {
+      const last = prev[prev.length - 1]
+      if (last?.role === 'assistant' && last.isStreaming)
+        return prev.map((m, i) => (i === prev.length - 1 ? { ...m, isStreaming: false, content: (m.content || '') + '\n\n_Pentest stopped._' } : m))
+      return prev
+    })
+    showToast('Pentest stopped.', 'info')
   }
 
   /** Send the current input or a given message (e.g. from suggestion button). */
@@ -1163,11 +1379,13 @@ const Dashboard = () => {
     if (!messageOverride) setInput('')
     inputRef.current?.focus()
 
+    stopRequestedRef.current = false
     sendInProgressRef.current = true
     const isNewChat = !currentChatId
     setIsLoading(true)
     setCurrentStep(null)
     setActivityLog([])
+    setLogEvents([])
     if (currentConversationId) {
       setConversationRunStatus(prev => ({ ...prev, [currentConversationId]: 'running' }))
     }
@@ -1288,6 +1506,20 @@ const Dashboard = () => {
 
   const handleSend = () => handleSendWithText()
 
+  /** Map step message body to GwehLog phase for structured log. */
+  const messageToLogPhase = (body: string): LogPhase => {
+    const lower = body.toLowerCase()
+    if (lower.includes('planning') || lower.includes('reasoning')) return 'THINKING'
+    if (lower.includes('writing response') || lower === 'done' || lower.startsWith('error:')) return 'REASONING'
+    if (
+      lower.includes('reading skills') ||
+      lower.includes('checklist loaded') ||
+      lower.includes('skill loaded') ||
+      lower.includes('memory for:')
+    ) return 'MODULE_LOADER'
+    return 'EXECUTION'
+  }
+
   const appendActivityStep = (step: string, agentLabel?: string) => {
     const raw = String(step || '').trim()
     if (!raw) return
@@ -1314,13 +1546,21 @@ const Dashboard = () => {
     const normalizedBody = /^(planning|running|text)\s*:\s*/i.test(body) ? body : `${category}: ${body}`
     const display = `${prefix}${normalizedBody}`.trim()
     setActivityLog(prev => {
-      // Keep the list stable during rapid status bursts and agent handoff.
       if (prev[prev.length - 1] === display) return prev
       return [...prev.slice(-49), display]
     })
+    const phase = messageToLogPhase(body)
+    const logEvent: LogEvent = {
+      id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+      ts: new Date().toISOString(),
+      phase,
+      message: display,
+    }
+    setLogEvents(prev => [...prev.slice(-199), logEvent])
   }
 
   const handleStreamEvent = (event: GwehAIEvent, _messageIndex: number) => {
+    if (stopRequestedRef.current) return
     // Log so you can see what the UI is processing in the console
     if (event.type !== 'message_delta' && event.type !== 'content') {
       const dataSummary = event.type === 'status' ? event.data?.message
@@ -1722,12 +1962,15 @@ const Dashboard = () => {
 
         sendInProgressRef.current = false
         setIsLoading(false)
-        // Keep currentStep so UI shows last real activity (e.g. "Running: dirsearch..."), not generic "Running tools..."
+        setCurrentStep(null)
         appendActivityStep('Done')
         streamingMessageRef.current = null
         if (event.data.conversation_id) {
-          setCurrentConversationId(event.data.conversation_id)
-          setConversationRunStatus(prev => ({ ...prev, [event.data.conversation_id]: 'finished' }))
+          const cid = event.data.conversation_id
+          setCurrentConversationId(cid)
+          setConversationRunStatus(prev => ({ ...prev, [cid]: 'finished' }))
+          // Link current view to the conversation the agent used (fixes "spawn creates another conversation" confusion)
+          setCurrentChatId(cid)
           refetchChatHistory()
         } else if (currentConversationId) {
           setConversationRunStatus(prev => ({ ...prev, [currentConversationId]: 'finished' }))
@@ -1825,6 +2068,35 @@ const Dashboard = () => {
         <button className="nav-item" onClick={() => navigate('/agent/pentest-runner')} title="Pentest Job Runner">
           <span className="nav-icon">&#9876;</span>
           <span className="nav-text">Pentest Runner</span>
+        </button>
+        <button className="nav-item" onClick={() => setShowReportModal(true)} title="Security Reports">
+          <span className="nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </span>
+          <span className="nav-text">Report</span>
+        </button>
+        <button className="nav-item" onClick={() => setShowHacktivityModal(true)} title="Hacktivity">
+          <span className="nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+          </span>
+          <span className="nav-text">Hacktivity</span>
+        </button>
+        <button className="nav-item" onClick={() => setShowPlanModal(true)} title="Plan & Usage">
+          <span className="nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/>
+            </svg>
+          </span>
+          <span className="nav-text">Plan</span>
         </button>
         {showSearch && (
           <div className="sidebar-search">
@@ -1980,8 +2252,6 @@ const Dashboard = () => {
           sidebarCollapsed={sidebarCollapsed}
           chatCollapsed={chatCollapsed}
           onChatCollapseToggle={(collapsed) => setChatCollapsed(collapsed !== undefined ? collapsed : !chatCollapsed)}
-          onReportClick={() => setShowReportModal(true)}
-          onPlanClick={() => setShowPlanModal(true)}
           sidebarHeader={sidebarHeaderContent}
           sidebarList={sidebarListContent}
           sidebarFooter={sidebarFooterContent}
@@ -2145,11 +2415,17 @@ const Dashboard = () => {
                         <div className="message-text">
                         {/* ChatGPT-style thinking bar above assistant output when streaming */}
                         {message.role === 'assistant' && (isStreamingThisMessage || (isLoading && !message.content)) && (
-                          <ThinkingBar
-                            currentStep={currentStep}
-                            steps={activityLog}
-                            isStreaming={isStreamingThisMessage || isLoading}
-                          />
+                          <>
+                            <ThinkingBar
+                              currentStep={currentStep}
+                              steps={activityLog}
+                              isStreaming={isStreamingThisMessage || isLoading}
+                              checklistProgress={pentestChecklistProgress}
+                            />
+                            {logEvents.length > 0 && (
+                              <GwehLogRenderer events={logEvents} compact copyableBlocks className="chat-gweh-log" />
+                            )}
+                          </>
                         )}
                         {message.eventType === 'planning' && !message.content ? null : message.eventType === 'thinking' && !message.content ? null : (
                           <>
@@ -2241,7 +2517,23 @@ const Dashboard = () => {
                   <div className="chat-message assistant chat-loading-dots" aria-hidden>
                     <div className="message-content">
                       <div className="message-bubble">
-                        <ThinkingBar currentStep={currentStep} steps={activityLog} isStreaming />
+                        <ThinkingBar currentStep={currentStep} steps={activityLog} isStreaming checklistProgress={pentestChecklistProgress} />
+                        {logEvents.length > 0 && (
+                          <GwehLogRenderer events={logEvents} compact copyableBlocks className="chat-gweh-log" />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {/* Show checklist bar for pentest chats when not streaming so user can expand to see progress */}
+                {!isLoading && pentestChecklistProgress && (
+                  <div className="chat-message assistant" aria-hidden>
+                    <div className="message-content">
+                      <div className="message-bubble">
+                        <ThinkingBar currentStep={null} steps={activityLog} isStreaming={false} checklistProgress={pentestChecklistProgress} />
+                        {logEvents.length > 0 && (
+                          <GwehLogRenderer events={logEvents} compact copyableBlocks className="chat-gweh-log" />
+                        )}
                       </div>
                     </div>
                   </div>
@@ -2472,47 +2764,94 @@ const Dashboard = () => {
                           </td>
                         </tr>
                       ) : (
-                        reports.map((report) => (
-                          <tr key={report.conversationId}>
-                            <td className="report-conversation-id" title={report.conversationId}>
-                              {report.conversationId.slice(0, 8)}…
-                            </td>
-                            <td className="target">{report.website}</td>
-                            <td className="report-findings-count">{report.findingsCount}</td>
-                            <td className="report-time">{formatReportTime(report.startedAt)}</td>
-                            <td className="report-time">{formatReportTime(report.finishedAt)}</td>
-                            <td className="report-duration">{formatReportDuration(report.startedAt, report.finishedAt)}</td>
-                            <td>
-                              {(() => {
-                                const status = (conversationRunStatus[report.conversationId] || String(report.runStatus || 'finished').toLowerCase() || 'finished') as string
-                                const tone = status === 'running'
-                                  ? 'info'
-                                  : status === 'error'
-                                    ? 'high'
-                                    : status === 'stopped'
-                                      ? 'info'
-                                      : 'low'
-                                return (
-                                  <span className={`severity-badge severity-${tone}`}>
-                                    {String(status).toUpperCase()}
-                                  </span>
-                                )
-                              })()}
-                            </td>
-                            <td className="report-actions">
-                              <button
-                                type="button"
-                                className="report-detail-btn"
-                                onClick={() => {
-                                  setReportDetailConversationId(report.conversationId)
-                                  loadFindingsForConversation(report.conversationId)
-                                }}
-                              >
-                                Detail
-                              </button>
-                            </td>
-                          </tr>
-                        ))
+                        reports.flatMap((report) => {
+                          const agents = (report as ReportTreeRow).agents ?? []
+                          const hasChildren = agents.length > 1
+                          const expanded = expandedReportIds.has(report.conversationId)
+                          const toggleExpand = () => {
+                            setExpandedReportIds((prev) => {
+                              const next = new Set(prev)
+                              if (next.has(report.conversationId)) next.delete(report.conversationId)
+                              else next.add(report.conversationId)
+                              return next
+                            })
+                          }
+                          const runRow = (
+                            <tr key={report.conversationId} className="report-run-row">
+                              <td className="report-conversation-id" title={report.conversationId}>
+                                {hasChildren ? (
+                                  <button
+                                    type="button"
+                                    className="report-expand-btn"
+                                    onClick={(e) => { e.stopPropagation(); toggleExpand() }}
+                                    aria-expanded={expanded}
+                                    title={expanded ? 'Collapse' : 'Expand'}
+                                  >
+                                    <span className={`report-chevron ${expanded ? 'expanded' : ''}`}>▸</span>
+                                  </button>
+                                ) : null}
+                                <span className={hasChildren ? 'report-id-with-expand' : ''}>
+                                  {report.conversationId.slice(0, 8)}…
+                                </span>
+                              </td>
+                              <td className="target">{report.website}</td>
+                              <td className="report-findings-count">{report.findingsCount}</td>
+                              <td className="report-time">{formatReportTime(report.startedAt)}</td>
+                              <td className="report-time">{formatReportTime(report.finishedAt)}</td>
+                              <td className="report-duration">{formatReportDuration(report.startedAt, report.finishedAt)}</td>
+                              <td>
+                                {(() => {
+                                  const status = (conversationRunStatus[report.conversationId] || String(report.runStatus || 'finished').toLowerCase() || 'finished') as string
+                                  const tone = status === 'running'
+                                    ? 'info'
+                                    : status === 'error'
+                                      ? 'high'
+                                      : status === 'stopped'
+                                        ? 'info'
+                                        : 'low'
+                                  return (
+                                    <span className={`severity-badge severity-${tone}`}>
+                                      {String(status).toUpperCase()}
+                                    </span>
+                                  )
+                                })()}
+                              </td>
+                              <td className="report-actions">
+                                <button
+                                  type="button"
+                                  className="report-detail-btn"
+                                  onClick={() => {
+                                    setReportDetailConversationId(report.conversationId)
+                                    loadFindingsForConversation(report.conversationId)
+                                  }}
+                                >
+                                  Detail
+                                </button>
+                              </td>
+                            </tr>
+                          )
+                          const agentRows = expanded && hasChildren
+                            ? agents.map((agent) => (
+                                <tr key={agent.conversationId} className="report-agent-row">
+                                  <td className="report-conversation-id report-agent-cell" title={agent.conversationId}>
+                                    <span className="report-agent-indent">└</span>
+                                    <span title={agent.conversationId}>{agent.conversationId.slice(0, 8)}…</span>
+                                    <span className="report-agent-role">
+                                      {agent.agentRole ? ` (${agent.agentRole})` : ''}
+                                    </span>
+                                  </td>
+                                  <td className="target">—</td>
+                                  <td className="report-findings-count">{agent.findingsCount}</td>
+                                  <td className="report-time">—</td>
+                                  <td className="report-time">—</td>
+                                  <td className="report-duration">—</td>
+                                  <td>—</td>
+                                  <td className="report-actions"></td>
+                                </tr>
+                              ))
+                            : []
+                          return [runRow, ...agentRows]
+                        })
                       )}
                     </tbody>
                   </table>
@@ -2611,6 +2950,167 @@ const Dashboard = () => {
               )}
               {!selectedFinding.detail && !selectedFinding.poc && (
                 <p className="report-poc-empty">No description or POC saved for this finding.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hacktivity Modal */}
+      {showHacktivityModal && (
+        <div className="modal-overlay" onClick={closeHacktivityModal}>
+          <div className="modal-content report-modal hacktivity-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">
+                {selectedHacktivity ? 'AI action detail' : 'Hacktivity'}
+              </h2>
+              <div className="modal-header-actions">
+                {selectedHacktivity && (
+                  <button
+                    type="button"
+                    className="report-back-btn"
+                    onClick={() => {
+                      setSelectedHacktivityId(null)
+                      setSelectedHacktivity(null)
+                    }}
+                  >
+                    ← Back
+                  </button>
+                )}
+                <button className="modal-close" onClick={closeHacktivityModal}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="modal-body">
+              {selectedHacktivity ? (
+                <div className="hacktivity-detail">
+                  {selectedHacktivity.domain && (
+                    <p className="hacktivity-detail-row"><strong>Domain:</strong> {selectedHacktivity.domain}</p>
+                  )}
+                  {selectedHacktivity.conversationId && (
+                    <p className="hacktivity-detail-row"><strong>Conversation:</strong> <code>{selectedHacktivity.conversationId.slice(0, 8)}…</code></p>
+                  )}
+                  <p className="hacktivity-detail-row"><strong>Time:</strong> {formatReportTime(selectedHacktivity.createdAt)}</p>
+                  {selectedHacktivity.toolArgs && Object.keys(selectedHacktivity.toolArgs).length > 0 && (
+                    <section className="hacktivity-detail-section">
+                      <h3>Arguments</h3>
+                      <pre className="hacktivity-detail-pre">{JSON.stringify(selectedHacktivity.toolArgs, null, 2)}</pre>
+                    </section>
+                  )}
+                  {selectedHacktivity.result != null && (
+                    <section className="hacktivity-detail-section">
+                      <h3>Result</h3>
+                      <pre className="hacktivity-detail-pre hacktivity-detail-result">{selectedHacktivity.result}</pre>
+                    </section>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div className="hacktivity-toolbar">
+                    <label className="hacktivity-filter-label">
+                      Conversation:
+                      <select
+                        className="hacktivity-filter-select"
+                        value={selectedHacktivityConversationId ?? ''}
+                        onChange={(e) => {
+                          const id = e.target.value || null
+                          setSelectedHacktivityConversationId(id)
+                          setHacktivityPage(1)
+                          loadHacktivity(1, id)
+                        }}
+                      >
+                        <option value="">All conversations</option>
+                        {hacktivityConversations.map((c) => (
+                          <option key={c.conversationId} value={c.conversationId}>
+                            {c.title || c.conversationId.slice(0, 8) + '…'} ({c.count})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="report-table-container">
+                    <table className="report-table">
+                      <thead>
+                        <tr>
+                          <th>Time</th>
+                          <th>Conversation</th>
+                          <th>Domain</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {isLoadingHacktivity ? (
+                          <tr>
+                            <td colSpan={4} className="report-loading-cell">Loading activity...</td>
+                          </tr>
+                        ) : hacktivityList.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="report-empty-cell">No AI activity yet. Run a pentest or chat to see actions here.</td>
+                          </tr>
+                        ) : (
+                          hacktivityList.map((row) => (
+                            <tr
+                              key={row.id}
+                              className="hacktivity-row"
+                              onClick={() => loadHacktivityDetail(row.id)}
+                              role="button"
+                              tabIndex={0}
+                              onKeyDown={(e) => e.key === 'Enter' && loadHacktivityDetail(row.id)}
+                            >
+                              <td className="report-time">{formatReportTime(row.createdAt)}</td>
+                              <td className="report-conversation-id" title={row.conversationId ?? ''}>
+                                {row.conversationId ? `${row.conversationId.slice(0, 8)}…` : '—'}
+                              </td>
+                              <td className="hacktivity-domain" title={row.domain ?? ''}>
+                                {row.domain ? (row.domain.length > 32 ? `${row.domain.slice(0, 32)}…` : row.domain) : '—'}
+                              </td>
+                              <td className="report-actions">
+                                <button type="button" className="report-detail-btn" onClick={(e) => { e.stopPropagation(); loadHacktivityDetail(row.id) }}>Detail</button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {hacktivityTotal > 0 && (
+                    <div className="hacktivity-pagination">
+                      <span className="hacktivity-pagination-info">
+                        Page {hacktivityPage} of {hacktivityTotalPages} ({hacktivityTotal} total)
+                      </span>
+                      <div className="hacktivity-pagination-buttons">
+                        <button
+                          type="button"
+                          className="report-detail-btn"
+                          disabled={hacktivityPage <= 1 || isLoadingHacktivity}
+                          onClick={() => {
+                            const prev = hacktivityPage - 1
+                            setHacktivityPage(prev)
+                            loadHacktivity(prev, selectedHacktivityConversationId)
+                          }}
+                        >
+                          ← Prev
+                        </button>
+                        <button
+                          type="button"
+                          className="report-detail-btn"
+                          disabled={hacktivityPage >= hacktivityTotalPages || isLoadingHacktivity}
+                          onClick={() => {
+                            const next = hacktivityPage + 1
+                            setHacktivityPage(next)
+                            loadHacktivity(next, selectedHacktivityConversationId)
+                          }}
+                        >
+                          Next →
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
