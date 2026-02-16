@@ -1973,7 +1973,7 @@ const Dashboard = () => {
       case 'tool_start': {
         const toolCallId = event.data.tool_call_id || `tool-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
         const toolName = event.data.tool || event.data.name || 'Unknown tool'
-        const toolInput = event.data.input || event.data.args || {}
+        const toolInput = event.data.input ?? event.data.args ?? {}
         let targetMessageId = lastCompletedAssistantMessageIdRef.current || currentAssistantMessageIdRef.current
         // Ensure we have an assistant message to attach the tool to (in case status arrived after tool_start)
         if (!targetMessageId) {
@@ -1981,13 +1981,13 @@ const Dashboard = () => {
         }
         const computedReasoning =
           toolName === 'memory_search'
-            ? `Searching memory for: ${(toolInput.query ?? '').toString().slice(0, 60) || '...'}`
+            ? `Searching memory for: ${(toolInput?.query ?? '').toString().slice(0, 60) || '...'}`
             : toolName === 'memory_get'
-              ? `Reading ${(toolInput.path ?? '').toString()}`
+              ? `Reading ${(toolInput?.path ?? '').toString()}`
               : toolName === 'write_file'
-                ? `Writing to ${(toolInput.path ?? '').toString()}`
+                ? `Writing to ${(toolInput?.path ?? '').toString()}`
                 : toolName === 'exec'
-                  ? `Running: ${(toolInput.command ?? '').toString().trim().slice(0, 60)}${(toolInput.command ?? '').toString().length > 60 ? '...' : ''}`
+                  ? `Running: ${(toolInput?.command ?? '').toString().trim().slice(0, 60)}${(toolInput?.command ?? '').toString().length > 60 ? '...' : ''}`
                   : `Running: ${toolName}`
         const reasoningToShow = lastReasoningFromBackendRef.current ?? computedReasoning
         lastReasoningFromBackendRef.current = null

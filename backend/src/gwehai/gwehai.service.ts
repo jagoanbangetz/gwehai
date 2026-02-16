@@ -205,6 +205,7 @@ export class GwehAIService {
             userId,
             result.conversationId,
             this.extractTargetFromMessage(message),
+            modelKey,
           );
         } catch (e) {
           // non-fatal: phase display may stay default

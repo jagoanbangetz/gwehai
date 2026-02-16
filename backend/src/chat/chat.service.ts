@@ -831,7 +831,8 @@ export class ChatService {
           }
           let args: Record<string, any> = {};
           try {
-            args = typeof tc.arguments === 'string' ? JSON.parse(tc.arguments) : tc.arguments || {};
+            const parsed = typeof tc.arguments === 'string' ? JSON.parse(tc.arguments) : tc.arguments;
+            args = parsed && typeof parsed === 'object' ? parsed : {};
           } catch {
             args = {};
           }
@@ -841,7 +842,7 @@ export class ChatService {
 
           let toolResult: string;
           try {
-            toolResult = await this.runTool(tc.name, args, jobId, cid, userId, push, memoryScopeId, nextAgentIndexRef, abortSignal);
+            toolResult = await this.runTool(tc.name, args, jobId, cid, userId, push, memoryScopeId, nextAgentIndexRef, abortSignal, options?.model_key);
           } catch (err: any) {
             toolResult = `Error: ${err?.message || String(err)}`;
           }
@@ -1002,11 +1003,12 @@ export class ChatService {
 
   /** Extract domain/target from tool args for Hacktivity (target, url, or from command). */
   private extractDomainFromArgs(args: Record<string, any>): string | null {
-    const target = (args.target ?? '').toString().trim();
+    const a = args ?? {};
+    const target = (a.target ?? '').toString().trim();
     if (target) return target;
-    const url = (args.url ?? '').toString().trim();
+    const url = (a.url ?? '').toString().trim();
     if (url) return url;
-    const cmd = (args.command ?? '').toString().trim();
+    const cmd = (a.command ?? '').toString().trim();
     if (cmd) {
       const urlLike = cmd.match(/https?:\/\/[^\s]+/);
       if (urlLike) return urlLike[0];
@@ -1016,9 +1018,10 @@ export class ChatService {
 
   /** One-line description for reasoning event before each tool (Cursor-style "I will run: ..."). */
   private formatToolReasoning(name: string, args: Record<string, any>): string {
-    const q = (args.query ?? '').toString().trim();
-    const pathVal = (args.path ?? '').toString().trim();
-    const cmd = (args.command ?? '').toString().trim();
+    const safeArgs = args ?? {};
+    const q = (safeArgs.query ?? '').toString().trim();
+    const pathVal = (safeArgs.path ?? '').toString().trim();
+    const cmd = (safeArgs.command ?? '').toString().trim();
     const maxLen = 60;
     switch (name) {
       case 'memory_search':
@@ -1030,43 +1033,43 @@ export class ChatService {
       case 'exec':
         return cmd ? `Running: ${cmd.slice(0, maxLen)}${cmd.length > maxLen ? '...' : ''}` : 'Running command...';
       case 'craft_payload':
-        return (args.script as string)?.trim()
-          ? `Running payload script: ${String(args.script).slice(0, maxLen)}${String(args.script).length > maxLen ? '...' : ''}`
+        return (safeArgs.script as string)?.trim()
+          ? `Running payload script: ${String(safeArgs.script).slice(0, maxLen)}${String(safeArgs.script).length > maxLen ? '...' : ''}`
           : 'Running payload script...';
       case 'report_finding':
-        return (args.detail as string)?.trim()
-          ? `Saving finding: ${String(args.detail).slice(0, maxLen)}${String(args.detail).length > maxLen ? '...' : ''}`
+        return (safeArgs.detail as string)?.trim()
+          ? `Saving finding: ${String(safeArgs.detail).slice(0, maxLen)}${String(safeArgs.detail).length > maxLen ? '...' : ''}`
           : 'Saving finding to report...';
       case 'update_pentest_phase':
-        return args.phase ? `Updating phase: ${String(args.phase)}` : 'Updating pentest phase...';
+        return safeArgs.phase ? `Updating phase: ${String(safeArgs.phase)}` : 'Updating pentest phase...';
       case 'add_skill':
-        return (args.name as string)?.trim()
-          ? `Adding skill: ${String(args.name).slice(0, maxLen)}`
+        return (safeArgs.name as string)?.trim()
+          ? `Adding skill: ${String(safeArgs.name).slice(0, maxLen)}`
           : 'Adding skill...';
       case 'download_skill':
-        return (args.path as string)?.trim()
-          ? `Downloading skill: ${String(args.path).slice(0, maxLen)}`
+        return (safeArgs.path as string)?.trim()
+          ? `Downloading skill: ${String(safeArgs.path).slice(0, maxLen)}`
           : 'Listing skills...';
       case 'download_agent':
         return 'Downloading agent info...';
       case 'git_search':
-        return (args.query as string)?.trim()
-          ? `Searching GitHub: ${String(args.query).slice(0, maxLen)}`
+        return (safeArgs.query as string)?.trim()
+          ? `Searching GitHub: ${String(safeArgs.query).slice(0, maxLen)}`
           : 'Searching GitHub...';
       case 'agents_list':
         return 'Listing allowed agent roles...';
       case 'sessions_list':
         return 'Listing sessions...';
       case 'sessions_history':
-        return args.session_id ? `Fetching history for session ${String(args.session_id).slice(0, 8)}...` : 'Fetching session history...';
+        return safeArgs.session_id ? `Fetching history for session ${String(safeArgs.session_id).slice(0, 8)}...` : 'Fetching session history...';
       case 'sessions_send':
-        return (args.message as string)?.trim()
-          ? `Sending to session: ${String(args.message).slice(0, maxLen)}${String(args.message).length > maxLen ? '...' : ''}`
+        return (safeArgs.message as string)?.trim()
+          ? `Sending to session: ${String(safeArgs.message).slice(0, maxLen)}${String(safeArgs.message).length > maxLen ? '...' : ''}`
           : 'Sending message to session...';
       case 'sessions_spawn':
-        return args.role ? `Spawning sub-agent: ${String(args.role)}` : 'Spawning sub-agent session...';
+        return safeArgs.role ? `Spawning sub-agent: ${String(safeArgs.role)}` : 'Spawning sub-agent session...';
       case 'session_status':
-        return args.session_id ? `Status for session ${String(args.session_id).slice(0, 8)}...` : 'Session status...';
+        return safeArgs.session_id ? `Status for session ${String(safeArgs.session_id).slice(0, 8)}...` : 'Session status...';
       default:
         return `Running: ${name}`;
     }
@@ -1086,16 +1089,18 @@ export class ChatService {
     memoryScopeId?: string,
     nextAgentIndexRef?: { current: number },
     abortSignal?: AbortSignal,
+    modelKey?: ModelOptionKey,
   ): Promise<string> {
     if (abortSignal?.aborted) {
       return JSON.stringify({ error: 'Job stopped by user' });
     }
+    const safeArgs = args ?? {};
     const scopeId = memoryScopeId ?? conversationId ?? jobId;
     switch (name) {
       case 'memory_search': {
         const results = await this.toolsService.memorySearch(
-          String(args.query || ''),
-          Number(args.max_results) || 10,
+          String(safeArgs.query || ''),
+          Number(safeArgs.max_results) || 10,
           scopeId,
         );
         const payload: { results: any[]; hint?: string } = { results };
@@ -1106,9 +1111,9 @@ export class ChatService {
       }
       case 'memory_get': {
         const text = await this.toolsService.memoryGet(
-          String(args.path || ''),
-          args.from != null ? Number(args.from) : undefined,
-          args.lines != null ? Number(args.lines) : undefined,
+          String(safeArgs.path || ''),
+          safeArgs.from != null ? Number(safeArgs.from) : undefined,
+          safeArgs.lines != null ? Number(safeArgs.lines) : undefined,
           scopeId,
         );
         if (!text || !text.trim()) {
@@ -1118,19 +1123,19 @@ export class ChatService {
       }
       case 'write_file': {
         const out = await this.toolsService.writeFile(
-          String(args.path || ''),
-          String(args.content || ''),
-          Boolean(args.append),
+          String(safeArgs.path || ''),
+          String(safeArgs.content || ''),
+          Boolean(safeArgs.append),
           scopeId,
         );
         return JSON.stringify(out);
       }
       case 'exec': {
-        const cmdLine = String(args.command || '').trim();
+        const cmdLine = String(safeArgs.command || '').trim();
         const parts = cmdLine.split(/\s+/).filter(Boolean);
         const command = parts[0] || '';
         const cmdArgs = parts.slice(1);
-        const target = args.target != null ? String(args.target) : undefined;
+        const target = safeArgs.target != null ? String(safeArgs.target) : undefined;
         const out = await this.toolsService.execCommand({
           command,
           args: cmdArgs.length ? cmdArgs : undefined,
@@ -1140,7 +1145,7 @@ export class ChatService {
         return JSON.stringify({ stdout: out.stdout, stderr: out.stderr, exitCode: out.exitCode });
       }
       case 'craft_payload': {
-        const script = String(args.script ?? '').trim();
+        const script = String(safeArgs.script ?? '').trim();
         if (!script) {
           return JSON.stringify({ error: 'craft_payload requires script (e.g. bash or python3 -c "..." )' });
         }
@@ -1151,16 +1156,16 @@ export class ChatService {
         if (!userId || !conversationId) {
           return JSON.stringify({ error: 'report_finding requires an active conversation' });
         }
-        const detail = String(args.detail ?? '').trim();
+        const detail = String(safeArgs.detail ?? '').trim();
         if (!detail) {
           return JSON.stringify({ error: 'report_finding requires detail (description of the bug/finding)' });
         }
         const report = await this.reportsService.createFinding(userId, conversationId, detail, {
-          title: args.title ? String(args.title) : undefined,
-          severity: args.severity ? String(args.severity) : undefined,
-          target: args.target ? String(args.target) : undefined,
-          poc: args.poc ? String(args.poc) : undefined,
-          finding_key: args.finding_key ? String(args.finding_key) : undefined,
+          title: safeArgs.title ? String(safeArgs.title) : undefined,
+          severity: safeArgs.severity ? String(safeArgs.severity) : undefined,
+          target: safeArgs.target ? String(safeArgs.target) : undefined,
+          poc: safeArgs.poc ? String(safeArgs.poc) : undefined,
+          finding_key: safeArgs.finding_key ? String(safeArgs.finding_key) : undefined,
         });
         return JSON.stringify({ ok: true, report_id: report.id, message: 'Finding saved to database' });
       }
@@ -1168,26 +1173,26 @@ export class ChatService {
         if (!userId || !conversationId) {
           return JSON.stringify({ error: 'update_pentest_phase requires an active conversation' });
         }
-        const convId = String(args.conversation_id ?? conversationId).trim();
+        const convId = String(safeArgs.conversation_id ?? conversationId).trim();
         if (!convId) {
           return JSON.stringify({ error: 'conversation_id is required' });
         }
         await this.pentestJobs.updateStateByConversationId(userId, convId, {
-          phase: args.phase != null ? String(args.phase) : undefined,
-          checklist: args.checklist && typeof args.checklist === 'object' ? args.checklist as Record<string, boolean> : undefined,
-          last_action_summary: args.last_action_summary != null ? String(args.last_action_summary) : undefined,
+          phase: safeArgs.phase != null ? String(safeArgs.phase) : undefined,
+          checklist: safeArgs.checklist && typeof safeArgs.checklist === 'object' ? safeArgs.checklist as Record<string, boolean> : undefined,
+          last_action_summary: safeArgs.last_action_summary != null ? String(safeArgs.last_action_summary) : undefined,
         });
         return JSON.stringify({ ok: true, message: 'Pentest phase updated' });
       }
       case 'add_skill': {
-        const name = String(args.name ?? '').trim();
-        const content = String(args.content ?? '').trim();
-        const description = args.description != null ? String(args.description) : undefined;
+        const name = String(safeArgs.name ?? '').trim();
+        const content = String(safeArgs.content ?? '').trim();
+        const description = safeArgs.description != null ? String(safeArgs.description) : undefined;
         const out = await this.toolsService.addSkill(name, content, description);
         return JSON.stringify(out);
       }
       case 'download_skill': {
-        const skillPath = args.path != null ? String(args.path).trim() : '';
+        const skillPath = safeArgs.path != null ? String(safeArgs.path).trim() : '';
         if (!skillPath) {
           const list = await this.toolsService.listSkills();
           return JSON.stringify(list);
@@ -1208,8 +1213,8 @@ export class ChatService {
         });
       }
       case 'git_search': {
-        const query = String(args.query ?? '').trim();
-        const apiUrl = args.api_url != null ? String(args.api_url) : undefined;
+        const query = String(safeArgs.query ?? '').trim();
+        const apiUrl = safeArgs.api_url != null ? String(safeArgs.api_url) : undefined;
         const out = await this.toolsService.gitSearch(query, apiUrl);
         return JSON.stringify(out);
       }
@@ -1220,25 +1225,25 @@ export class ChatService {
       case 'sessions_list': {
         if (!userId) return JSON.stringify({ error: 'sessions_list requires an active user' });
         const list = await this.listSessions(userId, {
-          parent_id: args.parent_id ? String(args.parent_id) : undefined,
-          role: args.role ? String(args.role) : undefined,
-          last: args.last != null ? Number(args.last) : undefined,
+          parent_id: safeArgs.parent_id ? String(safeArgs.parent_id) : undefined,
+          role: safeArgs.role ? String(safeArgs.role) : undefined,
+          last: safeArgs.last != null ? Number(safeArgs.last) : undefined,
         });
         return JSON.stringify({ sessions: list });
       }
       case 'sessions_history': {
-        const sessionId = String(args.session_id ?? '').trim();
+        const sessionId = String(safeArgs.session_id ?? '').trim();
         if (!sessionId) return JSON.stringify({ error: 'sessions_history requires session_id' });
         if (!userId) return JSON.stringify({ error: 'sessions_history requires an active user' });
-        const history = await this.getSessionHistory(userId, sessionId, args.last != null ? Number(args.last) : 50);
+        const history = await this.getSessionHistory(userId, sessionId, safeArgs.last != null ? Number(safeArgs.last) : 50);
         return JSON.stringify({ session_id: sessionId, messages: history });
       }
       case 'sessions_send': {
-        const sessionId = String(args.session_id ?? '').trim();
-        const msg = String(args.message ?? '').trim();
+        const sessionId = String(safeArgs.session_id ?? '').trim();
+        const msg = String(safeArgs.message ?? '').trim();
         if (!sessionId || !msg) return JSON.stringify({ error: 'sessions_send requires session_id and message' });
         if (!userId || !conversationId) return JSON.stringify({ error: 'sessions_send requires an active conversation' });
-        const waitForReply = args.wait_for_reply !== false;
+        const waitForReply = safeArgs.wait_for_reply !== false;
         const subIndex = nextAgentIndexRef ? nextAgentIndexRef.current++ : 2;
         const subLabel = getAgentLabel(subIndex);
         let onSubAgentDone: (() => Promise<void>) | undefined;
@@ -1261,6 +1266,7 @@ export class ChatService {
           scopeId,
           onSubAgentDone,
           abortSignal,
+          modelKey,
         );
         return JSON.stringify(result);
       }
@@ -1285,13 +1291,13 @@ export class ChatService {
         const result = await this.spawnSession(
           userId,
           conversationId,
-          args.role ? String(args.role) : undefined,
-          args.title ? String(args.title) : undefined,
+          safeArgs.role ? String(safeArgs.role) : undefined,
+          safeArgs.title ? String(safeArgs.title) : undefined,
         );
         return JSON.stringify(result);
       }
       case 'session_status': {
-        const sessionId = (args.session_id ?? conversationId) ?? '';
+        const sessionId = (safeArgs.session_id ?? conversationId) ?? '';
         if (!sessionId) return JSON.stringify({ error: 'session_status requires session_id (or current conversation)' });
         if (!userId) return JSON.stringify({ error: 'session_status requires an active user' });
         const status = await this.getSessionStatus(userId, sessionId);
@@ -1457,6 +1463,7 @@ export class ChatService {
     parentMemoryScope?: string,
     onSubAgentDone?: () => void | Promise<void>,
     abortSignal?: AbortSignal,
+    modelKey?: ModelOptionKey,
   ): Promise<{ ok: true; message?: string } | { ok: true; reply: string }> {
     const conversation = await this.conversationRepo.findOne({
       where: { id: toConversationId, userId },
@@ -1502,7 +1509,7 @@ export class ChatService {
         push,
         agentInfo,
         parentMemoryScope ?? currentConversationId,
-        { emitDoneEvent: false, abortSignal },
+        { emitDoneEvent: false, abortSignal, ...(modelKey && { model_key: modelKey }) },
       );
       if (agentInfo) {
         push({
@@ -1543,7 +1550,7 @@ export class ChatService {
       push,
       agentInfo,
       parentMemoryScope ?? currentConversationId,
-      { emitDoneEvent: false, abortSignal },
+      { emitDoneEvent: false, abortSignal, ...(modelKey && { model_key: modelKey }) },
     ).then(async () => {
       if (agentInfo) {
         push({
