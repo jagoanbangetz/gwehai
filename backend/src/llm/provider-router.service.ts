@@ -40,6 +40,45 @@ export interface GenerateWithToolsResult {
   meta: ChatCompletionMeta;
 }
 
+/** Parse API error response body and return a user-friendly message. */
+function parseApiErrorResponse(body: string, provider: string, fallback: string): string {
+  try {
+    const json = JSON.parse(body);
+    const msg = json?.error?.message ?? json?.message ?? json?.error;
+    if (typeof msg === 'string' && msg.trim()) {
+      if (/failed to call a function|invalid.*function|malformed.*tool/i.test(msg)) {
+        return `The ${provider} model returned an invalid response. Try again or use a different model (e.g. DeepSeek or Claude) for this task.`;
+      }
+      return msg.length > 500 ? msg.slice(0, 500) + '...' : msg;
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return fallback;
+}
+
+/** Sanitize OpenAI-style tool_calls: filter by name, ensure valid JSON arguments. */
+function sanitizeToolCalls(raw: any[]): Array<{ id: string; name: string; arguments: string }> {
+  return raw
+    .filter((tc: any) => tc?.function?.name)
+    .map((tc: any) => {
+      let argsStr =
+        typeof tc.function?.arguments === 'string'
+          ? tc.function.arguments
+          : JSON.stringify(tc.function?.arguments ?? {});
+      try {
+        JSON.parse(argsStr);
+      } catch {
+        argsStr = '{}';
+      }
+      return {
+        id: tc.id || tc.function?.name || `call_${Date.now()}`,
+        name: String(tc.function?.name ?? '').trim(),
+        arguments: argsStr,
+      };
+    });
+}
+
 @Injectable()
 export class ProviderRouterService {
   constructor(
@@ -266,18 +305,15 @@ export class ProviderRouterService {
       }),
     });
     if (!res.ok) {
-      const err = await res.text();
-      throw new HttpException(err || 'Groq API error', res.status);
+      const errText = await res.text();
+      const message = parseApiErrorResponse(errText, 'Groq', errText || 'Groq API error');
+      throw new HttpException(message, res.status);
     }
     const data = await res.json();
     const msg = data?.choices?.[0]?.message || {};
     const content = msg.content ?? '';
     const rawToolCalls = msg.tool_calls || [];
-    const tool_calls = rawToolCalls.map((tc: any) => ({
-      id: tc.id || tc.function?.name,
-      name: tc.function?.name || '',
-      arguments: typeof tc.function?.arguments === 'string' ? tc.function.arguments : JSON.stringify(tc.function?.arguments || {}),
-    }));
+    const tool_calls = sanitizeToolCalls(rawToolCalls);
     const usage = data?.usage || {};
     return {
       content,
@@ -313,8 +349,9 @@ export class ProviderRouterService {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const err = await res.text();
-      throw new HttpException(err || 'DeepSeek API error', res.status);
+      const errText = await res.text();
+      const message = parseApiErrorResponse(errText, 'DeepSeek', errText || 'DeepSeek API error');
+      throw new HttpException(message, res.status);
     }
     const data = await res.json();
     const content = data?.choices?.[0]?.message?.content ?? '';
@@ -370,18 +407,15 @@ export class ProviderRouterService {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const err = await res.text();
-      throw new HttpException(err || 'DeepSeek API error', res.status);
+      const errText = await res.text();
+      const message = parseApiErrorResponse(errText, 'DeepSeek', errText || 'DeepSeek API error');
+      throw new HttpException(message, res.status);
     }
     const data = await res.json();
     const msg = data?.choices?.[0]?.message || {};
     const content = msg.content ?? '';
     const rawToolCalls = msg.tool_calls || [];
-    const tool_calls = rawToolCalls.map((tc: any) => ({
-      id: tc.id || tc.function?.name,
-      name: tc.function?.name || '',
-      arguments: typeof tc.function?.arguments === 'string' ? tc.function.arguments : JSON.stringify(tc.function?.arguments || {}),
-    }));
+    const tool_calls = sanitizeToolCalls(rawToolCalls);
     const usage = data?.usage || {};
     return {
       content,
@@ -419,8 +453,9 @@ export class ProviderRouterService {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const err = await res.text();
-      throw new HttpException(err || 'OpenAI API error', res.status);
+      const errText = await res.text();
+      const message = parseApiErrorResponse(errText, 'OpenAI', errText || 'OpenAI API error');
+      throw new HttpException(message, res.status);
     }
     const data = await res.json();
     const content = data?.choices?.[0]?.message?.content ?? '';
@@ -478,18 +513,15 @@ export class ProviderRouterService {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const err = await res.text();
-      throw new HttpException(err || 'OpenAI API error', res.status);
+      const errText = await res.text();
+      const message = parseApiErrorResponse(errText, 'OpenAI', errText || 'OpenAI API error');
+      throw new HttpException(message, res.status);
     }
     const data = await res.json();
     const msg = data?.choices?.[0]?.message || {};
     const content = msg.content ?? '';
     const rawToolCalls = msg.tool_calls || [];
-    const tool_calls = rawToolCalls.map((tc: any) => ({
-      id: tc.id || tc.function?.name,
-      name: tc.function?.name || '',
-      arguments: typeof tc.function?.arguments === 'string' ? tc.function.arguments : JSON.stringify(tc.function?.arguments || {}),
-    }));
+    const tool_calls = sanitizeToolCalls(rawToolCalls);
     const usage = data?.usage || {};
     return {
       content,
@@ -528,8 +560,9 @@ export class ProviderRouterService {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const err = await res.text();
-      throw new HttpException(err || 'Anthropic API error', res.status);
+      const errText = await res.text();
+      const message = parseApiErrorResponse(errText, 'Anthropic', errText || 'Anthropic API error');
+      throw new HttpException(message, res.status);
     }
     const data = await res.json();
     const textBlock = (data.content || []).find((b: any) => b.type === 'text');
@@ -586,8 +619,9 @@ export class ProviderRouterService {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const err = await res.text();
-      throw new HttpException(err || 'Anthropic API error', res.status);
+      const errText = await res.text();
+      const message = parseApiErrorResponse(errText, 'Anthropic', errText || 'Anthropic API error');
+      throw new HttpException(message, res.status);
     }
     const data = await res.json();
     const contentBlocks = (data.content || []).filter((b: any) => b.type === 'text');
