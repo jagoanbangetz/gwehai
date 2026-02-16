@@ -28,11 +28,14 @@
     "db:logs": "cd .. && docker-compose logs -f postgres",
     "db:status": "cd .. && docker-compose ps",
     "db:seed": "ts-node src/scripts/seed-points.ts 999999",
+    "db:seed-model-options": "ts-node src/scripts/seed-model-options.ts",
     "db:delete-all-data": "ts-node src/scripts/delete-all-data.ts",
     "db:delete-all-data:confirm": "ts-node src/scripts/delete-all-data.ts --confirm",
-    "make-admin": "ts-node src/scripts/make-admin.ts"
+    "make-admin": "ts-node src/scripts/make-admin.ts",
+    "set-plan": "ts-node src/scripts/set-plan.ts"
   },
   "dependencies": {
+    "@ai-sdk/groq": "^3.0.24",
     "@mariozechner/pi-agent-core": "0.52.8",
     "@mariozechner/pi-ai": "0.52.8",
     "@mariozechner/pi-coding-agent": "0.52.8",
@@ -43,7 +46,10 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^10.0.0",
+    "@nestjs/platform-ws": "^10.4.22",
     "@nestjs/typeorm": "^11.0.0",
+    "@nestjs/websockets": "^10.4.22",
+    "ai": "^6.0.86",
     "axios": "^1.13.4",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",

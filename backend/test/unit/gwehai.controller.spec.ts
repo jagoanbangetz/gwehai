@@ -18,6 +18,8 @@ describe('GwehAIController SSE', () => {
 
     const gwehaiService = {
       getJob: jest.fn().mockImplementation(() => job),
+      incrementStreamConnections: jest.fn().mockReturnValue(1),
+      decrementStreamConnections: jest.fn().mockResolvedValue(undefined),
     };
 
     const controller = new GwehAIController(gwehaiService as any);

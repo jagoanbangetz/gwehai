@@ -8,24 +8,22 @@ import { PlanUsageService } from '../plans/plan-usage.service';
 import { validateScanStart } from '../plans/plan-limits.validation';
 import { getPlanPayload } from '../config/plans.config';
 import type { PlanId } from '../config/plans.config';
-import { WORKER_SLOT_TTL_MS } from '../config/plan-billing.config';
-
-/** In-memory worker slot with TTL. TODO: replace with Redis SETNX lock when Redis is available. */
-interface WorkerSlot {
-  jobId: string;
-  expiresAt: number;
-}
+import { JobsEventsService } from './jobs-events.service';
+import { PentestJobsService } from '../pentest-jobs/pentest-jobs.service';
 
 @Injectable()
 export class GwehAIService {
   private readonly jobs = new Map<string, LocalAIJob>();
-  /** In-memory per-user worker slots (jobId + expiresAt). Expired slots are pruned on check. */
-  private readonly workerSlots = new Map<string, WorkerSlot[]>();
+  /** Number of active SSE stream connections per job. When this goes to 0 for a running job, we stop the job to avoid background AI cost. */
+  private readonly streamConnectionCounts = new Map<string, number>();
+  /** Worker slots are in PlanUsageService (shared with pentest-jobs so limits cannot be bypassed). */
 
   constructor(
     private readonly chatService: ChatService,
     private readonly planResolution: PlanResolutionService,
     private readonly planUsage: PlanUsageService,
+    private readonly jobsEvents: JobsEventsService,
+    private readonly pentestJobs: PentestJobsService,
   ) {}
 
   /**
@@ -36,11 +34,13 @@ export class GwehAIService {
     messages: Array<{ role: string; content: string }>,
     stream: boolean = false,
     conversationId?: string,
+    modelKey?: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude',
   ): Promise<any> {
     const payload = {
       messages,
       stream,
       conversation_id: conversationId,
+      ...(modelKey && { model_key: modelKey }),
     };
     return this.startChat(userId, payload);
   }
@@ -58,27 +58,17 @@ export class GwehAIService {
     const def = this.planResolution.getPlanDefinition(planId);
     const limits = def.limits;
 
-    // Enforce workers concurrency (in-memory with TTL; TODO: Redis SETNX when available)
-    const now = Date.now();
-    let slots = this.workerSlots.get(userId) ?? [];
-    slots = slots.filter((s) => s.expiresAt > now);
-    this.workerSlots.set(userId, slots);
     const sessionsToday = await this.planUsage.getSessionsStartedToday(userId);
+    const currentWorkerCount = this.planUsage.getActiveWorkerCount(userId);
     validateScanStart(planId, limits, {
-      currentWorkerCount: slots.length,
+      currentWorkerCount,
       sessionsStartedToday: sessionsToday,
     });
     await this.planUsage.recordSessionStart(userId);
+    const { release: releaseWorker } = this.planUsage.reserveWorkerSlot(userId, limits.workers);
 
     const jobId = randomUUID();
-    slots = this.workerSlots.get(userId) ?? [];
-    slots.push({ jobId, expiresAt: now + WORKER_SLOT_TTL_MS });
-    this.workerSlots.set(userId, slots);
-
-    const releaseWorker = () => {
-      const list = this.workerSlots.get(userId) ?? [];
-      this.workerSlots.set(userId, list.filter((s) => s.jobId !== jobId));
-    };
+    const now = Date.now();
 
     const job: LocalAIJob = {
       id: jobId,
@@ -97,8 +87,12 @@ export class GwehAIService {
 
     this.jobs.set(jobId, job);
 
+    const modelKey = payload.model_key && ['auto', 'deepseek', 'openai_gpt5', 'claude'].includes(payload.model_key) ? payload.model_key : undefined;
+    if (modelKey) {
+      console.log('[gwehai] using model picker:', modelKey);
+    }
     // Run agent in background: LLM → append events to job.events; stream endpoint polls and yields SSE.
-    this.runAgentInBackground(jobId, userId, message, conversationId)
+    this.runAgentInBackground(jobId, userId, message, conversationId, modelKey)
       .catch((err) => {
         const job = this.jobs.get(jobId);
         if (job) {
@@ -107,12 +101,15 @@ export class GwehAIService {
           job.events.push({ type: 'error', data: { message: job.error } });
           job.events.push({ type: 'done', data: { job_id: jobId, conversation_id: job.conversationId } });
           this.chatService.setConversationRunStatus(job.conversationId || conversationId, 'error').catch(() => {});
+          this.jobsEvents.emitJobListUpdate(userId);
         }
       })
       .finally(releaseWorker);
 
     const planPayload = getPlanPayload(planId);
     const usage = await this.planUsage.getUsage(userId, planId, undefined);
+
+    this.jobsEvents.emitJobListUpdate(userId);
 
     return {
       job_id: jobId,
@@ -136,6 +133,19 @@ export class GwehAIService {
     return false;
   }
 
+  /** Extract target URL from user message for PentestJob (e.g. "pentest https://example.com" or plain URL). */
+  private extractTargetFromMessage(message: string): string {
+    const trimmed = message.trim();
+    const urlMatch = trimmed.match(/https?:\/\/[^\s"'<>)\]]+/i);
+    if (urlMatch) return urlMatch[0].replace(/[)\]\s,]+$/, '');
+    const pentestMatch = trimmed.match(/pentest\s+(\S+)/i);
+    if (pentestMatch) {
+      const target = pentestMatch[1];
+      return /^https?:\/\//i.test(target) ? target : `https://${target}`;
+    }
+    return '';
+  }
+
   /**
    * Agent loop (background): if no target host, use processMessageSimple (direct security Q&A); otherwise processMessageWithTools.
    * Events (status, message_delta, message_done, done) or full tool events are pushed to job.events;
@@ -146,6 +156,7 @@ export class GwehAIService {
     userId: string,
     message: string,
     conversationId?: string,
+    modelKey?: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude',
   ): Promise<void> {
     const job = this.jobs.get(jobId);
     if (!job || job.status === 'stopped') return;
@@ -162,6 +173,7 @@ export class GwehAIService {
 
     try {
       const useSimple = !this.looksLikeTargetRequest(message);
+      const chatOptions = { emitDoneEvent: true, abortSignal, ...(modelKey && { model_key: modelKey }) };
       const result = useSimple
         ? await this.chatService.processMessageSimple(
             userId,
@@ -169,7 +181,7 @@ export class GwehAIService {
             conversationId,
             jobId,
             pushEvent,
-            { emitDoneEvent: true, abortSignal },
+            chatOptions,
           )
         : await this.chatService.processMessageWithTools(
             userId,
@@ -179,7 +191,7 @@ export class GwehAIService {
             pushEvent,
             { index: 1, label: getAgentLabel(1) },
             undefined,
-            { emitDoneEvent: true, abortSignal },
+            chatOptions,
           );
 
       job.conversationId = result.conversationId;
@@ -187,6 +199,23 @@ export class GwehAIService {
       job.response = result.response || '';
       job.status = 'completed';
       job.updatedAt = Date.now();
+      if (!useSimple && result.conversationId) {
+        try {
+          await this.pentestJobs.ensureJobForConversation(
+            userId,
+            result.conversationId,
+            this.extractTargetFromMessage(message),
+          );
+        } catch (e) {
+          // non-fatal: phase display may stay default
+        }
+        try {
+          await this.pentestJobs.updateJobStatusByConversationId(userId, result.conversationId, 'done');
+        } catch (e) {
+          // non-fatal: pentest job may not exist for this conversation
+        }
+      }
+      this.jobsEvents.emitJobListUpdate(userId);
     } catch (err: any) {
       const errMsg = err?.message || String(err);
       const isContextLength =
@@ -212,7 +241,84 @@ export class GwehAIService {
       job.response = friendlyMessage;
       job.updatedAt = Date.now();
       await this.chatService.setConversationRunStatus(job.conversationId || conversationId, 'error');
+      const cid = job.conversationId || conversationId;
+      if (cid) {
+        try {
+          await this.pentestJobs.updateJobStatusByConversationId(userId, cid, 'failed');
+        } catch (e) {
+          // non-fatal
+        }
+      }
+      this.jobsEvents.emitJobListUpdate(userId);
     }
+  }
+
+  /** Max jobs to return per user (avoids huge lists and "no activity" for old jobs). */
+  private static readonly MAX_JOBS_PER_USER = 50;
+  /** Remove completed/stopped jobs older than this (ms) so we don't keep working on dead jobs. */
+  private static readonly PRUNE_AGE_MS = 2 * 60 * 60 * 1000; // 2 hours
+  /** Keep at least this many jobs per user when pruning. */
+  private static readonly MIN_JOBS_KEEP = 20;
+
+  /**
+   * Remove old completed/stopped jobs for a user so the list doesn't grow forever and streams don't sit on dead jobs.
+   */
+  private pruneOldJobsForUser(userId: string): void {
+    const now = Date.now();
+    const userJobs = Array.from(this.jobs.entries())
+      .filter(([, j]) => j.userId === userId)
+      .sort(([, a], [, b]) => b.createdAt - a.createdAt);
+    if (userJobs.length <= GwehAIService.MIN_JOBS_KEEP) return;
+    const toRemove = userJobs
+      .slice(GwehAIService.MIN_JOBS_KEEP)
+      .filter(([, j]) => {
+        const isDone = j.status === 'completed' || j.status === 'stopped' || j.status === 'failed';
+        const old = now - (j.updatedAt ?? j.createdAt) > GwehAIService.PRUNE_AGE_MS;
+        return isDone && old;
+      })
+      .map(([id]) => id);
+    toRemove.forEach((id) => {
+      this.jobs.delete(id);
+      this.streamConnectionCounts.delete(id);
+    });
+  }
+
+  /**
+   * List jobs for the current user (running first, then by createdAt desc).
+   * Used by Current Pentest modal. Limited to MAX_JOBS_PER_USER; old completed jobs are pruned.
+   */
+  listJobsForUser(userId: string): Array<{
+    job_id: string;
+    status: string;
+    user_message: string;
+    conversation_id: string | undefined;
+    createdAt: number;
+  }> {
+    this.pruneOldJobsForUser(userId);
+    const list: Array<{
+      job_id: string;
+      status: string;
+      user_message: string;
+      conversation_id: string | undefined;
+      createdAt: number;
+    }> = [];
+    this.jobs.forEach((job) => {
+      if (job.userId !== userId) return;
+      list.push({
+        job_id: job.id,
+        status: job.status,
+        user_message: (job.userMessage || '').slice(0, 300),
+        conversation_id: job.conversationId || undefined,
+        createdAt: job.createdAt,
+      });
+    });
+    list.sort((a, b) => {
+      const runningA = a.status === 'running' ? 1 : 0;
+      const runningB = b.status === 'running' ? 1 : 0;
+      if (runningA !== runningB) return runningB - runningA;
+      return b.createdAt - a.createdAt;
+    });
+    return list.slice(0, GwehAIService.MAX_JOBS_PER_USER);
   }
 
   /**
@@ -229,15 +335,45 @@ export class GwehAIService {
   }
 
   /**
-   * Stop a running job
+   * Stop a running job (abort agent loop so no more AI requests; saves cost).
    */
   async stopJob(jobId: string, userId?: string): Promise<any> {
     const job = this.getJob(jobId, userId);
+    if (job.status !== 'running' && job.status !== 'ready') return { job_id: job.id, status: job.status };
     job.status = 'stopped';
     job.updatedAt = Date.now();
     job.abortController?.abort();
     await this.chatService.setConversationRunStatus(job.conversationId, 'stopped');
+    if (job.conversationId && userId) {
+      try {
+        await this.pentestJobs.updateJobStatusByConversationId(userId, job.conversationId, 'failed');
+      } catch (e) {
+        // non-fatal
+      }
+    }
+    this.jobsEvents.emitJobListUpdate(job.userId);
     return { job_id: job.id, status: job.status };
+  }
+
+  /**
+   * Called when a client opens an SSE stream for a job. Only stop the job when the last client disconnects.
+   */
+  incrementStreamConnections(jobId: string): number {
+    const n = (this.streamConnectionCounts.get(jobId) ?? 0) + 1;
+    this.streamConnectionCounts.set(jobId, n);
+    return n;
+  }
+
+  /**
+   * Called when a client closes the SSE stream. We only update the connection count.
+   * We do NOT stop the job when the last client disconnects, so that starting another target
+   * (which closes the previous stream) does not stop the previous scan. Jobs are stopped only
+   * when the user explicitly stops or when the job completes/fails.
+   */
+  async decrementStreamConnections(jobId: string, _userId?: string): Promise<void> {
+    const n = Math.max(0, (this.streamConnectionCounts.get(jobId) ?? 1) - 1);
+    if (n === 0) this.streamConnectionCounts.delete(jobId);
+    else this.streamConnectionCounts.set(jobId, n);
   }
 
   /**

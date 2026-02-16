@@ -14,6 +14,7 @@ import SettingsModal from '../components/SettingsModal'
 import ChatLayout from '../components/ChatLayout'
 import MessagesArea, { type MessagesAreaRef } from '../components/MessagesArea'
 import Composer from '../components/Composer'
+import ModelPicker, { getStoredModelKey, setStoredModelKey, getModelLabel, type ModelKey } from '../components/ModelPicker'
 import ThinkingBar from '../components/ThinkingBar'
 import { GwehLogRenderer } from '../components/GwehLog'
 import type { LogEvent, LogPhase } from '../components/GwehLog'
@@ -42,6 +43,8 @@ interface Message {
   isStreaming?: boolean
   done?: boolean
   toolIds?: string[]
+  /** Selected model key for this turn (shown as badge on assistant bubble) */
+  modelKey?: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude'
   /** AI thinking (<think> block) — shown above the final reply */
   thinking?: string
   /** Animated substring of thinking for typing effect; hidden when done */
@@ -80,6 +83,11 @@ interface ReportGroupRow {
 /** Tree row: run with agents (children) */
 interface ReportTreeRow extends ReportGroupRow {
   agents?: { conversationId: string; agentRole: string | null; findingsCount: number }[]
+}
+
+/** Conversation id from API is a UUID; reject timestamps (e.g. "1771200395728") to avoid backend error. */
+function isConversationUuid(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id).trim())
 }
 
 /** Format ISO date string for display (e.g. "Feb 10, 2026 14:30") */
@@ -138,6 +146,28 @@ interface HacktivityConversationRow {
   count: number
 }
 
+/** Compare job lists so we only update state when something actually changed (avoids flicker). */
+function jobsEqual(
+  a: Array<{ job_id: string; status: string; phase_display?: string; current_section_display?: string | null }>,
+  b: Array<{ job_id: string; status: string; phase_display?: string; current_section_display?: string | null }>,
+): boolean {
+  if (a.length !== b.length) return false
+  return a.every((x, i) => {
+    const y = b[i]
+    return x.job_id === y.job_id && x.status === y.status && (x.phase_display ?? '') === (y.phase_display ?? '') && (x.current_section_display ?? '') === (y.current_section_display ?? '')
+  })
+}
+
+function hacktivityListEqual(a: HacktivityRow[], b: HacktivityRow[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every((x, i) => b[i] && x.id === b[i].id && x.createdAt === b[i].createdAt)
+}
+
+function hacktivityConversationsEqual(a: HacktivityConversationRow[], b: HacktivityConversationRow[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every((x, i) => b[i] && x.conversationId === b[i].conversationId && x.count === b[i].count)
+}
+
 interface CurrentPlan {
   id: string
   status: string
@@ -168,10 +198,16 @@ interface MyPlanResponse {
     workers: string
     scans: string
     steps: string
+    sub_agents?: string
   }
   usage?: {
     session: { steps_used: number; steps_remaining: number | null; tokens_used: number }
     day: { tokens_used: number; tokens_remaining: number | null }
+  }
+  /** When present, frontend can disable send when at daily scan limit */
+  scan_limit?: {
+    sessions_per_day: number | null
+    sessions_started_today: number
   }
 }
 
@@ -213,6 +249,7 @@ const Dashboard = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
+  const [selectedModelKey, setSelectedModelKey] = useState<ModelKey>(() => getStoredModelKey())
   const [isLoading, setIsLoading] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -242,7 +279,16 @@ const Dashboard = () => {
   const [selectedHacktivity, setSelectedHacktivity] = useState<HacktivityRow | null>(null)
   const [showPlanModal, setShowPlanModal] = useState(false)
   const [showCurrentPentestModal, setShowCurrentPentestModal] = useState(false)
-  const [currentPentestStatus, setCurrentPentestStatus] = useState<{ job_id: string; status: string; user_message?: string; conversation_id?: string } | null>(null)
+  /** List of current user's pentest jobs (running first). Each may have phase_display after fetch. */
+  const [currentPentestJobs, setCurrentPentestJobs] = useState<Array<{
+    job_id: string
+    status: string
+    user_message?: string
+    conversation_id?: string
+    phase_display?: string
+    current_section_display?: string | null
+    createdAt?: number
+  }>>([])
   const [currentPentestLoading, setCurrentPentestLoading] = useState(false)
   const [currentPentestError, setCurrentPentestError] = useState<string | null>(null)
   const [helpMessages, setHelpMessages] = useState<Message[]>([])
@@ -282,7 +328,12 @@ const Dashboard = () => {
   const [activityLog, setActivityLog] = useState<string[]>([])
   const [logEvents, setLogEvents] = useState<LogEvent[]>([])
   const [isSimpleConversation, setIsSimpleConversation] = useState(false)
-  const [pentestChecklistProgress, setPentestChecklistProgress] = useState<{ phase: string; checklist: Record<string, boolean> } | null>(null)
+  const [pentestChecklistProgress, setPentestChecklistProgress] = useState<{
+    phase: string
+    phase_display?: string
+    current_section_display?: string | null
+    checklist: Record<string, boolean>
+  } | null>(null)
   const messageToolsSnapshot = useMemo(() => messageTools, [messageTools])
   /** Mobile: <1024px — hamburger + drawer. Desktop: persistent sidebar + chevron collapse. */
   const isMobile = useMediaQuery('(max-width: 1023px)')
@@ -307,6 +358,10 @@ const Dashboard = () => {
   const pentestJobStreamAbortRef = useRef<AbortController | null>(null)
   /** When true, ignore all incoming SSE events so activity really stops when user clicks Stop. */
   const stopRequestedRef = useRef(false)
+  /** When true, we closed the stream to start a new job; error callback should not clear loading state. */
+  const intentionalCloseRef = useRef(false)
+  const jobsWsRef = useRef<WebSocket | null>(null)
+  const hacktivityPollRef = useRef({ page: 1, conversationId: null as string | null })
 
   /** Refetch chat list from DB (e.g. after sending a message so sidebar shows the conversation). */
   const refetchChatHistory = async () => {
@@ -418,7 +473,8 @@ const Dashboard = () => {
   const loadHacktivityConversations = async () => {
     try {
       const res = await apiClient.get('/hacktivity/conversations')
-      setHacktivityConversations(Array.isArray(res.data) ? res.data : [])
+      const next = Array.isArray(res.data) ? res.data : []
+      setHacktivityConversations((prev) => (hacktivityConversationsEqual(prev, next) ? prev : next))
     } catch (error: any) {
       console.error('Failed to load Hacktivity conversations', error)
     }
@@ -436,7 +492,7 @@ const Dashboard = () => {
       const data = res.data || {}
       const items = Array.isArray(data.items) ? data.items : []
       const total = typeof data.total === 'number' ? data.total : 0
-      setHacktivityList(items)
+      setHacktivityList((prev) => (hacktivityListEqual(prev, items) ? prev : items))
       setHacktivityTotal(total)
       setHacktivityPage(page)
     } catch (error: any) {
@@ -593,6 +649,8 @@ const Dashboard = () => {
     }
   }, [showReportModal])
 
+  hacktivityPollRef.current = { page: hacktivityPage, conversationId: selectedHacktivityConversationId }
+
   useEffect(() => {
     if (showHacktivityModal) {
       setHacktivityLoadError(null)
@@ -604,44 +662,122 @@ const Dashboard = () => {
   }, [showHacktivityModal])
 
   useEffect(() => {
+    if (!showHacktivityModal) return
+    const intervalMs = 4000
+    const t = setInterval(() => {
+      loadHacktivityConversations().catch(() => {})
+      const { page, conversationId } = hacktivityPollRef.current
+      loadHacktivity(page, conversationId)
+    }, intervalMs)
+    return () => clearInterval(t)
+  }, [showHacktivityModal])
+
+  useEffect(() => {
     if (showPlanModal) {
       loadPlan()
     }
   }, [showPlanModal])
 
-  const loadCurrentPentestStatus = useCallback(async (jobId: string) => {
-    setCurrentPentestLoading(true)
+  /** Enrich raw job list with phase_display from pentest-jobs by-conversation. */
+  const enrichJobsWithPhase = useCallback(async (
+    list: Array<{ job_id: string; status: string; user_message?: string; conversation_id?: string; createdAt?: number }>,
+  ) => {
+    return Promise.all(
+      list.map(async (job) => {
+        let phase_display = 'Recon'
+        let current_section_display: string | null = null
+        if (job.conversation_id) {
+          try {
+            const { data: phaseData } = await apiClient.get<{ phase_display?: string; current_section_display?: string | null }>(
+              `/pentest-jobs/by-conversation/${encodeURIComponent(job.conversation_id)}`,
+            )
+            phase_display = phaseData.phase_display ?? 'Recon'
+            current_section_display = phaseData.current_section_display ?? null
+          } catch {
+            // no pentest job linked; keep defaults
+          }
+        }
+        return {
+          ...job,
+          phase_display,
+          current_section_display,
+        }
+      }),
+    )
+  }, [])
+
+  /** Load job list via REST and enrich (fallback when WS fails or for initial load). */
+  const loadCurrentPentestJobsRest = useCallback(async () => {
     setCurrentPentestError(null)
     try {
-      const data = await gwehaiClient.getJobStatus(jobId)
-      setCurrentPentestStatus(data)
+      const list = await gwehaiClient.getJobs()
+      const withPhase = await enrichJobsWithPhase(list)
+      setCurrentPentestJobs((prev) => (jobsEqual(prev, withPhase) ? prev : withPhase))
     } catch (e: any) {
-      setCurrentPentestStatus(null)
-      setCurrentPentestError(e?.message || 'Job not found (it may have finished or the server restarted).')
+      setCurrentPentestJobs([])
+      setCurrentPentestError(e?.message || 'Failed to load jobs.')
     } finally {
       setCurrentPentestLoading(false)
     }
-  }, [])
+  }, [enrichJobsWithPhase])
 
   useEffect(() => {
     if (!showCurrentPentestModal) return
-    const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('gwehai_current_pentest_job_id') : null
-    if (!stored) {
-      setCurrentPentestStatus(null)
-      setCurrentPentestError(null)
+    setCurrentPentestLoading(true)
+    setCurrentPentestError(null)
+    setCurrentPentestJobs([])
+
+    loadCurrentPentestJobsRest()
+
+    const apiBase = import.meta.env.VITE_API_URL ?? '/api'
+    const wsHost = apiBase.startsWith('http')
+      ? (() => {
+          const u = new URL(apiBase)
+          return `${u.protocol === 'https:' ? 'wss:' : 'ws:'}//${u.host}`
+        })()
+      : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`
+    const token = (() => {
+      try {
+        const user = localStorage.getItem('scout_user')
+        return user ? JSON.parse(user).token : null
+      } catch {
+        return null
+      }
+    })()
+    if (!token) {
       setCurrentPentestLoading(false)
       return
     }
-    loadCurrentPentestStatus(stored)
-  }, [showCurrentPentestModal, loadCurrentPentestStatus])
-
-  useEffect(() => {
-    if (!showCurrentPentestModal || !currentPentestStatus || currentPentestStatus.status !== 'running') return
-    const interval = setInterval(() => {
-      loadCurrentPentestStatus(currentPentestStatus.job_id)
-    }, 4000)
-    return () => clearInterval(interval)
-  }, [showCurrentPentestModal, currentPentestStatus?.job_id, currentPentestStatus?.status, loadCurrentPentestStatus])
+    const wsUrl = `${wsHost}/gwehai-jobs?token=${encodeURIComponent(token)}`
+    const ws = new WebSocket(wsUrl)
+    jobsWsRef.current = ws
+    ws.onopen = () => {
+      // Loading is cleared when REST fallback completes so we don't show empty list
+    }
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data as string)
+        if (data?.type === 'jobs' && Array.isArray(data.jobs)) {
+          enrichJobsWithPhase(data.jobs).then((withPhase) => {
+            setCurrentPentestJobs((prev) => (jobsEqual(prev, withPhase) ? prev : withPhase))
+          })
+        }
+      } catch {
+        // ignore parse errors
+      }
+    }
+    ws.onerror = () => {
+      setCurrentPentestLoading(false)
+      loadCurrentPentestJobsRest()
+    }
+    ws.onclose = () => {
+      jobsWsRef.current = null
+    }
+    return () => {
+      ws.close()
+      jobsWsRef.current = null
+    }
+  }, [showCurrentPentestModal, enrichJobsWithPhase, loadCurrentPentestJobsRest])
 
   // When switching to mobile: close drawer and expand chat so UI is usable
   useEffect(() => {
@@ -780,12 +916,14 @@ const Dashboard = () => {
         const history = list.map((c) => conversationToChatHistory(c))
         setChatHistory(history)
 
-        // URL ?session_id= or ?conversation_id= or ?conversationId= or ?jobs_id= → open that chat and continue
-        const conversationId =
+        // URL ?session_id= or ?conversation_id= or ?conversationId= or ?jobs_id= → open that chat and continue (must be UUID)
+        const rawId =
           searchParams.get('session_id') ||
           searchParams.get('conversation_id') ||
           searchParams.get('conversationId') ||
           searchParams.get('jobs_id')
+        const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        const conversationId = rawId && uuidLike.test(rawId) ? rawId : null
         const jobIdFromUrl = searchParams.get('jobId') || undefined
         if (conversationId) {
           try {
@@ -882,9 +1020,16 @@ const Dashboard = () => {
   // Fetch pentest job summary (phase + checklist) when viewing a pentest conversation; clear when leaving.
   const fetchPentestChecklistProgress = useCallback(async (jobId: string) => {
     try {
-      const { data } = await apiClient.get<{ phase?: string; checklist?: Record<string, boolean> }>(`/pentest-jobs/${jobId}`)
+      const { data } = await apiClient.get<{
+        phase?: string
+        phase_display?: string
+        current_section_display?: string | null
+        checklist?: Record<string, boolean>
+      }>(`/pentest-jobs/${jobId}`)
       setPentestChecklistProgress({
         phase: data.phase ?? 'recon',
+        phase_display: data.phase_display,
+        current_section_display: data.current_section_display,
         checklist: data.checklist ?? {},
       })
     } catch {
@@ -1003,6 +1148,7 @@ const Dashboard = () => {
   }
 
   const handleLoadChat = async (chatId: string) => {
+    intentionalCloseRef.current = false
     if (eventSourceRef.current) {
       eventSourceRef.current.close()
       eventSourceRef.current = null
@@ -1017,28 +1163,32 @@ const Dashboard = () => {
     streamingMessageRef.current = null
     setIsLoading(false)
 
-    try {
-      const { data: conv } = await apiClient.get<{
-        id: string
-        title?: string | null
-        messages?: Array<{ id: string; role: string; content?: string | null; createdAt: string }>
-        createdAt: string
-        updatedAt: string
-      }>(`/chat/conversations/${chatId}`)
-      if (conv) {
-        const chat = conversationToChatHistory(conv)
-        const localChat = chatHistory.find(c => c.id === chatId)
-        const apiCount = chat.messages.length
-        const localCount = localChat?.messages?.length ?? 0
-        // Prefer local messages when we have more than API (avoid older messages disappearing)
-        if (localChat && localCount > apiCount) {
-          setMessages(localChat.messages)
-        } else {
-          setMessages(chat.messages)
+    if (isConversationUuid(chatId)) {
+      try {
+        const { data: conv } = await apiClient.get<{
+          id: string
+          title?: string | null
+          messages?: Array<{ id: string; role: string; content?: string | null; createdAt: string }>
+          createdAt: string
+          updatedAt: string
+        }>(`/chat/conversations/${chatId}`)
+        if (conv) {
+          const chat = conversationToChatHistory(conv)
+          const localChat = chatHistory.find(c => c.id === chatId)
+          const apiCount = chat.messages.length
+          const localCount = localChat?.messages?.length ?? 0
+          if (localChat && localCount > apiCount) {
+            setMessages(localChat.messages)
+          } else {
+            setMessages(chat.messages)
+          }
         }
+      } catch (e) {
+        console.warn('Could not load conversation detail:', chatId, e)
+        const chat = chatHistory.find(c => c.id === chatId)
+        if (chat) setMessages(chat.messages)
       }
-    } catch (e) {
-      console.warn('Could not load conversation detail:', chatId, e)
+    } else {
       const chat = chatHistory.find(c => c.id === chatId)
       if (chat) setMessages(chat.messages)
     }
@@ -1047,11 +1197,12 @@ const Dashboard = () => {
   }
 
   const handleDeleteChat = async (chatId: string) => {
-    try {
-      await apiClient.delete(`/chat/conversations/${chatId}`)
-    } catch (e) {
-      // 404 or not found: might be old localStorage-only chat; still remove from list
-      console.warn('Delete conversation:', e)
+    if (isConversationUuid(chatId)) {
+      try {
+        await apiClient.delete(`/chat/conversations/${chatId}`)
+      } catch (e) {
+        console.warn('Delete conversation:', e)
+      }
     }
     const updatedHistory = chatHistory.filter(c => c.id !== chatId)
     setChatHistory(updatedHistory)
@@ -1251,7 +1402,7 @@ const Dashboard = () => {
 
   const createMessageId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 
-  const addAssistantMessage = (eventType?: Message['eventType']) => {
+  const addAssistantMessage = (eventType?: Message['eventType'], modelKey?: ModelKey) => {
     const id = createMessageId()
     const newMessage: Message = {
       id,
@@ -1262,6 +1413,7 @@ const Dashboard = () => {
       done: false,
       // Default to 'planning' if no eventType specified
       eventType: eventType || 'planning',
+      ...(modelKey && { modelKey }),
     }
     setMessages(prev => {
       const updated = [...prev, newMessage]
@@ -1476,6 +1628,15 @@ const Dashboard = () => {
     const userInput = (messageOverride ?? input.trim()).trim()
     if (!userInput || isLoading) return
     if (sendInProgressRef.current) return
+    if (atScanLimit) {
+      const limit = myPlan?.scan_limit
+      const msg =
+        limit?.sessions_per_day != null
+          ? `You've used your ${limit.sessions_started_today}/${limit.sessions_per_day} scans for today. Upgrade for more.`
+          : 'Plan limit reached. Upgrade for more scans.'
+      showToast(msg, 'warning', 6000)
+      return
+    }
 
     const lower = userInput.toLowerCase()
 
@@ -1495,7 +1656,7 @@ const Dashboard = () => {
 
     const messageToSend = userInput
     addUserMessage(messageToSend)
-    addAssistantMessage('thinking')
+    addAssistantMessage('thinking', selectedModelKey)
     if (!messageOverride) setInput('')
     inputRef.current?.focus()
 
@@ -1512,6 +1673,7 @@ const Dashboard = () => {
     }
 
     if (eventSourceRef.current) {
+      intentionalCloseRef.current = true
       eventSourceRef.current.close()
       eventSourceRef.current = null
     }
@@ -1520,8 +1682,10 @@ const Dashboard = () => {
       const jobResponse = await gwehaiClient.startScan(
         messageToSend,
         false,
-        currentConversationId || undefined
+        currentConversationId || undefined,
+        selectedModelKey
       )
+      loadPlan().catch(() => {}) // refresh scan_limit (sessions_started_today) so banner appears when at limit
       const jobId = jobResponse.job_id
       setCurrentJobId(jobId)
       try { localStorage.setItem('gwehai_current_pentest_job_id', jobId) } catch (_) {}
@@ -1555,7 +1719,8 @@ const Dashboard = () => {
           handleStreamEvent(event, -1)
         },
         (_error) => {
-          // Connection failed after multiple retries
+          // If we intentionally closed to start a new job, don't clear loading (new job is loading)
+          if (intentionalCloseRef.current) return
           console.warn('SSE connection failed after retries for job:', jobId)
           sendInProgressRef.current = false
           setIsLoading(false)
@@ -1564,19 +1729,17 @@ const Dashboard = () => {
           streamingMessageRef.current = null
           eventSourceRef.current = null
 
-          // Show error message to user
           setMessages(prev => {
             const lastMessage = prev[prev.length - 1]
             if (lastMessage && lastMessage.role === 'assistant' && lastMessage.isStreaming) {
-              return prev.map((msg, idx) => 
-                idx === prev.length - 1 
+              return prev.map((msg, idx) =>
+                idx === prev.length - 1
                   ? { ...msg, isStreaming: false, content: msg.content || 'Connection lost. Please try again.' }
                   : msg
               )
             }
             return prev
           })
-          
           showToast('Connection lost. The response may be incomplete.', 'warning')
         },
         () => {
@@ -1585,7 +1748,9 @@ const Dashboard = () => {
       )
 
       eventSourceRef.current = es
+      intentionalCloseRef.current = false
     } catch (error: any) {
+      intentionalCloseRef.current = false
       console.error('Chat error:', error)
       setIsLoading(false)
       streamingMessageRef.current = null
@@ -1601,11 +1766,14 @@ const Dashboard = () => {
       })
       
       const errorText = error.message || 'Unknown error'
+      const isPlanLimit = /Plan limit|maximum.*concurrent|sessions per day/i.test(errorText)
       const isContextTooLong = /conversation is too long|start a new chat/i.test(errorText)
       const errorMessage: Message = {
         id: createMessageId(),
         role: 'assistant',
-        content: isContextTooLong
+        content: isPlanLimit
+          ? `${errorText}\n\nUpgrade your plan for more scans.`
+          : isContextTooLong
           ? `Error: ${errorText}\n\nTip: Start a new chat to continue — your previous messages won't be sent to the model.`
           : error.message || 'I apologize, but I encountered an error. Please try again or check your connection.',
         timestamp: new Date(),
@@ -1614,7 +1782,9 @@ const Dashboard = () => {
       setMessages(prev => [...prev, errorMessage])
       
       // Show appropriate error message
-      if (isContextTooLong) {
+      if (isPlanLimit) {
+        showToast(errorText, 'error', 6000)
+      } else if (isContextTooLong) {
         showToast('Conversation is too long. Start a new chat to continue.', 'warning', 6000)
       } else if (errorText.includes('target URL') || errorText.includes('valid URL')) {
         showToast('Please include a URL when requesting a pentest (e.g., "pentest https://example.com")', 'warning')
@@ -2158,6 +2328,12 @@ const Dashboard = () => {
 
   const planLabel = myPlan?.plan?.marketing_title || currentPlan?.plan?.name || currentPlan?.plan?.code || 'Free'
 
+  /** True when user has reached daily scan limit (e.g. FREE 5/day). Send is disabled and banner shown. */
+  const atScanLimit =
+    myPlan?.scan_limit != null &&
+    myPlan.scan_limit.sessions_per_day != null &&
+    myPlan.scan_limit.sessions_started_today >= myPlan.scan_limit.sessions_per_day
+
   const sidebarHeaderContent = (
     <>
       <div className="sidebar-header">
@@ -2416,19 +2592,19 @@ const Dashboard = () => {
                         <div className="chat-empty-mobile">
                           <h2 className="chat-empty-prompt">What would you like to test today?</h2>
                           <div className="chat-suggestions">
-                            <button type="button" className="chat-suggestion-btn" onClick={() => handleSendWithText('Run a pentest on a target URL and report findings')}>
+                            <button type="button" className="chat-suggestion-btn" disabled={atScanLimit} onClick={() => handleSendWithText('Run a pentest on a target URL and report findings')} title={atScanLimit ? 'Daily scan limit reached' : undefined}>
                               <span className="chat-suggestion-icon chat-suggestion-icon-pentest">&#9876;</span>
                               <span>Run a pentest</span>
                             </button>
-                            <button type="button" className="chat-suggestion-btn" onClick={() => handleSendWithText('Explain SQL injection and how to test for it')}>
+                            <button type="button" className="chat-suggestion-btn" disabled={atScanLimit} onClick={() => handleSendWithText('Explain SQL injection and how to test for it')} title={atScanLimit ? 'Daily scan limit reached' : undefined}>
                               <span className="chat-suggestion-icon chat-suggestion-icon-learn">&#128214;</span>
                               <span>Explain a vulnerability</span>
                             </button>
-                            <button type="button" className="chat-suggestion-btn" onClick={() => handleSendWithText('Check this URL for security issues: https://example.com')}>
+                            <button type="button" className="chat-suggestion-btn" disabled={atScanLimit} onClick={() => handleSendWithText('Check this URL for security issues: https://example.com')} title={atScanLimit ? 'Daily scan limit reached' : undefined}>
                               <span className="chat-suggestion-icon chat-suggestion-icon-check">&#128274;</span>
                               <span>Check a URL</span>
                             </button>
-                            <button type="button" className="chat-suggestion-btn" onClick={() => handleSendWithText('Give me step-by-step security testing tips for a web app')}>
+                            <button type="button" className="chat-suggestion-btn" disabled={atScanLimit} onClick={() => handleSendWithText('Give me step-by-step security testing tips for a web app')} title={atScanLimit ? 'Daily scan limit reached' : undefined}>
                               <span className="chat-suggestion-icon chat-suggestion-icon-tips">&#128161;</span>
                               <span>Security tips</span>
                             </button>
@@ -2439,6 +2615,28 @@ const Dashboard = () => {
                   }
                   composer={
                     <Composer>
+                      {atScanLimit && (
+                        <div className="chat-scan-limit-banner" role="alert">
+                          <span>
+                            You've used your {myPlan?.scan_limit?.sessions_started_today ?? 0}/
+                            {myPlan?.scan_limit?.sessions_per_day ?? 0} scans for today. Upgrade for more.
+                          </span>
+                          <button type="button" className="chat-scan-limit-upgrade" onClick={() => { setShowPlanModal(true) }}>
+                            View plans
+                          </button>
+                        </div>
+                      )}
+                      <div className="chat-input-row">
+                        <ModelPicker
+                          value={selectedModelKey}
+                          onChange={(key) => {
+                            setSelectedModelKey(key)
+                            setStoredModelKey(key)
+                          }}
+                          disabled={isLoading}
+                          className="chat-model-picker"
+                        />
+                      </div>
                       <div className="chat-input-area">
                         {isVoiceRecording ? (
                           <div className="voice-input-shell">
@@ -2491,8 +2689,8 @@ const Dashboard = () => {
                                 className="input-send input-send--toggle"
                                 onMouseDown={(e) => e.preventDefault()}
                                 onClick={isLoading ? handleStopJob : handleSend}
-                                disabled={!isLoading && !input.trim()}
-                                title={isLoading ? 'Stop' : 'Send message'}
+                                disabled={(!isLoading && !input.trim()) || atScanLimit}
+                                title={atScanLimit ? 'Daily scan limit reached. Upgrade for more.' : isLoading ? 'Stop' : 'Send message'}
                               >
                                 {isLoading ? (
                                   <span className="input-send-stop-label">Stop</span>
@@ -2557,6 +2755,11 @@ const Dashboard = () => {
                   <div key={message.id} className={`chat-message ${message.role} ${message.eventType ? `event-${message.eventType}` : ''}`}>
                     <div className="message-content">
                       <div className="message-bubble">
+                        {message.role === 'assistant' && message.modelKey && (
+                          <span className="model-badge" title={`Model: ${getModelLabel(message.modelKey)}`}>
+                            {getModelLabel(message.modelKey)}
+                          </span>
+                        )}
                         <div className="message-text">
                         {/* When simple conversation (no target): just "Replying...". Otherwise full ThinkingBar + GwehLog. */}
                         {message.role === 'assistant' && (isStreamingThisMessage || (isLoading && !message.content)) && (
@@ -2735,7 +2938,7 @@ const Dashboard = () => {
                     </div>
                     <div className="plan-price">
                       <span className="price">{tier.priceMonthly === 0 ? 'Free' : `$${tier.priceMonthly}`}</span>
-                      <span className="points">{tier.priceMonthly > 0 ? '/mo' : ''} {formatWorkersLabel(tier.limitsSummary.workers)} • {tier.limitsSummary.scans} • {tier.limitsSummary.steps}</span>
+                      <span className="points">{tier.priceMonthly > 0 ? '/mo' : ''} {formatWorkersLabel(tier.limitsSummary.workers)} • {tier.limitsSummary.scans} • {tier.limitsSummary.steps}{tier.limitsSummary.sub_agents != null ? ` • ${tier.limitsSummary.sub_agents} sub-agent${tier.limitsSummary.sub_agents === '1' ? '' : 's'}` : ''}</span>
                     </div>
                     <ul className="upgrade-plan-features">
                       {tier.features.slice(0, 3).map((f, i) => <li key={i}>{f}</li>)}
@@ -3361,7 +3564,7 @@ const Dashboard = () => {
                       <div className="plan-detail-item">
                         <span className="detail-label">Limits:</span>
                         <span className="detail-value">
-                          {formatWorkersLabel(myPlan.limits_summary.workers)} • {myPlan.limits_summary.scans} • {myPlan.limits_summary.steps}
+                          {formatWorkersLabel(myPlan.limits_summary.workers)} • {myPlan.limits_summary.scans} • {myPlan.limits_summary.steps}{myPlan.limits_summary.sub_agents != null ? ` • ${myPlan.limits_summary.sub_agents} sub-agent${myPlan.limits_summary.sub_agents === '1' ? '' : 's'}` : ''}
                         </span>
                       </div>
                       <div className="plan-detail-item">
@@ -3475,7 +3678,7 @@ const Dashboard = () => {
             <div className="modal-body">
               <p className="current-pentest-hint">Monitor what testing is currently running and whether it has finished or is still scanning.</p>
               {currentPentestLoading ? (
-                <div className="current-pentest-loading">Loading status…</div>
+                <div className="current-pentest-loading">Loading jobs…</div>
               ) : currentPentestError ? (
                 <div className="current-pentest-empty">
                   <p>{currentPentestError}</p>
@@ -3484,7 +3687,7 @@ const Dashboard = () => {
                     Open Pentest Runner
                   </button>
                 </div>
-              ) : !currentPentestStatus ? (
+              ) : currentPentestJobs.length === 0 ? (
                 <div className="current-pentest-empty">
                   <p>No active pentest.</p>
                   <p className="current-pentest-empty-hint">Start one from chat (e.g. paste a target URL) or from <strong>Pentest Runner</strong>.</p>
@@ -3493,38 +3696,53 @@ const Dashboard = () => {
                   </button>
                 </div>
               ) : (
-                <div className="current-pentest-card">
-                  <div className="current-pentest-row">
-                    <span className="current-pentest-label">Status</span>
-                    <span className={`current-pentest-status current-pentest-status--${currentPentestStatus.status}`}>
-                      {currentPentestStatus.status === 'running' ? 'Still scanning' : currentPentestStatus.status === 'completed' ? 'Finished' : currentPentestStatus.status}
-                    </span>
-                  </div>
-                  <div className="current-pentest-row">
-                    <span className="current-pentest-label">Job ID</span>
-                    <code className="current-pentest-job-id">{currentPentestStatus.job_id}</code>
-                  </div>
-                  {currentPentestStatus.user_message && (
-                    <div className="current-pentest-row">
-                      <span className="current-pentest-label">Target / request</span>
-                      <span className="current-pentest-message">{currentPentestStatus.user_message.substring(0, 120)}{currentPentestStatus.user_message.length > 120 ? '…' : ''}</span>
+                <div className="current-pentest-list">
+                  {currentPentestJobs.map((job) => (
+                    <div key={job.job_id} className="current-pentest-card">
+                      <div className="current-pentest-row">
+                        <span className="current-pentest-label">Status</span>
+                        <span className={`current-pentest-status current-pentest-status--${job.status}`}>
+                          {job.status === 'running' ? 'Still scanning' : job.status === 'completed' ? 'Finished' : job.status}
+                        </span>
+                      </div>
+                      <div className="current-pentest-row">
+                        <span className="current-pentest-label">Phase</span>
+                        <span className="current-pentest-phase">
+                          {job.status === 'completed'
+                            ? 'Completed'
+                            : job.status === 'failed' || job.status === 'stopped'
+                              ? (job.status === 'stopped' ? 'Stopped' : 'Failed')
+                              : (job.phase_display ?? 'Scanning')}
+                          {job.status === 'running' && job.current_section_display ? ` • ${job.current_section_display}` : ''}
+                        </span>
+                      </div>
+                      <div className="current-pentest-row">
+                        <span className="current-pentest-label">Job ID</span>
+                        <code className="current-pentest-job-id">{job.job_id}</code>
+                      </div>
+                      {job.user_message && (
+                        <div className="current-pentest-row">
+                          <span className="current-pentest-label">Target / request</span>
+                          <span className="current-pentest-message">{job.user_message.substring(0, 120)}{job.user_message.length > 120 ? '…' : ''}</span>
+                        </div>
+                      )}
+                      <div className="current-pentest-actions">
+                        <button type="button" className="pentest-runner-link-btn" onClick={() => { setShowCurrentPentestModal(false); navigate('/agent/pentest-runner') }}>
+                          Open in Runner
+                        </button>
+                        {job.conversation_id && (
+                          <button type="button" className="pentest-conversation-btn" onClick={() => {
+                            setCurrentChatId(job.conversation_id!)
+                            setCurrentConversationId(job.conversation_id!)
+                            refetchChatHistory()
+                            setShowCurrentPentestModal(false)
+                          }}>
+                            Open conversation
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  )}
-                  <div className="current-pentest-actions">
-                    <button type="button" className="pentest-runner-link-btn" onClick={() => { setShowCurrentPentestModal(false); navigate('/agent/pentest-runner') }}>
-                      Open in Runner
-                    </button>
-                    {currentPentestStatus.conversation_id && (
-                      <button type="button" className="pentest-conversation-btn" onClick={() => {
-                        setCurrentChatId(currentPentestStatus!.conversation_id!)
-                        setCurrentConversationId(currentPentestStatus!.conversation_id!)
-                        refetchChatHistory()
-                        setShowCurrentPentestModal(false)
-                      }}>
-                        Open conversation
-                      </button>
-                    )}
-                  </div>
+                  ))}
                 </div>
               )}
             </div>

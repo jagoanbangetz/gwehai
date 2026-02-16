@@ -1,0 +1,29 @@
+# Dependencies (reinstalled in image)
+node_modules
+npm-debug.log
+
+# Build output (rebuilt in image)
+dist
+
+# Env and secrets (mount at runtime)
+.env
+.env.*
+!.env.example
+
+# Tests and dev
+test
+*.spec.ts
+coverage
+.nyc_output
+
+# Git and IDE
+.git
+.gitignore
+.dockerignore
+Dockerfile*
+*.md
+!skills/**/*.md
+
+# Misc
+.DS_Store
+*.log

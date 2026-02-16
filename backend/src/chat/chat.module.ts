@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ChatController } from './chat.controller';
 import { ChatService } from './chat.service';
@@ -14,6 +14,7 @@ import { ToolsModule } from '../tools/tools.module';
 import { ReportsModule } from '../reports/reports.module';
 import { HacktivityModule } from '../hacktivity/hacktivity.module';
 import { PlansModule } from '../plans/plans.module';
+import { PentestJobsModule } from '../pentest-jobs/pentest-jobs.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { PlansModule } from '../plans/plans.module';
     ReportsModule,
     HacktivityModule,
     PlansModule,
+    forwardRef(() => PentestJobsModule),
   ],
   controllers: [ChatController],
   providers: [ChatService],

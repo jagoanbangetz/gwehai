@@ -4,9 +4,12 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { GwehAIController } from './gwehai.controller';
 import { GwehAIService } from './gwehai.service';
 import { GwehAISSEGuard } from './gwehai-sse.guard';
+import { JobsGateway } from './jobs.gateway';
+import { JobsEventsService } from './jobs-events.service';
 import { AuthModule } from '../auth/auth.module';
 import { ChatModule } from '../chat/chat.module';
 import { PlansModule } from '../plans/plans.module';
+import { PentestJobsModule } from '../pentest-jobs/pentest-jobs.module';
 
 @Module({
   imports: [
@@ -17,12 +20,13 @@ import { PlansModule } from '../plans/plans.module';
       }),
       inject: [ConfigService],
     }),
-    AuthModule, // Import AuthModule to use AuthService for user validation
+    AuthModule,
     ChatModule,
     PlansModule,
+    PentestJobsModule,
   ],
   controllers: [GwehAIController],
-  providers: [GwehAIService, GwehAISSEGuard],
-  exports: [GwehAIService],
+  providers: [GwehAIService, GwehAISSEGuard, JobsEventsService, JobsGateway],
+  exports: [GwehAIService, JobsEventsService],
 })
 export class GwehAIModule {}

@@ -7,14 +7,17 @@
 export type PlanId = 'FREE' | 'PRO' | 'PRO_PLUS' | 'ULTRA';
 
 export interface PlanLimits {
+  /** Concurrent targets (scans) at once */
   workers: number;
   /** -1 = unlimited */
   sessions_per_day: number;
-  /** -1 = unlimited (ULTRA uses soft cap internally) */
+  /** -1 = unlimited for all plans — scan runs until checklist is done */
   steps_per_session: number;
+  /** Max sub-agents spawnable in one run (0 = cannot spawn). -1 = unlimited */
+  max_sub_agents: number;
   tokens_per_step_total: number;
   max_output_tokens: number;
-  /** -1 = unlimited (ULTRA uses soft cap internally) */
+  /** -1 = unlimited */
   tokens_per_day: number;
   cooldown_between_steps_seconds: number;
   /** PRO_PLUS: priority queue for jobs */
@@ -40,40 +43,43 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     planId: 'FREE',
     limits: {
       workers: 1,
-      sessions_per_day: 5,
-      steps_per_session: 15,
+      sessions_per_day: 3,
+      steps_per_session: -1,
+      max_sub_agents: 0,
       tokens_per_step_total: 2000,
       max_output_tokens: 200,
       tokens_per_day: 30000,
-      cooldown_between_steps_seconds: 1,
+      cooldown_between_steps_seconds: 0,
     },
     marketing_title: 'Free',
-    marketing_bullets: [],
+    marketing_bullets: ['Unlimited steps per scan', '1 target at a time', '3 targets per day', 'No sub-agents'],
     marketing_footnote: MARKETING_FOOTNOTE,
     monthlyPriceUsd: 0,
   },
   PRO: {
     planId: 'PRO',
     limits: {
-      workers: 3,
+      workers: 5,
       sessions_per_day: -1,
-      steps_per_session: 40,
+      steps_per_session: -1,
+      max_sub_agents: 3,
       tokens_per_step_total: 6000,
       max_output_tokens: 400,
       tokens_per_day: 250000,
       cooldown_between_steps_seconds: 0,
     },
     marketing_title: 'Pro',
-    marketing_bullets: ['Unlimited Scans'],
+    marketing_bullets: ['Unlimited steps', '5 concurrent targets', 'Spawn up to 3 sub-agents'],
     marketing_footnote: MARKETING_FOOTNOTE,
     monthlyPriceUsd: 19,
   },
   PRO_PLUS: {
     planId: 'PRO_PLUS',
     limits: {
-      workers: 8,
+      workers: 10,
       sessions_per_day: -1,
-      steps_per_session: 80,
+      steps_per_session: -1,
+      max_sub_agents: 6,
       tokens_per_step_total: 10000,
       max_output_tokens: 700,
       tokens_per_day: 1000000,
@@ -81,24 +87,25 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
       priority_queue: true,
     },
     marketing_title: 'Pro Plus',
-    marketing_bullets: ['Unlimited Scans'],
+    marketing_bullets: ['Unlimited steps', '10 concurrent targets', 'Spawn up to 6 sub-agents', 'Priority queue'],
     marketing_footnote: MARKETING_FOOTNOTE,
     monthlyPriceUsd: 49,
   },
   ULTRA: {
     planId: 'ULTRA',
     limits: {
-      workers: 20, // marketing: "Unlimited Workers"
+      workers: 50,
       sessions_per_day: -1,
-      steps_per_session: 500, // soft cap
+      steps_per_session: -1,
+      max_sub_agents: -1,
       tokens_per_step_total: 14000,
       max_output_tokens: 1200,
-      tokens_per_day: 5000000, // soft cap
+      tokens_per_day: 5000000,
       cooldown_between_steps_seconds: 0,
       throttle_on_soft_cap: true,
     },
     marketing_title: 'Ultra',
-    marketing_bullets: ['Unlimited Workers', 'Unlimited Scans', 'Unlimited Steps'],
+    marketing_bullets: ['Unlimited steps', 'Unlimited concurrent targets', 'Unlimited sub-agents'],
     marketing_footnote: MARKETING_FOOTNOTE,
     monthlyPriceUsd: 99,
   },
@@ -112,29 +119,31 @@ export function getPlanDefinition(planId: PlanId): PlanDefinition {
 
 /**
  * Build limits_summary for API response (user-facing strings).
- * workers: "1" or "Unlimited*", scans: "5/day" or "Unlimited*", steps: "15/session" or "Unlimited*"
+ * workers = concurrent targets, scans = targets/day, steps = per scan (unlimited for all), sub_agents = spawnable.
  */
 export function getLimitsSummary(planId: PlanId): {
   workers: string;
   scans: string;
   steps: string;
+  sub_agents: string;
 } {
   const def = PLANS[planId] ?? PLANS.FREE;
   const { limits } = def;
   const unlimitedStar = 'Unlimited*';
   return {
     workers:
-      limits.sessions_per_day === -1 && limits.workers >= 20
+      limits.workers >= 50 || (limits as any).workers === -1
         ? unlimitedStar
         : String(limits.workers),
     scans:
       limits.sessions_per_day === -1
         ? unlimitedStar
         : `${limits.sessions_per_day}/day`,
-    steps:
-      limits.steps_per_session === -1
+    steps: unlimitedStar,
+    sub_agents:
+      limits.max_sub_agents === -1
         ? unlimitedStar
-        : `${limits.steps_per_session}/session`,
+        : String(limits.max_sub_agents),
   };
 }
 
@@ -151,6 +160,7 @@ export function getPlanPayload(planId: PlanId): {
     workers: string;
     scans: string;
     steps: string;
+    sub_agents: string;
   };
 } {
   const def = PLANS[planId] ?? PLANS.FREE;
@@ -176,7 +186,7 @@ export function getPlanTiers(): Array<{
   name: string;
   priceMonthly: number;
   features: string[];
-  limitsSummary: { workers: string; scans: string; steps: string };
+  limitsSummary: { workers: string; scans: string; steps: string; sub_agents: string };
   popular?: boolean;
 }> {
   return PLAN_IDS_ORDER.map((id) => {
@@ -189,9 +199,10 @@ export function getPlanTiers(): Array<{
       features: def.marketing_bullets.length
         ? def.marketing_bullets
         : [
-            `${def.limits.workers} concurrent scan${def.limits.workers !== 1 ? 's' : ''}`,
-            `${def.limits.sessions_per_day === -1 ? 'Unlimited' : def.limits.sessions_per_day} scans per day`,
-            `${def.limits.steps_per_session === -1 ? 'Unlimited' : def.limits.steps_per_session} steps per session`,
+            `${limitsSummary.workers} concurrent target${limitsSummary.workers === '1' ? '' : 's'}`,
+            `${limitsSummary.scans} per day`,
+            `${limitsSummary.steps} steps per scan`,
+            `${limitsSummary.sub_agents} sub-agent${limitsSummary.sub_agents === '1' ? '' : 's'}`,
           ],
       limitsSummary,
       popular: id === 'PRO_PLUS',

@@ -32,7 +32,14 @@ docker-compose ps
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and configure:
+Copy the sample env file and configure:
+
+```bash
+cp env.sample .env
+# Edit .env with your values
+```
+
+See `env.sample` for all options. Minimum for local dev:
 
 ```bash
 # Database
@@ -51,7 +58,35 @@ JWT_EXPIRES_IN=7d
 GOOGLE_CLIENT_ID=your-google-client-id
 GOOGLE_CLIENT_SECRET=your-google-client-secret
 GOOGLE_CALLBACK_URL=http://localhost:3001/api/auth/google/callback
+
+# Model Provider Selector: set at least one API key for chat (Auto=Groq, or DeepSeek/OpenAI/Claude)
+GROQ_API_KEY=          # for "Auto" option
+DEEPSEEK_API_KEY=     # for "DeepSeek"
+OPENAI_API_KEY=       # for "OpenAI GPT5"
+ANTHROPIC_API_KEY=    # for "Claude"
 ```
+
+### Skills loading (local first, then CDN)
+
+The pentest agent loads skills with **the same path structure everywhere** (e.g. `skills/AGENTS.md`, `skills/recon/SKILL.md`).
+
+1. **Check local directory first:** `/opt/skills` (or `PENTEST_SKILLS_LOCAL_DIR`). If the file exists there, it is read from disk.
+2. **If not found locally:** the backend **downloads** the skill from the CDN (default **https://skills.gweh.sh**) and **caches it to the local directory** for the next load. Same path: `skills/AGENTS.md` → URL `https://skills.gweh.sh/skills/AGENTS.md` → cached to `/opt/skills/AGENTS.md`.
+3. **Fallback:** if no CDN is used and the file is not in `/opt/skills`, skills are read from the workspace `skills/` folder (e.g. `backend/skills/` when running from backend).
+
+Optional env (defaults in parentheses):
+
+```bash
+# Local skills directory — check here first; missing skills are cached here after CDN fetch (default: /opt/skills)
+PENTEST_SKILLS_LOCAL_DIR=/opt/skills
+
+# CDN base URL for skills — same path structure: skills/AGENTS.md → {base}/skills/AGENTS.md (default: https://skills.gweh.sh)
+PENTEST_SKILLS_CDN_URL=https://skills.gweh.sh
+```
+
+- **Docker/container:** Mount or create `/opt/skills` (or set `PENTEST_SKILLS_LOCAL_DIR`) so the backend can cache CDN skills. You can also set `PENTEST_WORKSPACE` to the directory that contains `skills/` for add_skill and workspace-based fallback.
+
+Custom skills added via `add_skill` are still written to the workspace `skills/custom/` folder.
 
 ## Installation
 

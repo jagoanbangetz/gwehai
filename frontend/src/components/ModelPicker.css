@@ -1,0 +1,118 @@
+/* Model Picker: compact pill/dropdown near chat input */
+.model-picker {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.model-picker-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  background: var(--bg-elevated, rgba(255, 255, 255, 0.06));
+  color: var(--text-secondary, rgba(255, 255, 255, 0.85));
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.model-picker-trigger:hover:not(:disabled) {
+  background: var(--bg-elevated-hover, rgba(255, 255, 255, 0.1));
+  border-color: var(--border-hover, rgba(255, 255, 255, 0.2));
+}
+
+.model-picker-trigger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.model-picker.open .model-picker-trigger {
+  border-color: var(--accent, #6366f1);
+  background: var(--bg-elevated, rgba(255, 255, 255, 0.08));
+}
+
+.model-picker-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.85;
+}
+
+.model-picker-label {
+  white-space: nowrap;
+}
+
+.model-picker-chevron {
+  display: flex;
+  opacity: 0.7;
+  transition: transform 0.2s ease;
+}
+
+.model-picker.open .model-picker-chevron {
+  transform: rotate(180deg);
+}
+
+.model-picker-dropdown {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  min-width: 160px;
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  background: var(--bg-elevated, rgba(18, 18, 22, 0.98));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  animation: model-picker-fade 0.15s ease;
+}
+
+@keyframes model-picker-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.model-picker-option {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary, rgba(255, 255, 255, 0.95));
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.model-picker-option:hover {
+  background: var(--bg-option-hover, rgba(255, 255, 255, 0.08));
+}
+
+.model-picker-option.selected {
+  background: var(--accent-subtle, rgba(99, 102, 241, 0.2));
+  color: var(--accent, #6366f1);
+}
+
+/* Small badge for chat bubble header */
+.model-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: var(--bg-elevated, rgba(255, 255, 255, 0.08));
+  color: var(--text-tertiary, rgba(255, 255, 255, 0.7));
+  font-size: 11px;
+  font-weight: 500;
+  margin-bottom: 6px;
+}

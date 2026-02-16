@@ -19,6 +19,7 @@ describe('plans.config', () => {
         expect(def.limits.workers).toBeGreaterThanOrEqual(1);
         expect(def.limits.sessions_per_day).toBeDefined();
         expect(def.limits.steps_per_session).toBeDefined();
+        expect(def.limits.max_sub_agents).toBeDefined();
       }
     });
 
@@ -29,47 +30,58 @@ describe('plans.config', () => {
 
     it('has expected worker counts per plan', () => {
       expect(getPlanDefinition('FREE').limits.workers).toBe(1);
-      expect(getPlanDefinition('PRO').limits.workers).toBe(3);
-      expect(getPlanDefinition('PRO_PLUS').limits.workers).toBe(8);
-      expect(getPlanDefinition('ULTRA').limits.workers).toBe(20);
+      expect(getPlanDefinition('PRO').limits.workers).toBe(5);
+      expect(getPlanDefinition('PRO_PLUS').limits.workers).toBe(10);
+      expect(getPlanDefinition('ULTRA').limits.workers).toBe(50);
     });
 
-    it('has expected sessions_per_day (FREE limited, others unlimited)', () => {
-      expect(getPlanDefinition('FREE').limits.sessions_per_day).toBe(5);
+    it('has expected sessions_per_day (FREE 3/day, others unlimited)', () => {
+      expect(getPlanDefinition('FREE').limits.sessions_per_day).toBe(3);
       expect(getPlanDefinition('PRO').limits.sessions_per_day).toBe(-1);
       expect(getPlanDefinition('PRO_PLUS').limits.sessions_per_day).toBe(-1);
       expect(getPlanDefinition('ULTRA').limits.sessions_per_day).toBe(-1);
     });
 
-    it('has expected steps_per_session per plan', () => {
-      expect(getPlanDefinition('FREE').limits.steps_per_session).toBe(15);
-      expect(getPlanDefinition('PRO').limits.steps_per_session).toBe(40);
-      expect(getPlanDefinition('PRO_PLUS').limits.steps_per_session).toBe(80);
-      expect(getPlanDefinition('ULTRA').limits.steps_per_session).toBe(500);
+    it('has unlimited steps_per_session for all plans', () => {
+      expect(getPlanDefinition('FREE').limits.steps_per_session).toBe(-1);
+      expect(getPlanDefinition('PRO').limits.steps_per_session).toBe(-1);
+      expect(getPlanDefinition('PRO_PLUS').limits.steps_per_session).toBe(-1);
+      expect(getPlanDefinition('ULTRA').limits.steps_per_session).toBe(-1);
+    });
+
+    it('has expected max_sub_agents per plan', () => {
+      expect(getPlanDefinition('FREE').limits.max_sub_agents).toBe(0);
+      expect(getPlanDefinition('PRO').limits.max_sub_agents).toBe(3);
+      expect(getPlanDefinition('PRO_PLUS').limits.max_sub_agents).toBe(6);
+      expect(getPlanDefinition('ULTRA').limits.max_sub_agents).toBe(-1);
     });
   });
 
   describe('getLimitsSummary', () => {
-    it('returns workers/scans/steps strings for display', () => {
+    it('returns workers/scans/steps/sub_agents strings for display', () => {
       const free = getLimitsSummary('FREE');
       expect(free.workers).toBe('1');
-      expect(free.scans).toBe('5/day');
-      expect(free.steps).toBe('15/session');
+      expect(free.scans).toBe('3/day');
+      expect(free.steps).toBe('Unlimited*');
+      expect(free.sub_agents).toBe('0');
 
       const pro = getLimitsSummary('PRO');
-      expect(pro.workers).toBe('3');
+      expect(pro.workers).toBe('5');
       expect(pro.scans).toBe('Unlimited*');
-      expect(pro.steps).toBe('40/session');
+      expect(pro.steps).toBe('Unlimited*');
+      expect(pro.sub_agents).toBe('3');
 
       const proPlus = getLimitsSummary('PRO_PLUS');
-      expect(proPlus.workers).toBe('8');
+      expect(proPlus.workers).toBe('10');
       expect(proPlus.scans).toBe('Unlimited*');
-      expect(proPlus.steps).toBe('80/session');
+      expect(proPlus.steps).toBe('Unlimited*');
+      expect(proPlus.sub_agents).toBe('6');
 
       const ultra = getLimitsSummary('ULTRA');
       expect(ultra.workers).toBe('Unlimited*');
       expect(ultra.scans).toBe('Unlimited*');
-      expect(ultra.steps).toBe('500/session'); // ULTRA has soft cap 500
+      expect(ultra.steps).toBe('Unlimited*');
+      expect(ultra.sub_agents).toBe('Unlimited*');
     });
 
     it('returns same worker count as plan limits for non-ULTRA', () => {
@@ -93,6 +105,7 @@ describe('plans.config', () => {
         expect(tier.limitsSummary.workers).toBe(expected.workers);
         expect(tier.limitsSummary.scans).toBe(expected.scans);
         expect(tier.limitsSummary.steps).toBe(expected.steps);
+        expect(tier.limitsSummary.sub_agents).toBe(expected.sub_agents);
       }
     });
 
@@ -100,9 +113,9 @@ describe('plans.config', () => {
       const tiers = getPlanTiers();
       const workers = tiers.map((t) => t.limitsSummary.workers);
       expect(workers[0]).toBe('1');
-      expect(workers[1]).toBe('3');
-      expect(workers[2]).toBe('8');
-      expect(workers[3]).toBe('Unlimited*'); // ULTRA: workers >= 20
+      expect(workers[1]).toBe('5');
+      expect(workers[2]).toBe('10');
+      expect(workers[3]).toBe('Unlimited*');
     });
 
     it('each tier has name and priceMonthly', () => {

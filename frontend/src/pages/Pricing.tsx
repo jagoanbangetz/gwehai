@@ -86,7 +86,7 @@ const Pricing = () => {
                 <div className="pack-limits">
                   <span className="limits-label">Limits:</span>
                   <span className="limits-value">
-                    {formatWorkersLabel(tier.limitsSummary.workers)} • {tier.limitsSummary.scans} • {tier.limitsSummary.steps}
+                    {formatWorkersLabel(tier.limitsSummary.workers)} • {tier.limitsSummary.scans} • {tier.limitsSummary.steps} • {tier.limitsSummary.sub_agents} sub-agent{tier.limitsSummary.sub_agents === '1' ? '' : 's'}
                   </span>
                 </div>
 

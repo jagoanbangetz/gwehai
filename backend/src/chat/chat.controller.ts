@@ -1,7 +1,12 @@
-import { Controller, Post, Get, Delete, Body, Param, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Body, Param, UseGuards, Req, BadRequestException } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Request } from 'express';
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidUuid(id: string): boolean {
+  return typeof id === 'string' && id.length > 0 && UUID_REGEX.test(id.trim());
+}
 
 interface ChatRequest {
   message: string;
@@ -34,14 +39,20 @@ export class ChatController {
 
   @Get('conversations/:id')
   async getConversation(@Req() req: Request, @Param('id') id: string) {
+    if (!isValidUuid(id)) {
+      throw new BadRequestException('Conversation id must be a valid UUID');
+    }
     const user = req.user as any;
-    return await this.chatService.getConversation(user.id, id);
+    return await this.chatService.getConversation(user.id, id.trim());
   }
 
   @Delete('conversations/:id')
   async deleteConversation(@Req() req: Request, @Param('id') id: string) {
+    if (!isValidUuid(id)) {
+      throw new BadRequestException('Conversation id must be a valid UUID');
+    }
     const user = req.user as any;
-    await this.chatService.deleteConversation(user.id, id);
+    await this.chatService.deleteConversation(user.id, id.trim());
     return { ok: true };
   }
 

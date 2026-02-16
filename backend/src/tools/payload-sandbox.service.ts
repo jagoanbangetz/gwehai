@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { promises as fs } from 'fs';
+import { promises as fs, existsSync, statSync } from 'fs';
 import * as path from 'path';
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
@@ -42,12 +42,30 @@ export class PayloadSandboxService {
     return path.join(workspace, 'payloads');
   }
 
+  /** Same resolution as ToolsService so workspace/skills and workspace/payloads are consistent (e.g. in containers). */
   private getWorkspaceRoot(): string {
     const configured = this.configService.get<string>('PENTEST_WORKSPACE');
     if (configured) {
       return path.resolve(configured);
     }
-    return path.resolve(process.cwd(), 'skills');
+    const cwd = process.cwd();
+    const cwdSkills = path.join(cwd, 'skills');
+    if (existsSync(cwdSkills) && statSync(cwdSkills).isDirectory()) {
+      return cwd;
+    }
+    const thisDir = __dirname;
+    const candidates = [
+      path.resolve(thisDir, '..', '..'),
+      path.resolve(thisDir, '..', '..', '..'),
+      path.resolve(thisDir, '..', '..', '..', '..'),
+    ];
+    for (const dir of candidates) {
+      const skillsPath = path.join(dir, 'skills');
+      if (existsSync(skillsPath) && statSync(skillsPath).isDirectory()) {
+        return dir;
+      }
+    }
+    return cwd;
   }
 
   /**

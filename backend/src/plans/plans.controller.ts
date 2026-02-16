@@ -2,7 +2,7 @@ import { Controller, Get, UseGuards, Req, Query } from '@nestjs/common';
 import { PlansService } from './plans.service';
 import { PlanResolutionService } from './plan-resolution.service';
 import { PlanUsageService } from './plan-usage.service';
-import { getPlanPayload } from '../config/plans.config';
+import { getPlanPayload, getPlanDefinition } from '../config/plans.config';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Request } from 'express';
 
@@ -25,11 +25,18 @@ export class PlansController {
     const planId = await this.planResolution.getUserPlan(user.id);
     const payload = getPlanPayload(planId);
     const usage = await this.planUsage.getUsage(user.id, planId, conversationId || undefined);
+    const def = getPlanDefinition(planId);
+    const sessionsStartedToday = await this.planUsage.getSessionsStartedToday(user.id);
+    const sessionsPerDay = def.limits.sessions_per_day === -1 ? null : def.limits.sessions_per_day;
     return {
       planId,
       plan: payload.plan,
       limits_summary: payload.limits_summary,
       usage,
+      scan_limit: {
+        sessions_per_day: sessionsPerDay,
+        sessions_started_today: sessionsStartedToday,
+      },
     };
   }
 

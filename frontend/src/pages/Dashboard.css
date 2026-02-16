@@ -2036,8 +2036,52 @@
 
 /* integration button styles removed (no longer used) */
 
+.chat-scan-limit-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0.75rem;
+  margin: 0 0.75rem 0.25rem;
+  background: oklch(0.25 0.1 25 / 0.95);
+  border: 1px solid oklch(0.4 0.1 25);
+  border-radius: 8px;
+  color: oklch(0.95 0.02 90);
+  font-size: 0.875rem;
+}
+
+.chat-scan-limit-upgrade {
+  padding: 0.25rem 0.5rem;
+  background: oklch(0.5 0.15 25);
+  border: none;
+  border-radius: 6px;
+  color: oklch(0.98 0.02 90);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.chat-scan-limit-upgrade:hover {
+  background: oklch(0.55 0.15 25);
+}
+
+.chat-input-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 0.75rem 0.5rem 0.75rem;
+  width: 100%;
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.chat-model-picker {
+  flex-shrink: 0;
+}
+
 .chat-input-area {
-  margin-top: 1.5rem;
+  margin-top: 0.5rem;
   padding: 0 0.75rem 1.5rem 0.75rem;
   display: flex;
   align-items: center;
@@ -3115,8 +3159,9 @@
 }
 .hacktivity-row {
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, opacity 0.2s ease;
 }
+
 .hacktivity-row:hover {
   background: oklch(0.16 0 0 / 0.6);
 }
@@ -3527,9 +3572,19 @@
   color: oklch(0.75 0 0);
 }
 
+.current-pentest-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
 .current-pentest-empty,
 .current-pentest-card {
   padding: 0.5rem 0;
+}
+
+.current-pentest-card {
+  transition: opacity 0.2s ease;
 }
 
 .current-pentest-empty p {
@@ -3602,6 +3657,11 @@
 .current-pentest-status--failed,
 .current-pentest-status--stopped {
   color: oklch(0.65 0.2 25);
+}
+
+.current-pentest-phase {
+  font-weight: 600;
+  color: oklch(0.8 0 0);
 }
 
 .current-pentest-job-id {

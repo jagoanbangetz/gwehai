@@ -19,6 +19,7 @@ export interface PlanTier {
     workers: string
     scans: string
     steps: string
+    sub_agents: string
   }
   popular?: boolean
 }
@@ -28,30 +29,30 @@ export const PLAN_TIERS: PlanTier[] = [
     id: 'FREE',
     name: 'Free',
     priceMonthly: 0,
-    features: ['1 concurrent scan', '5 scans per day', '15 steps per session'],
-    limitsSummary: { workers: '1', scans: '5/day', steps: '15/session' },
+    features: ['Unlimited steps per scan', '1 target at a time', '3 targets per day', 'No sub-agents'],
+    limitsSummary: { workers: '1', scans: '3/day', steps: 'Unlimited*', sub_agents: '0' },
   },
   {
     id: 'PRO',
     name: 'Pro',
     priceMonthly: 19,
-    features: ['Unlimited Scans', '3 concurrent workers', '40 steps per session'],
-    limitsSummary: { workers: '3', scans: 'Unlimited*', steps: '40/session' },
+    features: ['Unlimited steps', '5 concurrent targets', 'Spawn up to 3 sub-agents'],
+    limitsSummary: { workers: '5', scans: 'Unlimited*', steps: 'Unlimited*', sub_agents: '3' },
   },
   {
     id: 'PRO_PLUS',
     name: 'Pro Plus',
     priceMonthly: 49,
-    features: ['Unlimited Scans', '8 concurrent workers', '80 steps per session', 'Priority queue'],
-    limitsSummary: { workers: '8', scans: 'Unlimited*', steps: '80/session' },
+    features: ['Unlimited steps', '10 concurrent targets', 'Spawn up to 6 sub-agents', 'Priority queue'],
+    limitsSummary: { workers: '10', scans: 'Unlimited*', steps: 'Unlimited*', sub_agents: '6' },
     popular: true,
   },
   {
     id: 'ULTRA',
     name: 'Ultra',
     priceMonthly: 99,
-    features: ['Unlimited Workers', 'Unlimited Scans', 'Unlimited Steps'],
-    limitsSummary: { workers: 'Unlimited*', scans: 'Unlimited*', steps: 'Unlimited*' },
+    features: ['Unlimited steps', 'Unlimited concurrent targets', 'Unlimited sub-agents'],
+    limitsSummary: { workers: 'Unlimited*', scans: 'Unlimited*', steps: 'Unlimited*', sub_agents: 'Unlimited*' },
   },
 ]
 

@@ -15,27 +15,29 @@ describe('plans config', () => {
       expect(PLAN_TIERS.map((t) => t.id)).toEqual(PLAN_IDS)
     })
 
-    it('each tier has limitsSummary with workers, scans, steps', () => {
+    it('each tier has limitsSummary with workers, scans, steps, sub_agents', () => {
       for (const tier of PLAN_TIERS) {
         expect(tier.limitsSummary).toBeDefined()
         expect(typeof tier.limitsSummary.workers).toBe('string')
         expect(typeof tier.limitsSummary.scans).toBe('string')
         expect(typeof tier.limitsSummary.steps).toBe('string')
+        expect(typeof tier.limitsSummary.sub_agents).toBe('string')
       }
     })
 
     it('worker counts are distinct so users can compare plans', () => {
       const workers = PLAN_TIERS.map((t) => t.limitsSummary.workers)
       expect(workers[0]).toBe('1')
-      expect(workers[1]).toBe('3')
-      expect(workers[2]).toBe('8')
+      expect(workers[1]).toBe('5')
+      expect(workers[2]).toBe('10')
       expect(workers[3]).toBe('Unlimited*')
     })
 
-    it('FREE has 5/day scans and 15/session steps', () => {
+    it('FREE has 3/day scans and unlimited steps', () => {
       const free = PLAN_TIERS.find((t) => t.id === 'FREE')!
-      expect(free.limitsSummary.scans).toBe('5/day')
-      expect(free.limitsSummary.steps).toBe('15/session')
+      expect(free.limitsSummary.scans).toBe('3/day')
+      expect(free.limitsSummary.steps).toBe('Unlimited*')
+      expect(free.limitsSummary.sub_agents).toBe('0')
     })
 
     it('PRO and PRO_PLUS have Unlimited* scans', () => {
@@ -69,9 +71,9 @@ describe('plans config', () => {
     it('formats "1" as "1 worker"', () => {
       expect(formatWorkersLabel('1')).toBe('1 worker')
     })
-    it('formats "3" and "8" as "X workers"', () => {
-      expect(formatWorkersLabel('3')).toBe('3 workers')
-      expect(formatWorkersLabel('8')).toBe('8 workers')
+    it('formats "5" and "10" as "X workers"', () => {
+      expect(formatWorkersLabel('5')).toBe('5 workers')
+      expect(formatWorkersLabel('10')).toBe('10 workers')
     })
     it('returns "Unlimited*" as-is', () => {
       expect(formatWorkersLabel('Unlimited*')).toBe('Unlimited*')

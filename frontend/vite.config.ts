@@ -12,8 +12,11 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
         secure: false,
-        // Backend has global prefix 'api', so no rewrite needed
-        // The request /api/auth/me will be forwarded to http://localhost:3001/api/auth/me
+      },
+      '/gwehai-jobs': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        ws: true,
       },
     },
   },

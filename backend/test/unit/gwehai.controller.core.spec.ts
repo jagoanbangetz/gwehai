@@ -9,6 +9,8 @@ describe('GwehAIController core endpoints', () => {
     continueJob: jest.fn(),
     healthCheck: jest.fn(),
     getJob: jest.fn(),
+    incrementStreamConnections: jest.fn().mockReturnValue(1),
+    decrementStreamConnections: jest.fn().mockResolvedValue(undefined),
   };
 
   let controller: GwehAIController;

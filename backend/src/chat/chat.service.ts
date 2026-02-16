@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository, IsNull } from 'typeorm';
 import { Conversation } from '../entities/conversation.entity';
@@ -11,6 +11,9 @@ import { UsageEvent } from '../entities/usage-event.entity';
 import { PointsService } from '../points/points.service';
 import { PointLedgerReason } from '../entities/point-ledger.entity';
 import { LlmService } from '../llm/llm.service';
+import { ProviderRouterService } from '../llm/provider-router.service';
+import { CostManagerService } from '../llm/cost-manager.service';
+import type { ModelOptionKey } from '../config/model-options.config';
 import { PENTEST_SYSTEM_PROMPT, SIMPLE_SECURITY_SYSTEM_PROMPT } from '../prompt/pentest.system-prompt';
 import { PENTEST_TOOL_DEFS } from '../prompt/pentest-tools.def';
 import { LlmMessage, LlmToolCall } from '../llm/llm.types';
@@ -22,9 +25,19 @@ import { PlanResolutionService } from '../plans/plan-resolution.service';
 import { PlanUsageService } from '../plans/plan-usage.service';
 import { validateStep } from '../plans/plan-limits.validation';
 import { getPlanPayload } from '../config/plans.config';
+import { PentestJobsService } from '../pentest-jobs/pentest-jobs.service';
 
 /** Small delay so SSE client receives events over time and frontend typing effect can run */
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Conversation id is a UUID; reject timestamps or other non-UUID values to avoid Postgres "invalid input syntax for type uuid". */
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function requireUuid(id: unknown, paramName: string): void {
+  const s = typeof id === 'string' ? id.trim() : String(id ?? '');
+  if (!s || !UUID_REGEX.test(s)) {
+    throw new BadRequestException(`${paramName} must be a valid UUID`);
+  }
+}
 
 /** Message-count guard for context window. Keeps system + first user + last N. */
 const MAX_MESSAGES_FOR_CONTEXT = 40;
@@ -166,13 +179,22 @@ export class ChatService {
     private hacktivityService: HacktivityService,
     private planResolution: PlanResolutionService,
     private planUsage: PlanUsageService,
+    @Inject(forwardRef(() => PentestJobsService))
+    private pentestJobs: PentestJobsService,
+    private providerRouter: ProviderRouterService,
+    private costManager: CostManagerService,
     private dataSource: DataSource,
   ) {}
 
   /** Tracks main-agent done + pending sub-agents per parent conversation so we only set "finished" and push "done" when all work is complete. */
   private readonly pendingSubAgentsByParent = new Map<string, { mainDone: boolean; pending: number }>();
+  /** Resolvers for callers waiting until conversation is fully finished (main + all sub-agents). */
+  private readonly pendingFinishResolvers = new Map<string, () => void>();
 
-  /** Mark main agent done for cid; if no pending sub-agents, set runStatus finished and optionally push done. */
+  /**
+   * Mark main agent done for cid; if no pending sub-agents, set runStatus finished and optionally push done.
+   * If there are pending sub-agents, returns a Promise that resolves when the last sub-agent finishes (so callers can wait before marking job "completed").
+   */
   private async tryMarkMainDoneAndMaybeFinish(
     cid: string,
     emitDoneEvent: boolean,
@@ -189,7 +211,11 @@ export class ChatService {
       if (emitDoneEvent) {
         push({ type: 'done', data: { job_id: jobId, conversation_id: cid } });
       }
+      return;
     }
+    return new Promise<void>((resolve) => {
+      this.pendingFinishResolvers.set(cid, resolve);
+    });
   }
 
   /** Called when a sub-agent (wait_for_reply: false) completes; decrements pending and may set finished + push done. */
@@ -204,9 +230,15 @@ export class ChatService {
     if (state.mainDone && state.pending <= 0) {
       this.pendingSubAgentsByParent.delete(parentCid);
       const conv = await this.conversationRepo.findOne({ where: { id: parentCid }, select: ['runStatus'] });
-      if (conv?.runStatus === 'stopped') return;
+      if (conv?.runStatus === 'stopped') {
+        this.pendingFinishResolvers.get(parentCid)?.();
+        this.pendingFinishResolvers.delete(parentCid);
+        return;
+      }
       await this.setConversationRunStatus(parentCid, 'finished');
       push({ type: 'done', data: { job_id: jobId, conversation_id: parentCid } });
+      this.pendingFinishResolvers.get(parentCid)?.();
+      this.pendingFinishResolvers.delete(parentCid);
     } else {
       this.pendingSubAgentsByParent.set(parentCid, state);
     }
@@ -434,38 +466,45 @@ export class ChatService {
     conversationId: string | undefined,
     jobId: string,
     pushEvent: (ev: { type: string; data: Record<string, any> }) => void,
-    options?: { emitDoneEvent?: boolean; abortSignal?: AbortSignal },
+    options?: { emitDoneEvent?: boolean; abortSignal?: AbortSignal; model_key?: ModelOptionKey },
   ): Promise<{ conversationId: string; messageId: string; response: string }> {
+    const useModelPicker = !!options?.model_key;
     const result = await this.dataSource.transaction(async (manager) => {
       const conversation = await this.getOrCreateConversation(userId, conversationId);
-      const model = await manager.findOne(Model, {
+      let model = await manager.findOne(Model, {
         where: { id: conversation.modelId },
       });
       if (!model || !model.isActive) {
-        throw new NotFoundException('Model not found or inactive');
+        if (useModelPicker) {
+          model = null as any;
+        } else {
+          throw new NotFoundException('Model not found or inactive');
+        }
       }
 
-      const inputTokens = Math.ceil(message.length / 4);
-      const outputTokens = 500;
-      const fixedCostPoints = this.getFixedCostPoints(model);
-      const costPoints =
-        fixedCostPoints !== null
-          ? fixedCostPoints
-          : (Number(model.pointsPer1kInputTokens) * inputTokens) / 1000 +
-            (Number(model.pointsPer1kOutputTokens) * outputTokens) / 1000;
-      const finalCostPoints =
-        fixedCostPoints !== null
-          ? this.normalizePoints(costPoints)
-          : Math.max(1, Math.ceil(costPoints));
+      if (model && model.isActive) {
+        const inputTokens = Math.ceil(message.length / 4);
+        const outputTokens = 500;
+        const fixedCostPoints = this.getFixedCostPoints(model);
+        const costPoints =
+          fixedCostPoints !== null
+            ? fixedCostPoints
+            : (Number(model.pointsPer1kInputTokens) * inputTokens) / 1000 +
+              (Number(model.pointsPer1kOutputTokens) * outputTokens) / 1000;
+        const finalCostPoints =
+          fixedCostPoints !== null
+            ? this.normalizePoints(costPoints)
+            : Math.max(1, Math.ceil(costPoints));
 
-      await this.pointsService.spendPoints(
-        userId,
-        finalCostPoints,
-        PointLedgerReason.CHAT_USAGE,
-        'usage_events',
-        null,
-        { modelId: model.id, conversationId: conversation.id },
-      );
+        await this.pointsService.spendPoints(
+          userId,
+          finalCostPoints,
+          PointLedgerReason.CHAT_USAGE,
+          'usage_events',
+          null,
+          { modelId: model.id, conversationId: conversation.id },
+        );
+      }
 
       const userMessage = manager.create(Message, {
         conversationId: conversation.id,
@@ -526,10 +565,24 @@ export class ChatService {
       { role: 'system', content: SIMPLE_SECURITY_SYSTEM_PROMPT },
       { role: 'user', content: message },
     ];
-    const response = await this.llmService.generate(model, messages);
-    const content = response?.content?.trim()
-      ? response.content.trim()
-      : this.generateLocalResponse(message);
+    let content: string;
+    const modelKey = options?.model_key;
+    if (modelKey) {
+      const result = await this.providerRouter.runChatCompletion({
+        selectedModelKey: modelKey,
+        messages,
+        mode: 'decision',
+      });
+      content = result.text?.trim() ? result.text.trim() : this.generateLocalResponse(message);
+      if (result.meta && this.costManager.isCostDebug()) {
+        pushEvent({ type: 'meta', data: result.meta });
+      }
+    } else {
+      const response = await this.llmService.generate(model, messages);
+      content = response?.content?.trim()
+        ? response.content.trim()
+        : this.generateLocalResponse(message);
+    }
 
     if (abortSignal?.aborted) {
       await this.setConversationRunStatus(cid, 'stopped');
@@ -568,38 +621,45 @@ export class ChatService {
     pushEvent: (ev: { type: string; data: Record<string, any> }) => void,
     agentInfo?: { index: number; label: string },
     memoryScopeIdOverride?: string,
-    options?: { emitDoneEvent?: boolean; abortSignal?: AbortSignal },
+    options?: { emitDoneEvent?: boolean; abortSignal?: AbortSignal; model_key?: ModelOptionKey },
   ): Promise<{ conversationId: string; messageId: string; response: string }> {
+    const useModelPicker = !!options?.model_key;
     const result = await this.dataSource.transaction(async (manager) => {
       const conversation = await this.getOrCreateConversation(userId, conversationId);
-      const model = await manager.findOne(Model, {
+      let model = await manager.findOne(Model, {
         where: { id: conversation.modelId },
       });
       if (!model || !model.isActive) {
-        throw new NotFoundException('Model not found or inactive');
+        if (useModelPicker) {
+          model = null as any;
+        } else {
+          throw new NotFoundException('Model not found or inactive');
+        }
       }
 
-      const inputTokens = Math.ceil(message.length / 4);
-      const outputTokens = 500;
-      const fixedCostPoints = this.getFixedCostPoints(model);
-      const costPoints =
-        fixedCostPoints !== null
-          ? fixedCostPoints
-          : (Number(model.pointsPer1kInputTokens) * inputTokens) / 1000 +
-            (Number(model.pointsPer1kOutputTokens) * outputTokens) / 1000;
-      const finalCostPoints =
-        fixedCostPoints !== null
-          ? this.normalizePoints(costPoints)
-          : Math.max(1, Math.ceil(costPoints));
+      if (model && model.isActive) {
+        const inputTokens = Math.ceil(message.length / 4);
+        const outputTokens = 500;
+        const fixedCostPoints = this.getFixedCostPoints(model);
+        const costPoints =
+          fixedCostPoints !== null
+            ? fixedCostPoints
+            : (Number(model.pointsPer1kInputTokens) * inputTokens) / 1000 +
+              (Number(model.pointsPer1kOutputTokens) * outputTokens) / 1000;
+        const finalCostPoints =
+          fixedCostPoints !== null
+            ? this.normalizePoints(costPoints)
+            : Math.max(1, Math.ceil(costPoints));
 
-      await this.pointsService.spendPoints(
-        userId,
-        finalCostPoints,
-        PointLedgerReason.CHAT_USAGE,
-        'usage_events',
-        null,
-        { modelId: model.id, conversationId: conversation.id },
-      );
+        await this.pointsService.spendPoints(
+          userId,
+          finalCostPoints,
+          PointLedgerReason.CHAT_USAGE,
+          'usage_events',
+          null,
+          { modelId: model.id, conversationId: conversation.id },
+        );
+      }
 
       const userMessage = manager.create(Message, {
         conversationId: conversation.id,
@@ -671,8 +731,20 @@ export class ChatService {
 
     push({ type: 'status', data: { message: 'Planning the plan...' } });
 
+    // Load prior messages so the AI sees the seed (target, scope) and full conversation. One conversation = one pentest context; sub-agents share memory but only see the message the parent sent, so the parent must include the actual URL when delegating.
+    const allMessages = await this.messageRepo.find({
+      where: { conversationId: cid },
+      order: { createdAt: 'ASC' },
+    });
+    const priorMessages = allMessages.slice(0, -2); // exclude the current user message and empty assistant message we just added
+    const priorLlm: LlmMessage[] = priorMessages.map((m) => ({
+      role: m.role as 'user' | 'assistant' | 'system',
+      content: m.content ?? '',
+    }));
+
     let messages: LlmMessage[] = [
       { role: 'system', content: PENTEST_SYSTEM_PROMPT },
+      ...priorLlm,
       { role: 'user', content: message },
     ];
 
@@ -681,6 +753,7 @@ export class ChatService {
     let turn = 0;
     let finalContent = '';
     let lastStepAt = 0;
+    let stepLimitReached = false;
 
     while (turn < MAX_TURNS) {
       if (abortSignal?.aborted) {
@@ -689,10 +762,19 @@ export class ChatService {
       turn++;
 
       // Plan enforcement: steps_per_session and cooldown (centralized in plan-limits.validation)
-      validateStep(planId, limits, {
-        stepNumber: turn,
-        lastStepAtMs: lastStepAt,
-      });
+      try {
+        validateStep(planId, limits, {
+          stepNumber: turn,
+          lastStepAtMs: lastStepAt,
+        });
+      } catch (err: any) {
+        if (err?.message?.includes('steps per session')) {
+          stepLimitReached = true;
+          push({ type: 'status', data: { message: 'Step limit reached for this session. Summarizing findings...' } });
+          break;
+        }
+        throw err;
+      }
       if (turn === 1) {
         const payload = getPlanPayload(planId);
         const usage = await this.planUsage.getUsage(userId, planId, cid);
@@ -706,13 +788,24 @@ export class ChatService {
 
       // Turn 1: require tools so the agent starts with tools. After that, model chooses tools or text freely.
       const toolChoice = turn === 1 ? ('required' as const) : undefined;
+      const modelKey = options?.model_key;
 
-      const response = await this.llmService.generateWithTools(
-        model,
-        truncateMessagesForContext(messages),
-        PENTEST_TOOL_DEFS,
-        toolChoice ? { tool_choice: toolChoice } : undefined,
-      );
+      const response = modelKey
+        ? await this.providerRouter
+            .generateWithTools({
+              selectedModelKey: modelKey,
+              messages: truncateMessagesForContext(messages),
+              tools: PENTEST_TOOL_DEFS,
+              mode: 'decision',
+              tool_choice: toolChoice,
+            })
+            .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
+        : await this.llmService.generateWithTools(
+            model,
+            truncateMessagesForContext(messages),
+            PENTEST_TOOL_DEFS,
+            toolChoice ? { tool_choice: toolChoice } : undefined,
+          );
       if (!response) {
         finalContent = this.generateLocalResponse(message);
         break;
@@ -790,20 +883,29 @@ export class ChatService {
       break;
     }
 
-    // If we hit MAX_TURNS without any text reply, ask the model once for a summary (no tools).
+    // If we hit MAX_TURNS or step limit without any text reply, ask the model once for a summary (no tools).
+    const modelKeySummary = options?.model_key;
     if (!finalContent?.trim()) {
       push({ type: 'status', data: { message: 'Writing response...' } });
+      const summaryPrompt = stepLimitReached
+        ? 'Step limit for this session was reached. Summarize what you found so far (list each report_finding). In <final>, also list which checklist areas you did NOT get to test (e.g. XSS, LFI, auth) so the user knows. Reply only with <think>brief</think> then <final>summary + unchecked areas</final>. No tool calls.'
+        : 'Summarize what you did so far. Reply only with <think>brief reasoning</think> then <final>your summary for the user</final>. No tool calls.';
       const summaryMessage: LlmMessage = {
         role: 'user',
-        content:
-          'Summarize what you did so far. Reply only with <think>brief reasoning</think> then <final>your summary for the user</final>. No tool calls.',
+        content: summaryPrompt,
       };
-      const summaryResponse = await this.llmService.generateWithTools(
-        model,
-        truncateMessagesForContext([...messages, summaryMessage]),
-        PENTEST_TOOL_DEFS,
-        { tool_choice: 'none' },
-      );
+      const summaryMessages = truncateMessagesForContext([...messages, summaryMessage]);
+      const summaryResponse = modelKeySummary
+        ? await this.providerRouter
+            .generateWithTools({
+              selectedModelKey: modelKeySummary,
+              messages: summaryMessages,
+              tools: PENTEST_TOOL_DEFS,
+              mode: 'decision',
+              tool_choice: 'none',
+            })
+            .then((r) => ({ content: r.content }))
+        : await this.llmService.generateWithTools(model, summaryMessages, PENTEST_TOOL_DEFS, { tool_choice: 'none' });
       if (summaryResponse?.content?.trim()) {
         finalContent = summaryResponse.content;
       } else {
@@ -844,6 +946,10 @@ export class ChatService {
     const cid = String(conversationId || '').trim();
     if (!cid) return;
     await this.conversationRepo.update({ id: cid }, { runStatus: status } as any);
+    if (status === 'stopped' || status === 'error') {
+      this.pendingFinishResolvers.get(cid)?.();
+      this.pendingFinishResolvers.delete(cid);
+    }
   }
 
   /**
@@ -931,10 +1037,18 @@ export class ChatService {
         return (args.detail as string)?.trim()
           ? `Saving finding: ${String(args.detail).slice(0, maxLen)}${String(args.detail).length > maxLen ? '...' : ''}`
           : 'Saving finding to report...';
+      case 'update_pentest_phase':
+        return args.phase ? `Updating phase: ${String(args.phase)}` : 'Updating pentest phase...';
       case 'add_skill':
         return (args.name as string)?.trim()
           ? `Adding skill: ${String(args.name).slice(0, maxLen)}`
           : 'Adding skill...';
+      case 'download_skill':
+        return (args.path as string)?.trim()
+          ? `Downloading skill: ${String(args.path).slice(0, maxLen)}`
+          : 'Listing skills...';
+      case 'download_agent':
+        return 'Downloading agent info...';
       case 'git_search':
         return (args.query as string)?.trim()
           ? `Searching GitHub: ${String(args.query).slice(0, maxLen)}`
@@ -1050,12 +1164,48 @@ export class ChatService {
         });
         return JSON.stringify({ ok: true, report_id: report.id, message: 'Finding saved to database' });
       }
+      case 'update_pentest_phase': {
+        if (!userId || !conversationId) {
+          return JSON.stringify({ error: 'update_pentest_phase requires an active conversation' });
+        }
+        const convId = String(args.conversation_id ?? conversationId).trim();
+        if (!convId) {
+          return JSON.stringify({ error: 'conversation_id is required' });
+        }
+        await this.pentestJobs.updateStateByConversationId(userId, convId, {
+          phase: args.phase != null ? String(args.phase) : undefined,
+          checklist: args.checklist && typeof args.checklist === 'object' ? args.checklist as Record<string, boolean> : undefined,
+          last_action_summary: args.last_action_summary != null ? String(args.last_action_summary) : undefined,
+        });
+        return JSON.stringify({ ok: true, message: 'Pentest phase updated' });
+      }
       case 'add_skill': {
         const name = String(args.name ?? '').trim();
         const content = String(args.content ?? '').trim();
         const description = args.description != null ? String(args.description) : undefined;
         const out = await this.toolsService.addSkill(name, content, description);
         return JSON.stringify(out);
+      }
+      case 'download_skill': {
+        const skillPath = args.path != null ? String(args.path).trim() : '';
+        if (!skillPath) {
+          const list = await this.toolsService.listSkills();
+          return JSON.stringify(list);
+        }
+        const out = await this.toolsService.downloadSkill(skillPath);
+        return JSON.stringify(out);
+      }
+      case 'download_agent': {
+        const roles = [...ChatService.ALLOWED_AGENT_ROLES];
+        const agentLabels: Record<number, string> = {};
+        for (let i = 1; i <= 10; i++) {
+          agentLabels[i] = getAgentLabel(i);
+        }
+        return JSON.stringify({
+          roles,
+          agent_labels: agentLabels,
+          hint: 'Use sessions_spawn with role to create a sub-agent (recon, exploit, general).',
+        });
       }
       case 'git_search': {
         const query = String(args.query ?? '').trim();
@@ -1116,6 +1266,22 @@ export class ChatService {
       }
       case 'sessions_spawn': {
         if (!userId || !conversationId) return JSON.stringify({ error: 'sessions_spawn requires an active conversation' });
+        const planIdForSpawn = await this.planResolution.getUserPlan(userId);
+        const defForSpawn = this.planResolution.getPlanDefinition(planIdForSpawn);
+        const maxSubAgents = defForSpawn.limits.max_sub_agents;
+        if (maxSubAgents === 0) {
+          return JSON.stringify({
+            error: 'Your plan does not allow spawning sub-agents. Upgrade to Pro or higher to use multiple agents.',
+          });
+        }
+        if (maxSubAgents !== -1) {
+          const existingSubs = await this.listSessions(userId, { parent_id: conversationId, last: 100 });
+          if (existingSubs.length >= maxSubAgents) {
+            return JSON.stringify({
+              error: `Plan limit: maximum ${maxSubAgents} sub-agent(s) per run. You have ${existingSubs.length}. Upgrade for more.`,
+            });
+          }
+        }
         const result = await this.spawnSession(
           userId,
           conversationId,
@@ -1485,6 +1651,7 @@ export class ChatService {
     userId: string,
     conversationId: string,
   ): Promise<Conversation & { memory?: Array<{ path: string; content: string }> }> {
+    requireUuid(conversationId, 'conversationId');
     const conversation = await this.conversationRepo.findOne({
       where: { id: conversationId, userId },
       relations: ['messages', 'messages.parts'],
@@ -1511,6 +1678,7 @@ export class ChatService {
    * Delete a conversation (and its messages via cascade)
    */
   async deleteConversation(userId: string, conversationId: string): Promise<void> {
+    requireUuid(conversationId, 'conversationId');
     const conversation = await this.conversationRepo.findOne({
       where: { id: conversationId, userId },
     });

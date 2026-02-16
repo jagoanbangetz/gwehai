@@ -15,11 +15,14 @@ import { Request, Response } from 'express';
 import { GwehAIService } from './gwehai.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GwehAISSEGuard } from './gwehai-sse.guard';
+import { getModelOptions } from '../config/model-options.config';
 
 interface ChatCompletionRequest {
   messages: Array<{ role: string; content: string }>;
   stream?: boolean;
   job_id?: string;
+  conversation_id?: string;
+  model_key?: string;
 }
 
 @Controller('gwehai')
@@ -50,7 +53,7 @@ export class GwehAIController {
     }
     const job = this.gwehaiService.getJob(streamId);
     const lastEventId = Number(req.headers['last-event-id'] || 0) || 0;
-    this.streamJob(res, job, lastEventId);
+    this.streamJob(res, job, lastEventId, undefined);
   }
 
   /**
@@ -63,7 +66,7 @@ export class GwehAIController {
     const user = req.user as any;
     console.log(`User ${user.id} creating local AI job`);
 
-    const { messages, stream = false, job_id } = body;
+    const { messages, stream = false, job_id, conversation_id, model_key } = body;
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       throw new HttpException(
@@ -72,7 +75,21 @@ export class GwehAIController {
       );
     }
 
-    return this.gwehaiService.createJob(user.id, messages, stream, job_id);
+    const validModelKey = model_key && ['auto', 'deepseek', 'openai_gpt5', 'claude'].includes(model_key)
+      ? (model_key as 'auto' | 'deepseek' | 'openai_gpt5' | 'claude')
+      : undefined;
+    return this.gwehaiService.createJob(user.id, messages, stream, conversation_id || job_id, validModelKey);
+  }
+
+  /**
+   * List current user's jobs (running first, then recent). Used by Current Pentest modal to show all jobs.
+   * GET /api/gwehai/jobs
+   */
+  @Get('jobs')
+  @UseGuards(JwtAuthGuard)
+  async listJobs(@Req() req: Request) {
+    const user = req.user as any;
+    return this.gwehaiService.listJobsForUser(user.id);
   }
 
   /**
@@ -113,10 +130,11 @@ export class GwehAIController {
     @Req() req: Request,
   ) {
     const user = req.user as any;
-    console.log(`SSE connection for job ${id} by user ${user?.sub || user?.id || 'unknown'}`);
-    const job = this.gwehaiService.getJob(id, user?.id || user?.sub);
+    const userId = user?.id || user?.sub;
+    console.log(`SSE connection for job ${id} by user ${userId || 'unknown'}`);
+    const job = this.gwehaiService.getJob(id, userId);
     const lastEventId = Number(req.headers['last-event-id'] || 0) || 0;
-    this.streamJob(res, job, lastEventId);
+    this.streamJob(res, job, lastEventId, userId);
   }
 
   /**
@@ -142,6 +160,15 @@ export class GwehAIController {
   }
 
   /**
+   * List model options for the Model Provider Selector (Auto, DeepSeek, OpenAI GPT5, Claude).
+   * GET /api/gwehai/models
+   */
+  @Get('models')
+  async listModels() {
+    return { options: getModelOptions() };
+  }
+
+  /**
    * Health check
    * GET /api/gwehai/health
    */
@@ -158,11 +185,13 @@ export class GwehAIController {
    * Stream endpoint: poll job.events and yield SSE.
    * First event: connected. Then for each new event in job.events, send event.type + event.data.
    * On 'done' or job stopped, close stream.
+   * When the client disconnects (res close), stop the job so no background AI requests continue (saves cost).
    */
   private streamJob(
     res: Response,
     job: { id: string; events: Array<{ type: string; data: any }> },
     lastEventId: number = 0,
+    userId?: string,
   ) {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -184,6 +213,8 @@ export class GwehAIController {
 
     sendEvent('connected', { stream_id: job.id });
 
+    this.gwehaiService.incrementStreamConnections(job.id);
+
     // Resume from next event after Last-Event-ID when EventSource reconnects.
     let lastSentIndex = Math.max(0, Math.floor(lastEventId));
     const POLL_MS = 50;
@@ -194,8 +225,19 @@ export class GwehAIController {
         return;
       }
 
-      const currentJob = this.gwehaiService.getJob(job.id);
-      if (currentJob?.status === 'stopped') {
+      let currentJob: { id: string; status?: string; events?: Array<{ type: string; data: any }> } | null = null;
+      try {
+        currentJob = this.gwehaiService.getJob(job.id, userId ?? undefined);
+      } catch {
+        currentJob = null;
+      }
+      if (!currentJob) {
+        clearInterval(pollInterval);
+        sendEvent('done', { job_id: job.id, message: 'Job no longer available' });
+        if (!res.writableEnded) res.end();
+        return;
+      }
+      if (currentJob.status === 'stopped') {
         clearInterval(pollInterval);
         sendEvent('status', { message: 'Stopped' });
         sendEvent('done', { job_id: job.id });
@@ -203,7 +245,7 @@ export class GwehAIController {
         return;
       }
 
-      const events = currentJob?.events ?? job.events;
+      const events = currentJob.events ?? job.events;
       for (let i = lastSentIndex; i < events.length; i++) {
         const ev = events[i];
         sendEvent(ev.type, ev.data, i + 1);
@@ -221,6 +263,10 @@ export class GwehAIController {
 
     res.on('close', () => {
       clearInterval(pollInterval);
+      // When the last client disconnects, stop the job so no background AI calls continue (saves cost).
+      this.gwehaiService.decrementStreamConnections(job.id, userId).catch((err) =>
+        console.warn(`[gwehai] decrement stream / stop on disconnect failed for job ${job.id}:`, err?.message),
+      );
     });
   }
 

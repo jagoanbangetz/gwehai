@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { execFile, exec } from 'child_process';
-import { promises as fs } from 'fs';
+import { promises as fs, existsSync, statSync } from 'fs';
 import * as path from 'path';
 import { ConversationMemory } from '../entities/conversation-memory.entity';
 import { PayloadSandboxService } from './payload-sandbox.service';
@@ -93,8 +93,7 @@ export class ToolsService {
     }
 
     if (filePath.startsWith('skills/')) {
-      const resolved = this.resolveSkillsPath(filePath);
-      const content = await this.readExistingFile(resolved, true);
+      const content = await this.readSkillContent(filePath, true);
       if (!from) return content;
       const allLines = content.split(/\r?\n/);
       const start = Math.max(0, from - 1);
@@ -371,7 +370,78 @@ export class ToolsService {
     throw new BadRequestException('Conversation memory is in the database only; use memory_get with path main, daily/YYYY-MM-DD, or daily/website/YYYY-MM-DD.');
   }
 
-  /** Resolve path under workspace/skills/ (e.g. skills/recon/SKILL.md). Read-only. */
+  /**
+   * Local directory for skills (e.g. /opt/skills). Check here first before CDN.
+   * Set PENTEST_SKILLS_LOCAL_DIR to override; default /opt/skills.
+   */
+  private getSkillsLocalDir(): string {
+    const dir = this.configService.get<string>('PENTEST_SKILLS_LOCAL_DIR');
+    if (dir && dir.trim()) return path.resolve(dir.trim());
+    return '/opt/skills';
+  }
+
+  /**
+   * Base URL for skills on CDN (e.g. https://skills.gweh.sh). No trailing slash.
+   * Same directory structure: path skills/AGENTS.md → URL {cdnBase}/skills/AGENTS.md.
+   * Default https://skills.gweh.sh when not set.
+   */
+  private getSkillsCdnBase(): string | null {
+    const base =
+      this.configService.get<string>('PENTEST_SKILLS_CDN_URL')?.trim() || 'https://skills.gweh.sh';
+    const trimmed = base.replace(/\/+$/, '');
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return null;
+    return trimmed;
+  }
+
+  /**
+   * Read skill content: check local dir (/opt/skills) first; if not found, fetch from CDN
+   * (https://skills.gweh.sh) and cache to local. Same path structure everywhere (skills/AGENTS.md, etc.).
+   */
+  private async readSkillContent(filePath: string, allowMissing: boolean): Promise<string> {
+    if (!filePath.startsWith('skills/')) {
+      throw new BadRequestException('path must start with skills/ (e.g. skills/recon/SKILL.md)');
+    }
+    const suffix = filePath.replace(/^skills\/?/, '');
+    const localDir = this.getSkillsLocalDir();
+    const localPath = path.join(localDir, suffix);
+
+    // 1) Check local /opt/skills (or PENTEST_SKILLS_LOCAL_DIR) first
+    if (existsSync(localPath) && statSync(localPath).isFile()) {
+      return this.readExistingFile(localPath, allowMissing);
+    }
+
+    // 2) Not found locally: fetch from CDN (same path: cdnBase/skills/AGENTS.md)
+    const cdnBase = this.getSkillsCdnBase();
+    if (cdnBase) {
+      const url = `${cdnBase}/${filePath}`;
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+        if (!res.ok) {
+          if (res.status === 404 && allowMissing) return '';
+          throw new NotFoundException(`Skill not found: ${filePath} (${res.status})`);
+        }
+        const content = await res.text();
+        // Cache to local so next load is from disk
+        try {
+          await fs.mkdir(path.dirname(localPath), { recursive: true });
+          await fs.writeFile(localPath, content, 'utf8');
+        } catch {
+          // ignore cache write errors (e.g. read-only fs)
+        }
+        return content;
+      } catch (err: any) {
+        if (allowMissing && (err?.name === 'NotFoundError' || err?.message?.includes('404')))
+          return '';
+        throw err;
+      }
+    }
+
+    // 3) No CDN: fallback to workspace/skills/
+    const resolved = this.resolveSkillsPath(filePath);
+    return this.readExistingFile(resolved, allowMissing);
+  }
+
+  /** Resolve path under workspace/skills/ (e.g. skills/recon/SKILL.md). Read-only. Used when CDN is not set or for add_skill (writes locally). */
   private resolveSkillsPath(filePath: string): string {
     if (!filePath.startsWith('skills/')) {
       throw new BadRequestException('path must start with skills/ (e.g. skills/recon/SKILL.md)');
@@ -415,12 +485,94 @@ export class ToolsService {
     }
   }
 
+  /**
+   * Workspace root = directory that contains the "skills" folder (e.g. backend/ when skills are in backend/skills/).
+   * In containers, set PENTEST_WORKSPACE to that directory (e.g. /app/backend) so skills load correctly.
+   */
   private getWorkspaceRoot(): string {
     const configured = this.configService.get<string>('PENTEST_WORKSPACE');
     if (configured) {
       return path.resolve(configured);
     }
-    return path.resolve(process.cwd(), 'skills');
+    const cwd = process.cwd();
+    const cwdSkills = path.join(cwd, 'skills');
+    if (existsSync(cwdSkills) && statSync(cwdSkills).isDirectory()) {
+      return cwd;
+    }
+    // Fallback when run from compiled dist/ (e.g. dist/src/tools -> backend root is 2 levels up from dist)
+    const thisDir = __dirname;
+    const candidates = [
+      path.resolve(thisDir, '..', '..'), // src/tools -> backend
+      path.resolve(thisDir, '..', '..', '..'), // dist/src/tools -> dist; dist has no skills, backend does
+      path.resolve(thisDir, '..', '..', '..', '..'), // dist/src/tools -> backend (if dist is backend/dist)
+    ];
+    for (const dir of candidates) {
+      const skillsPath = path.join(dir, 'skills');
+      if (existsSync(skillsPath) && statSync(skillsPath).isDirectory()) {
+        return dir;
+      }
+    }
+    return cwd;
+  }
+
+  /**
+   * List available skill paths. Prefer local dir (/opt/skills or PENTEST_SKILLS_LOCAL_DIR);
+   * if empty or missing, hint to use memory_get(skills/SKILLS_INDEX.md) or load by path (fetched from CDN on first use).
+   */
+  async listSkills(): Promise<{ paths: string[]; hint?: string }> {
+    const localDir = this.getSkillsLocalDir();
+    if (existsSync(localDir) && statSync(localDir).isDirectory()) {
+      const paths: string[] = [];
+      const walk = async (dir: string, relPrefix: string): Promise<void> => {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        for (const e of entries) {
+          const rel = relPrefix ? `${relPrefix}/${e.name}` : e.name;
+          if (e.isDirectory()) {
+            await walk(path.join(dir, e.name), rel);
+          } else if (e.isFile() && (e.name.endsWith('.md') || e.name.endsWith('.txt'))) {
+            paths.push(`skills/${rel}`);
+          }
+        }
+      };
+      await walk(localDir, '');
+      paths.sort();
+      return paths.length ? { paths } : { paths: [], hint: 'Local skills dir empty. Use memory_get(path: "skills/SKILLS_INDEX.md") or load by path; missing skills are downloaded from CDN (https://skills.gweh.sh) and cached to /opt/skills.' };
+    }
+    const workspace = this.getWorkspaceRoot();
+    const skillsRoot = path.resolve(workspace, 'skills');
+    if (existsSync(skillsRoot) && statSync(skillsRoot).isDirectory()) {
+      const paths: string[] = [];
+      const walk = async (dir: string, relPrefix: string): Promise<void> => {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        for (const e of entries) {
+          const rel = relPrefix ? `${relPrefix}/${e.name}` : e.name;
+          if (e.isDirectory()) {
+            await walk(path.join(dir, e.name), rel);
+          } else if (e.isFile() && (e.name.endsWith('.md') || e.name.endsWith('.txt'))) {
+            paths.push(`skills/${rel}`);
+          }
+        }
+      };
+      await walk(skillsRoot, '');
+      paths.sort();
+      return { paths };
+    }
+    return {
+      paths: [],
+      hint: 'Skills: check /opt/skills first; if missing, memory_get(path: "skills/...") downloads from CDN (https://skills.gweh.sh) and caches to /opt/skills. Use memory_get(path: "skills/SKILLS_INDEX.md") or skills/AGENTS.md for index.',
+    };
+  }
+
+  /**
+   * Download a skill by path: returns content for use or export. Path must start with skills/ (e.g. skills/recon/SKILL.md).
+   */
+  async downloadSkill(skillPath: string): Promise<{ path: string; content: string }> {
+    if (!skillPath || !String(skillPath).trim().startsWith('skills/')) {
+      throw new BadRequestException('path must start with skills/ (e.g. skills/recon/SKILL.md)');
+    }
+    const pathNorm = String(skillPath).trim();
+    const content = await this.readSkillContent(pathNorm, false);
+    return { path: pathNorm, content };
   }
 
   /**

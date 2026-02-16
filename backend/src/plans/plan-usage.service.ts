@@ -1,10 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { randomUUID } from 'crypto';
 import { PlanQuotaUsageDaily } from '../entities/plan-quota-usage-daily.entity';
 import { PlanQuotaUsageSession } from '../entities/plan-quota-usage-session.entity';
 import { getPlanDefinition } from '../config/plans.config';
 import type { PlanId } from '../config/plans.config';
+import { WORKER_SLOT_TTL_MS } from '../config/plan-billing.config';
 
 export interface UsageSummary {
   session: {
@@ -18,14 +20,58 @@ export interface UsageSummary {
   };
 }
 
+/** In-memory worker slot (shared by gwehai and pentest-jobs so limits cannot be bypassed). */
+interface WorkerSlot {
+  jobId: string;
+  expiresAt: number;
+}
+
 @Injectable()
 export class PlanUsageService {
+  /** Shared worker slots: both gwehai and pentest-jobs use this so one limit applies to all scan entry points. */
+  private readonly workerSlots = new Map<string, WorkerSlot[]>();
+
   constructor(
     @InjectRepository(PlanQuotaUsageDaily)
     private readonly dailyRepo: Repository<PlanQuotaUsageDaily>,
     @InjectRepository(PlanQuotaUsageSession)
     private readonly sessionRepo: Repository<PlanQuotaUsageSession>,
   ) {}
+
+  /** Current number of active (non-expired) scan slots for the user. */
+  getActiveWorkerCount(userId: string): number {
+    const now = Date.now();
+    let slots = this.workerSlots.get(userId) ?? [];
+    slots = slots.filter((s) => s.expiresAt > now);
+    this.workerSlots.set(userId, slots);
+    return slots.length;
+  }
+
+  /**
+   * Reserve one worker slot for a new scan. Throws if at limit.
+   * Call the returned release() when the scan ends (success or failure).
+   */
+  reserveWorkerSlot(userId: string, maxWorkers: number): { jobId: string; release: () => void } {
+    const now = Date.now();
+    let slots = this.workerSlots.get(userId) ?? [];
+    slots = slots.filter((s) => s.expiresAt > now);
+    this.workerSlots.set(userId, slots);
+    if (slots.length >= maxWorkers) {
+      throw new HttpException(
+        `Plan limit: maximum ${maxWorkers} concurrent scan(s). Wait for one to finish or upgrade.`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    const jobId = randomUUID();
+    slots = this.workerSlots.get(userId) ?? [];
+    slots.push({ jobId, expiresAt: now + WORKER_SLOT_TTL_MS });
+    this.workerSlots.set(userId, slots);
+    const release = () => {
+      const list = this.workerSlots.get(userId) ?? [];
+      this.workerSlots.set(userId, list.filter((s) => s.jobId !== jobId));
+    };
+    return { jobId, release };
+  }
 
   /** Record that a session was started today (increment sessions_started_today). */
   async recordSessionStart(userId: string): Promise<void> {

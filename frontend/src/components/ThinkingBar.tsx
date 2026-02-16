@@ -4,6 +4,8 @@ import './ThinkingBar.css'
 
 export interface ChecklistProgress {
   phase: string
+  phase_display?: string
+  current_section_display?: string | null
   checklist: Record<string, boolean>
 }
 
@@ -79,7 +81,10 @@ const ThinkingBar: React.FC<ThinkingBarProps> = ({
               {hasChecklist && (
                 <>
                   <div className="thinking-bar-terminal__section-label">CHECKLIST PROGRESS</div>
-                  <div className="thinking-bar-terminal__phase">Phase: {checklistProgress!.phase}</div>
+                  <div className="thinking-bar-terminal__phase">
+                    Phase: {checklistProgress!.phase_display ?? checklistProgress!.phase}
+                    {checklistProgress!.current_section_display ? ` • ${checklistProgress!.current_section_display}` : ''}
+                  </div>
                   <div className="thinking-bar-terminal__checklist-items">
                     {Object.entries(checklistProgress!.checklist).map(([key, done]) => (
                       <span

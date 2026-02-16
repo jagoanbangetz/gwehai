@@ -55,7 +55,8 @@ export class GwehAIClient {
   async startScan(
     message: string,
     stream: boolean = true,
-    jobId?: string
+    jobId?: string,
+    modelKey?: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude'
   ): Promise<GwehAIJobResponse> {
     const user = localStorage.getItem('scout_user');
     const token = user ? JSON.parse(user).token : null;
@@ -70,6 +71,7 @@ export class GwehAIClient {
         messages: [{ role: 'user', content: message }],
         stream: stream,
         ...(jobId && { conversation_id: jobId }), // Use conversation_id for continuation
+        ...(modelKey && { model_key: modelKey }),
       }),
     });
 
@@ -483,6 +485,24 @@ export class GwehAIClient {
     };
 
     return es;
+  }
+
+  /**
+   * List current user's jobs (running first, then recent). Used by Current Pentest modal to show all jobs.
+   */
+  async getJobs(): Promise<Array<{ job_id: string; status: string; user_message: string; conversation_id?: string; createdAt: number }>> {
+    const user = localStorage.getItem('scout_user');
+    const token = user ? JSON.parse(user).token : null;
+
+    const response = await fetch(`${this.baseUrl}/jobs`, {
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    if (!response.ok) {
+      throw new Error('Failed to list jobs');
+    }
+    return response.json();
   }
 
   /**
