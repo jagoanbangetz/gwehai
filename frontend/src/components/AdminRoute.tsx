@@ -6,7 +6,12 @@ interface AdminRouteProps {
 }
 
 const AdminRoute = ({ children }: AdminRouteProps) => {
-  const { user, isAuthenticated } = useAuth()
+  const { user, isAuthenticated, authReady } = useAuth()
+
+  // Wait for auth to hydrate from localStorage before deciding access
+  if (!authReady) {
+    return null
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />

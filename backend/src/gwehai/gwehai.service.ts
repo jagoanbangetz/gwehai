@@ -10,6 +10,7 @@ import { getPlanPayload } from '../config/plans.config';
 import type { PlanId } from '../config/plans.config';
 import { JobsEventsService } from './jobs-events.service';
 import { PentestJobsService } from '../pentest-jobs/pentest-jobs.service';
+import { normalizeLlmErrorMessage } from '../llm/provider-router.service';
 
 @Injectable()
 export class GwehAIService {
@@ -87,9 +88,13 @@ export class GwehAIService {
 
     this.jobs.set(jobId, job);
 
-    const modelKey = payload.model_key && ['auto', 'deepseek', 'openai_gpt5', 'claude'].includes(payload.model_key) ? payload.model_key : undefined;
+    // Auto = DeepSeek. Always use a model key (default 'auto') so we never hit "Model not found".
+    const modelKey: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' =
+      payload.model_key && ['auto', 'deepseek', 'openai_gpt5', 'claude'].includes(payload.model_key)
+        ? payload.model_key
+        : 'auto';
     if (modelKey) {
-      console.log('[gwehai] using model picker:', modelKey);
+      console.log('[gwehai] using model picker:', modelKey, modelKey === 'auto' ? '(DeepSeek)' : '');
     }
     // Run agent in background: LLM → append events to job.events; stream endpoint polls and yields SSE.
     this.runAgentInBackground(jobId, userId, message, conversationId, modelKey)
@@ -97,7 +102,8 @@ export class GwehAIService {
         const job = this.jobs.get(jobId);
         if (job) {
           job.status = 'failed';
-          job.error = err?.message || String(err);
+          const raw = err?.message ?? err?.response?.message ?? String(err);
+          job.error = normalizeLlmErrorMessage(raw);
           job.events.push({ type: 'error', data: { message: job.error } });
           job.events.push({ type: 'done', data: { job_id: jobId, conversation_id: job.conversationId } });
           this.chatService.setConversationRunStatus(job.conversationId || conversationId, 'error').catch(() => {});
@@ -218,7 +224,7 @@ export class GwehAIService {
       }
       this.jobsEvents.emitJobListUpdate(userId);
     } catch (err: any) {
-      const errMsg = err?.message || String(err);
+      const errMsg = err?.message ?? err?.response?.message ?? String(err);
       const isContextLength =
         /maximum context length|context length|requested.*tokens|reduce the length of the messages|conversation is too long/i.test(errMsg);
       const isAborted =
@@ -227,8 +233,8 @@ export class GwehAIService {
         ? 'Conversation is too long for the model. Please start a new chat or ask a shorter question.'
         : isAborted
           ? 'Request was cancelled before completion. Please run again.'
-          : errMsg;
-      pushEvent({ type: 'status', data: { message: `Error: ${friendlyMessage}` } });
+          : normalizeLlmErrorMessage(errMsg);
+      pushEvent({ type: 'status', data: { message: 'An error occurred.' } });
       pushEvent({
         type: 'error',
         data: {

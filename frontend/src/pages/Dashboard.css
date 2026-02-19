@@ -3019,6 +3019,41 @@
   white-space: nowrap;
 }
 
+.report-domain-header-row {
+  background: oklch(0.14 0 0 / 0.8);
+  border-top: 1px solid oklch(0.25 0 0 / 0.5);
+}
+
+.report-domain-header-row:first-child {
+  border-top: none;
+}
+
+.report-table .report-domain-header {
+  padding: 0.6rem 1rem;
+  font-weight: 600;
+  color: oklch(0.9 0 0);
+  vertical-align: middle;
+}
+
+.report-domain-header-label {
+  display: inline-block;
+  margin-right: 0.75rem;
+}
+
+.report-domain-header-meta {
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: oklch(0.65 0 0);
+}
+
+.report-table .report-domain-sub {
+  width: 1px;
+  padding-left: 1.5rem;
+  border-left: 2px solid oklch(0.35 0.12 250 / 0.5);
+  color: transparent;
+  user-select: none;
+}
+
 .report-detail-btn {
   padding: 0.4rem 0.85rem;
   font-size: 0.85rem;
@@ -3676,6 +3711,43 @@
   display: block;
 }
 
+.current-pentest-conversation-id {
+  font-size: 12px;
+  color: oklch(0.7 0 0);
+  font-family: ui-monospace, monospace;
+}
+
+.current-pentest-checklist-wrap .current-pentest-label {
+  margin-bottom: 0.35rem;
+}
+
+.current-pentest-checklist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  font-size: 12px;
+  color: oklch(0.8 0 0);
+}
+
+.current-pentest-checklist-item {
+  white-space: nowrap;
+}
+
+.current-pentest-last-action-wrap {
+  align-items: flex-start;
+}
+
+.current-pentest-last-action-wrap .current-pentest-label {
+  flex-shrink: 0;
+}
+
+.current-pentest-last-action {
+  font-size: 13px;
+  color: oklch(0.8 0 0);
+  line-height: 1.4;
+  display: block;
+}
+
 .current-pentest-actions {
   margin-top: 1rem;
   display: flex;
@@ -3742,6 +3814,19 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.plan-detail-item.plan-limits-explainer {
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.plan-limits-explainer .detail-value {
+  font-weight: 400;
+  font-family: inherit;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  max-width: 100%;
 }
 
 .detail-label {

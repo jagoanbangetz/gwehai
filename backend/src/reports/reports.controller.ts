@@ -9,19 +9,35 @@ import { ReportStatus } from '../entities/report.entity';
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
-  /** List reports: flat (groupBy=parent) or tree (format=tree with agents as children). */
+  /** List reports grouped by unique (domain, date). No parent/child. */
   @Get()
-  async listReports(@Req() req: Request, @Query('groupBy') groupBy?: string, @Query('format') format?: string) {
+  async listReports(@Req() req: Request) {
     const user = req.user as any;
-    if (format === 'tree') {
-      return this.reportsService.listReportsTree(user.id);
-    }
-    return this.reportsService.listGroupedByConversation(user.id, {
-      groupByParent: groupBy === 'parent',
-    });
+    return this.reportsService.listGroupedByDomainAndDate(user.id);
   }
 
-  /** List all findings for one conversation (for "Detail" on a report row). */
+  /** List all findings for a domain + date group (optional conversationId for unique row). */
+  @Get('by-domain-date')
+  async listFindingsByDomainAndDate(
+    @Req() req: Request,
+    @Query('domain') domain: string,
+    @Query('date') date: string,
+    @Query('conversationId') conversationId?: string,
+  ) {
+    const user = req.user as any;
+    if (!domain?.trim() || !date?.trim()) {
+      return [];
+    }
+    const convId = conversationId?.trim() || undefined;
+    return this.reportsService.listFindingsByDomainAndDate(
+      user.id,
+      decodeURIComponent(domain.trim()),
+      date.trim(),
+      convId,
+    );
+  }
+
+  /** List all findings for one conversation (legacy). */
   @Get('by-conversation/:conversationId')
   async listFindingsByConversation(
     @Req() req: Request,
@@ -29,16 +45,6 @@ export class ReportsController {
   ) {
     const user = req.user as any;
     return this.reportsService.listFindingsByConversation(user.id, conversationId);
-  }
-
-  /** List all findings for a run (main + sub-agent conversations). Use when list was loaded with groupBy=parent. */
-  @Get('by-run/:rootConversationId')
-  async listFindingsByRun(
-    @Req() req: Request,
-    @Param('rootConversationId') rootConversationId: string,
-  ) {
-    const user = req.user as any;
-    return this.reportsService.listFindingsByRun(user.id, rootConversationId);
   }
 
   @Get(':id')

@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Repository } from 'typeorm';
 import { Report, ReportStatus } from '../../src/entities/report.entity';
+import { PentestJob } from '../../src/entities/pentest-job.entity';
 import { ReportsService } from '../../src/reports/reports.service';
 
 describe('ReportsService', () => {
@@ -15,6 +16,10 @@ describe('ReportsService', () => {
     create: jest.fn(),
     save: jest.fn(),
     createQueryBuilder: jest.fn(),
+  };
+
+  const mockPentestJobRepo = {
+    find: jest.fn(),
   };
 
   const mockQueryBuilder: any = {
@@ -40,6 +45,7 @@ describe('ReportsService', () => {
     mockQueryBuilder.addGroupBy.mockReturnValue(mockQueryBuilder);
     mockQueryBuilder.orderBy.mockReturnValue(mockQueryBuilder);
     mockReportRepo.createQueryBuilder.mockReturnValue(mockQueryBuilder);
+    mockPentestJobRepo.find.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -47,6 +53,10 @@ describe('ReportsService', () => {
         {
           provide: getRepositoryToken(Report),
           useValue: mockReportRepo,
+        },
+        {
+          provide: getRepositoryToken(PentestJob),
+          useValue: mockPentestJobRepo,
         },
       ],
     }).compile();
@@ -167,6 +177,115 @@ describe('ReportsService', () => {
           status: ReportStatus.COMPLETED,
         }),
       );
+    });
+  });
+
+  describe('listGroupedByDomainAndDate', () => {
+    it('returns one row per (domain, conversationId, date) with findingsCount, firstAt, lastAt', async () => {
+      const reports = [
+        {
+          id: 'r1',
+          target: 'https://example.com/page',
+          createdAt: new Date('2026-02-17T10:00:00.000Z'),
+          conversationId: 'c1',
+        },
+        {
+          id: 'r2',
+          target: 'https://example.com/other',
+          createdAt: new Date('2026-02-17T12:00:00.000Z'),
+          conversationId: 'c1',
+        },
+      ];
+      mockReportRepo.find.mockResolvedValue(reports);
+
+      const result = await service.listGroupedByDomainAndDate('u1');
+
+      expect(mockReportRepo.find).toHaveBeenCalledWith({
+        where: { userId: 'u1', status: ReportStatus.COMPLETED },
+        order: { createdAt: 'DESC' },
+        select: ['id', 'target', 'createdAt', 'conversationId'],
+      });
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        domain: 'example.com',
+        date: '2026-02-17',
+        conversationId: 'c1',
+        findingsCount: 2,
+      });
+      expect(result[0].firstAt).toBe('2026-02-17T10:00:00.000Z');
+      expect(result[0].lastAt).toBe('2026-02-17T12:00:00.000Z');
+      expect(result[0].createdAt).toBeDefined();
+    });
+
+    it('returns separate rows for different conversationId on same domain and date', async () => {
+      const reports = [
+        { id: 'r1', target: 'https://example.com', createdAt: new Date('2026-02-17T10:00:00.000Z'), conversationId: 'c1' },
+        { id: 'r2', target: 'https://example.com', createdAt: new Date('2026-02-17T11:00:00.000Z'), conversationId: 'c2' },
+      ];
+      mockReportRepo.find.mockResolvedValue(reports);
+
+      const result = await service.listGroupedByDomainAndDate('u1');
+
+      expect(result).toHaveLength(2);
+      expect(result.map((r) => ({ domain: r.domain, date: r.date, conversationId: r.conversationId, findingsCount: r.findingsCount }))).toEqual([
+        { domain: 'example.com', date: '2026-02-17', conversationId: 'c2', findingsCount: 1 },
+        { domain: 'example.com', date: '2026-02-17', conversationId: 'c1', findingsCount: 1 },
+      ]);
+    });
+
+    it('uses "—" for domain when target is null', async () => {
+      mockReportRepo.find.mockResolvedValue([
+        { id: 'r1', target: null, createdAt: new Date('2026-02-17T10:00:00.000Z'), conversationId: 'c1' },
+      ]);
+
+      const result = await service.listGroupedByDomainAndDate('u1');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].domain).toBe('—');
+      expect(result[0].date).toBe('2026-02-17');
+      expect(result[0].conversationId).toBe('c1');
+    });
+  });
+
+  describe('listFindingsByDomainAndDate', () => {
+    it('returns completed findings for domain and date', async () => {
+      const reports = [
+        { id: 'f1', target: 'https://example.com', conversationId: 'c1', createdAt: new Date('2026-02-17T10:00:00.000Z'), status: ReportStatus.COMPLETED },
+        { id: 'f2', target: 'https://example.com/path', conversationId: 'c1', createdAt: new Date('2026-02-17T11:00:00.000Z'), status: ReportStatus.COMPLETED },
+      ];
+      mockReportRepo.find.mockResolvedValue(reports);
+
+      const result = await service.listFindingsByDomainAndDate('u1', 'example.com', '2026-02-17');
+
+      expect(mockReportRepo.find).toHaveBeenCalledWith({
+        where: { userId: 'u1', status: ReportStatus.COMPLETED },
+        order: { createdAt: 'DESC' },
+      });
+      expect(result).toHaveLength(2);
+      expect(result[0].id).toBe('f1');
+      expect(result[1].id).toBe('f2');
+    });
+
+    it('filters by conversationId when provided', async () => {
+      const reports = [
+        { id: 'f1', target: 'https://example.com', conversationId: 'c1', createdAt: new Date('2026-02-17T10:00:00.000Z'), status: ReportStatus.COMPLETED },
+        { id: 'f2', target: 'https://example.com', conversationId: 'c2', createdAt: new Date('2026-02-17T11:00:00.000Z'), status: ReportStatus.COMPLETED },
+      ];
+      mockReportRepo.find.mockResolvedValue(reports);
+
+      const result = await service.listFindingsByDomainAndDate('u1', 'example.com', '2026-02-17', 'c1');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('f1');
+      expect(result[0].conversationId).toBe('c1');
+    });
+
+    it('returns empty array when no reports match', async () => {
+      mockReportRepo.find.mockResolvedValue([]);
+
+      const result = await service.listFindingsByDomainAndDate('u1', 'other.com', '2026-02-17');
+
+      expect(result).toEqual([]);
     });
   });
 

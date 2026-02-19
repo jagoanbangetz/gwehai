@@ -9,7 +9,7 @@ Use this skill when you have **identified a potential vulnerability** (e.g. from
 
 ## Before Running
 
-1. **Scope** — The target and URL must be in SCOPE.md. No verification against out-of-scope assets.
+1. **Scope** — The target and URL must be in scope (Pentest State allowed_hosts/allowed_urls and user-provided target). SCOPE.md is optional; if you call memory_get(path: "SCOPE.md") and get empty content, use Pentest State and user target. No verification against out-of-scope assets.
 2. **Allowlist** — Only use **exec** with allowlisted tools. **For SQLi:** use **sqlmap** (e.g. `sqlmap -u "URL" --level=1 --risk=1 --batch`), not only curl with a single quote. For XSS you may use curl with a single test payload. Do not run raw exploit code from the model.
 3. **Memory** — Use **memory_search** / **memory_get** for prior findings on this target so you don’t re-verify the same issue.
 

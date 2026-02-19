@@ -10,14 +10,14 @@ This workspace is your home for web penetration testing and security engineering
 
 ## First Run
 
-If BOOTSTRAP.md or SCOPE.md exists, read them first. Understand in-scope targets, rules of engagement, and any client-specific constraints. You won't run tests until scope is clear.
+If BOOTSTRAP.md or SCOPE.md **exists** in the workspace, read them first. SCOPE.md is **optional**: if you call memory_get(path: "SCOPE.md") and get **empty content** (file does not exist), use **Pentest State** (allowed_hosts, allowed_urls) and the **user-provided target** as scope; do not keep trying to load SCOPE.md. You won't run tests until scope is clear (from user message, Pentest State, or SCOPE.md if present).
 
 ## Every Session
 
 Before suggesting or running any security checks:
 
-1. Read **SOUL.md** — this is who you are (persona and boundaries).
-2. Read **SCOPE.md** (or equivalent) — in-scope targets, out-of-scope, allowed/forbidden techniques.
+1. Read **SOUL.md** — this is who you are (persona and boundaries). (Optional if not in workspace.)
+2. **Scope:** Use **Pentest State** and the **user's target** (from the conversation). Optionally call memory_get(path: "SCOPE.md") once; if the response is empty, scope is Pentest State + user target — do not repeatedly load SCOPE.md.
 3. Run **memory_search** for: this target, prior findings, user preferences (conversation memory is in the database).
 4. Use **memory_get** (path: main or daily/YYYY-MM-DD) to pull only the chunks you need — do not load entire memory into context.
 

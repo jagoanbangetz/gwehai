@@ -7,6 +7,42 @@
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api';
 const GWEHAI_API_BASE = `${API_BASE}/gwehai`;
 
+const TOOL_USE_FAILED_MESSAGE =
+  'The model returned an invalid response. Try again or use a different model (e.g. DeepSeek or Claude) for this task.';
+
+/** Normalize error event payload so we never show raw Groq/API JSON to the user. */
+function normalizeSseErrorMessage(eventData: unknown): string {
+  if (eventData == null) return 'An error occurred. Please try again.';
+  if (typeof eventData === 'string') {
+    const s = eventData.trim();
+    if (!s) return TOOL_USE_FAILED_MESSAGE;
+    if (/failed to call a function|tool_use_failed|failed_generation/i.test(s)) return TOOL_USE_FAILED_MESSAGE;
+    try {
+      const j = JSON.parse(s);
+      const msg = j?.error?.message ?? j?.message;
+      if (typeof msg === 'string' && /failed to call a function|tool_use_failed/i.test(msg)) return TOOL_USE_FAILED_MESSAGE;
+      return typeof msg === 'string' ? msg : s;
+    } catch {
+      return s.slice(0, 500);
+    }
+  }
+  if (typeof eventData === 'object' && eventData !== null) {
+    const o = eventData as Record<string, unknown>;
+    const msg = (o.message as string) ?? (o.error as Record<string, unknown>)?.message;
+    if (typeof msg === 'string') {
+      if (/failed to call a function|tool_use_failed|failed_generation/i.test(msg)) return TOOL_USE_FAILED_MESSAGE;
+      return msg;
+    }
+    const err = o.error;
+    if (err && typeof err === 'object' && typeof (err as Record<string, unknown>).message === 'string') {
+      const m = (err as Record<string, unknown>).message as string;
+      if (/failed to call a function|tool_use_failed/i.test(m)) return TOOL_USE_FAILED_MESSAGE;
+      return m;
+    }
+  }
+  return TOOL_USE_FAILED_MESSAGE;
+}
+
 export interface GwehAIEvent {
   type: string;
   data: {
@@ -71,7 +107,7 @@ export class GwehAIClient {
         messages: [{ role: 'user', content: message }],
         stream: stream,
         ...(jobId && { conversation_id: jobId }), // Use conversation_id for continuation
-        ...(modelKey && { model_key: modelKey }),
+        model_key: modelKey ?? 'auto', // Auto = DeepSeek; always send so backend never returns "Model not found"
       }),
     });
 
@@ -271,7 +307,8 @@ export class GwehAIClient {
           } else if (eventType === 'done') {
             console.log('[GwehAI] SSE event: done', eventData?.job_id ?? eventData);
           } else if (eventType === 'error') {
-            console.log('[GwehAI] SSE event: error', eventData?.message ?? eventData?.error ?? eventData);
+            const errMsg = normalizeSseErrorMessage(eventData);
+            console.log('[GwehAI] SSE event: error', errMsg);
           } else {
             console.log('[GwehAI] SSE event:', eventType, eventData);
           }
@@ -386,8 +423,18 @@ export class GwehAIClient {
               type: 'tool_end', 
               data: eventData
             });
+          } else if (eventType === 'error') {
+            // Normalize so UI never shows raw Groq/API error object; omit undefined fields
+            const message = normalizeSseErrorMessage(eventData);
+            const data: Record<string, unknown> = { message };
+            if (eventData && typeof eventData === 'object') {
+              if (eventData.agent_index != null) data.agent_index = eventData.agent_index;
+              if (eventData.agent_label != null) data.agent_label = eventData.agent_label;
+              if (eventData.error_code != null) data.error_code = eventData.error_code;
+            }
+            onEvent({ type: 'error', data });
           } else {
-            // Other event types (thinking, tool, result, error, connected, message_id)
+            // Other event types (thinking, tool, result, connected, message_id)
             onEvent({ 
               type: eventType, 
               data: typeof eventData === 'object' ? eventData : { message: eventData } 

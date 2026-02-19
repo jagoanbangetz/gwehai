@@ -3,12 +3,15 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Report, ReportStatus } from '../entities/report.entity';
 import { Conversation } from '../entities/conversation.entity';
+import { PentestJob } from '../entities/pentest-job.entity';
 
 @Injectable()
 export class ReportsService {
   constructor(
     @InjectRepository(Report)
     private readonly reportRepo: Repository<Report>,
+    @InjectRepository(PentestJob)
+    private readonly pentestJobRepo: Repository<PentestJob>,
   ) {}
 
   async listReportsForUser(userId: string) {
@@ -65,6 +68,118 @@ export class ReportsService {
     } catch {
       return t;
     }
+  }
+
+  /** Extract domain (hostname) from target URL for grouping. e.g. https://example.com/path -> example.com */
+  private extractDomain(target: string | null | undefined): string {
+    if (!target || !target.trim()) return '—';
+    const t = target.trim();
+    try {
+      const u = new URL(t.startsWith('http') ? t : `https://${t}`);
+      return u.hostname || '—';
+    } catch {
+      return t;
+    }
+  }
+
+  /**
+   * List reports grouped by unique (domain, conversationId, date). One row per domain + conversation + date.
+   * date is YYYY-MM-DD from createdAt. Returns conversationId so the UI can show it as unique identifier.
+   */
+  async listGroupedByDomainAndDate(
+    userId: string,
+  ): Promise<
+    { domain: string; date: string; conversationId: string | null; findingsCount: number; createdAt: string; firstAt: string; lastAt: string }[]
+  > {
+    const reports = await this.reportRepo.find({
+      where: { userId, status: ReportStatus.COMPLETED },
+      order: { createdAt: 'DESC' },
+      select: ['id', 'target', 'createdAt', 'conversationId'],
+    });
+    const sep = '|';
+    const map = new Map<string, { count: number; firstAt: Date; lastAt: Date; conversationId: string | null }>();
+    for (const r of reports) {
+      const domain = this.extractDomain(r.target);
+      const convId = r.conversationId ?? null;
+      const d = r.createdAt;
+      const date = d ? `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}` : '—';
+      const key = [domain, convId ?? '—', date].join(sep);
+      const existing = map.get(key);
+      if (!existing) {
+        map.set(key, { count: 1, firstAt: d, lastAt: d, conversationId: convId });
+      } else {
+        existing.count += 1;
+        if (d < existing.firstAt) existing.firstAt = d;
+        if (d > existing.lastAt) existing.lastAt = d;
+      }
+    }
+    let result = Array.from(map.entries())
+      .map(([key, v]) => {
+        const parts = key.split(sep);
+        const domain = parts[0] ?? '—';
+        const conversationId = parts[1] === '—' ? null : (parts[1] ?? null);
+        const date = parts[2] ?? '—';
+        return {
+          domain: domain || '—',
+          date: date || '—',
+          conversationId,
+          findingsCount: v.count,
+          createdAt: v.lastAt.toISOString(),
+          firstAt: v.firstAt.toISOString(),
+          lastAt: v.lastAt.toISOString(),
+        };
+      })
+      .sort((a, b) => (b.createdAt > a.createdAt ? 1 : -1));
+
+    // When domain is "—" (report target was null), try to derive from pentest job for this conversation
+    const convIdsNeedingDomain = [...new Set(result.filter((r) => (r.domain === '—' || !r.domain) && r.conversationId).map((r) => r.conversationId!))];
+    if (convIdsNeedingDomain.length > 0) {
+      const jobs = await this.pentestJobRepo.find({
+        where: { userId, conversationId: In(convIdsNeedingDomain) },
+        select: ['conversationId', 'targetBaseUrl'],
+      });
+      const convToDomain = new Map<string, string>();
+      for (const j of jobs) {
+        if (j.conversationId && j.targetBaseUrl) {
+          const d = this.extractDomain(j.targetBaseUrl);
+          if (d !== '—') convToDomain.set(j.conversationId, d);
+        }
+      }
+      result = result.map((r) => {
+        if ((r.domain === '—' || !r.domain) && r.conversationId) {
+          const derived = convToDomain.get(r.conversationId);
+          if (derived) return { ...r, domain: derived };
+        }
+        return r;
+      });
+    }
+
+    return result;
+  }
+
+  /** List all findings for a given domain + date group; optionally filter by conversationId. */
+  async listFindingsByDomainAndDate(
+    userId: string,
+    domain: string,
+    date: string,
+    conversationId?: string | null,
+  ): Promise<Report[]> {
+    const reports = await this.reportRepo.find({
+      where: { userId, status: ReportStatus.COMPLETED },
+      order: { createdAt: 'DESC' },
+    });
+    const dateNorm = date.trim();
+    const convNorm = conversationId?.trim() || null;
+    return reports.filter((r) => {
+      const d = this.extractDomain(r.target);
+      const rDate = r.createdAt
+        ? `${r.createdAt.getUTCFullYear()}-${String(r.createdAt.getUTCMonth() + 1).padStart(2, '0')}-${String(r.createdAt.getUTCDate()).padStart(2, '0')}`
+        : '—';
+      const domainMatch = (domain === '—' && (d === '—' || !d)) || d === domain;
+      const dateMatch = rDate === dateNorm;
+      const convMatch = convNorm == null || (r.conversationId === convNorm);
+      return domainMatch && dateMatch && convMatch;
+    });
   }
 
   /** Save a bug/finding from the pentest agent into the reports table (user_id, conversation_id, detail, poc). Dedup: by (conversationId, detail, target, poc) and by finding_key when provided. */

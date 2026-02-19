@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Observable, Subject } from 'rxjs';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Hacktivity } from '../entities/hacktivity.entity';
@@ -19,6 +20,12 @@ export interface HacktivityConversationRow {
 
 @Injectable()
 export class HacktivityService {
+  /**
+   * Stream of new hacktivity rows for admin SSE/WebSocket consumers.
+   * Emits every time create() saves a new entry.
+   */
+  private readonly adminStreamSubject = new Subject<Hacktivity>();
+
   constructor(
     @InjectRepository(Hacktivity)
     private readonly hacktivityRepo: Repository<Hacktivity>,
@@ -49,7 +56,14 @@ export class HacktivityService {
       result,
       toolArgs: data.toolArgs ?? null,
     });
-    return this.hacktivityRepo.save(row);
+    const saved = await this.hacktivityRepo.save(row);
+    // Emit for admin stream (non-blocking; errors should not break writes)
+    try {
+      this.adminStreamSubject.next(saved);
+    } catch {
+      // ignore stream errors
+    }
+    return saved;
   }
 
   /**
@@ -113,5 +127,32 @@ export class HacktivityService {
       throw new NotFoundException('Activity not found');
     }
     return row;
+  }
+
+  /**
+   * Admin-level stream: emits every new Hacktivity row as it is created.
+   * Used by /admin/hacktivity/stream SSE so admin UI can update in realtime.
+   */
+  getAdminStream(): Observable<{ data: any }> {
+    return this.adminStreamSubject.asObservable().pipe((source) =>
+      new Observable<{ data: any }>((subscriber) =>
+        source.subscribe({
+          next: (row) =>
+            subscriber.next({
+              data: {
+                id: row.id,
+                userId: row.userId,
+                conversationId: row.conversationId,
+                domain: row.domain,
+                result: row.result,
+                toolArgs: row.toolArgs,
+                createdAt: row.createdAt,
+              },
+            }),
+          error: (err) => subscriber.error(err),
+          complete: () => subscriber.complete(),
+        }),
+      ),
+    );
   }
 }

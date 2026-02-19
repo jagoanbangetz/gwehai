@@ -112,7 +112,7 @@ export class OpenAICompatibleProvider implements LlmProvider {
     model: Model,
     messages: LlmMessage[],
     tools: LlmToolDef[],
-    options?: { tool_choice?: 'auto' | 'required' | 'none' },
+    options?: { tool_choice?: 'auto' | 'required' | 'none'; max_tokens?: number },
   ): Promise<LlmResponse> {
     const metadata = model?.metadata || {};
     const apiBase = this.getApiBase(model, metadata);
@@ -173,6 +173,9 @@ export class OpenAICompatibleProvider implements LlmProvider {
       payload.tool_choice = 'required';
     } else if (options?.tool_choice === 'none') {
       payload.tool_choice = 'none';
+    }
+    if (options?.max_tokens != null && options.max_tokens > 0) {
+      payload.max_tokens = options.max_tokens;
     }
 
     console.log('[LLM API] request (tools)', {

@@ -27,6 +27,6 @@ import { PentestJobsModule } from '../pentest-jobs/pentest-jobs.module';
   ],
   controllers: [GwehAIController],
   providers: [GwehAIService, GwehAISSEGuard, JobsEventsService, JobsGateway],
-  exports: [GwehAIService, JobsEventsService],
+  exports: [GwehAIService, JobsEventsService, GwehAISSEGuard],
 })
 export class GwehAIModule {}

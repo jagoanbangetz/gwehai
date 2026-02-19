@@ -1,12 +1,12 @@
-import { Controller, Get, Post, Body, Query, Param, UseGuards, Req, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Query, Param, UseGuards, Req, HttpException, HttpStatus, Sse } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { User, UserRole } from '../entities/user.entity';
 import { Model } from '../entities/model.entity';
-import { CreditOrder } from '../entities/credit-order.entity';
+import { CreditOrder, CreditOrderStatus } from '../entities/credit-order.entity';
 import { Report } from '../entities/report.entity';
 import { UsageEvent } from '../entities/usage-event.entity';
 import { Message } from '../entities/message.entity';
@@ -15,11 +15,27 @@ import { MessageFile } from '../entities/message-file.entity';
 import { Conversation } from '../entities/conversation.entity';
 import { ConversationMemory } from '../entities/conversation-memory.entity';
 import { Hacktivity } from '../entities/hacktivity.entity';
+import { AdminSetting } from '../entities/admin-setting.entity';
+import { AbuseEvent } from '../entities/abuse-event.entity';
 import { Request } from 'express';
 import { AdminService } from './admin.service';
 import { GwehAIService } from '../gwehai/gwehai.service';
+import { HacktivityService } from '../hacktivity/hacktivity.service';
+import { GwehAISSEGuard } from '../gwehai/gwehai-sse.guard';
+import { PlanUsageService } from '../plans/plan-usage.service';
+import { getPlanDefinition, type PlanId } from '../config/plans.config';
+import { Observable } from 'rxjs';
+import { MailService } from '../mail/mail.service';
+import * as bcrypt from 'bcrypt';
 
 const WIPE_CONFIRM_PHRASE = 'WIPE_ALL_DATA';
+const PLAN_IDS: PlanId[] = ['FREE', 'PRO', 'PRO_PLUS', 'ULTRA'];
+const POINTS_TO_USD = 0.0001;
+const POLICY_KEYS = [
+  'blockLocalhost', 'blockRfc1918Ip', 'blockMetadataEndpoints', 'blockRepeatedTargetScanning',
+  'enforcePerPlanToolRestrictions', 'strictExploitModeProOnly',
+  'maxParallelJobsPerPlan', 'maxSubAgentsPerPlan', 'maxToolCallsPerJob', 'maxStepsPerConversation',
+];
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -48,8 +64,15 @@ export class AdminController {
     private readonly memoryRepo: Repository<ConversationMemory>,
     @InjectRepository(Hacktivity)
     private readonly hacktivityRepo: Repository<Hacktivity>,
+    @InjectRepository(AdminSetting)
+    private readonly settingsRepo: Repository<AdminSetting>,
+    @InjectRepository(AbuseEvent)
+    private readonly abuseRepo: Repository<AbuseEvent>,
     private readonly adminService: AdminService,
     private readonly gwehaiService: GwehAIService,
+    private readonly hacktivityService: HacktivityService,
+    private readonly planUsageService: PlanUsageService,
+    private readonly mailService: MailService,
   ) {}
 
   @Get('dashboard')
@@ -94,6 +117,61 @@ export class AdminController {
     };
   }
 
+  @Get('dashboard/chart')
+  async getDashboardChart(@Query('days') days?: string) {
+    const numDays = Math.min(31, Math.max(7, parseInt(days || '14', 10) || 14));
+    const start = new Date();
+    start.setDate(start.getDate() - numDays);
+    start.setHours(0, 0, 0, 0);
+
+    const dateSeries: string[] = [];
+    for (let i = 0; i < numDays; i++) {
+      const d = new Date(start);
+      d.setDate(d.getDate() + i);
+      dateSeries.push(d.toISOString().slice(0, 10));
+    }
+
+    const [userRows, convRows, activityRows] = await Promise.all([
+      this.userRepo
+        .createQueryBuilder('u')
+        .select('(u."createdAt")::date', 'date')
+        .addSelect('COUNT(*)', 'count')
+        .where('u."createdAt" >= :start', { start: start.toISOString() })
+        .groupBy('(u."createdAt")::date')
+        .getRawMany<{ date: string; count: string }>(),
+      this.conversationRepo
+        .createQueryBuilder('c')
+        .select('(c."createdAt")::date', 'date')
+        .addSelect('COUNT(*)', 'count')
+        .where('c."createdAt" >= :start', { start: start.toISOString() })
+        .groupBy('(c."createdAt")::date')
+        .getRawMany<{ date: string; count: string }>(),
+      this.usageRepo
+        .createQueryBuilder('e')
+        .select('(e."createdAt")::date', 'date')
+        .addSelect('COUNT(*)', 'count')
+        .where('e."createdAt" >= :start', { start: start.toISOString() })
+        .groupBy('(e."createdAt")::date')
+        .getRawMany<{ date: string; count: string }>(),
+    ]);
+
+    const mapByDate = (rows: { date: string | Date; count: string }[]) =>
+      new Map(rows.map((r) => [String(r.date).slice(0, 10), parseInt(r.count, 10)]));
+
+    const usersByDate = mapByDate(userRows);
+    const convByDate = mapByDate(convRows);
+    const activityByDate = mapByDate(activityRows);
+
+    return {
+      labels: dateSeries,
+      datasets: [
+        { label: 'New users', data: dateSeries.map((d) => usersByDate.get(d) ?? 0) },
+        { label: 'Conversations', data: dateSeries.map((d) => convByDate.get(d) ?? 0) },
+        { label: 'Activity (usage)', data: dateSeries.map((d) => activityByDate.get(d) ?? 0) },
+      ],
+    };
+  }
+
   @Get('users')
   async listUsers(@Query('role') role?: string, @Query('search') search?: string, @Query('limit') limit?: string) {
     const take = Math.min(500, Math.max(1, parseInt(limit || '100', 10) || 100));
@@ -107,6 +185,56 @@ export class AdminController {
       qb.andWhere('(u.email ILIKE :search OR u.name ILIKE :search)', { search: `%${search.trim()}%` });
     }
     return qb.getMany();
+  }
+
+  @Patch('users/:id/plan')
+  async setUserPlan(
+    @Param('id') userId: string,
+    @Body() body: { planId?: string },
+    @Req() req: Request,
+  ) {
+    const adminUser = req.user as { id: string };
+    const ip = this.adminService.getClientIp(req);
+    const planId = (body.planId ?? '').toUpperCase();
+    if (!PLAN_IDS.includes(planId as PlanId)) {
+      throw new HttpException('Invalid planId. Use one of: FREE, PRO, PRO_PLUS, ULTRA', HttpStatus.BAD_REQUEST);
+    }
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+    user.planId = planId as PlanId;
+    await this.userRepo.save(user);
+    await this.adminService.log(adminUser.id, 'user_plan_change', {
+      resource: userId,
+      details: JSON.stringify({ planId: user.planId, email: user.email }),
+      ipAddress: ip,
+    });
+    return { ok: true, planId: user.planId };
+  }
+
+  @Patch('users/:id/reset-password')
+  async resetUserPassword(
+    @Param('id') userId: string,
+    @Body() body: { newPassword?: string },
+    @Req() req: Request,
+  ) {
+    const adminUser = req.user as { id: string };
+    const ip = this.adminService.getClientIp(req);
+    if (!body.newPassword || typeof body.newPassword !== 'string') {
+      throw new HttpException('newPassword is required (min 8 characters)', HttpStatus.BAD_REQUEST);
+    }
+    if (body.newPassword.length < 8) {
+      throw new HttpException('Password must be at least 8 characters', HttpStatus.BAD_REQUEST);
+    }
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+    user.password_hash = await bcrypt.hash(body.newPassword, 10);
+    await this.userRepo.save(user);
+    await this.adminService.log(adminUser.id, 'user_password_reset', {
+      resource: userId,
+      details: JSON.stringify({ email: user.email }),
+      ipAddress: ip,
+    });
+    return { ok: true };
   }
 
   @Get('conversations')
@@ -152,6 +280,36 @@ export class AdminController {
     };
   }
 
+  @Get('conversations/:id')
+  async getConversationById(@Param('id') id: string) {
+    const conv = await this.conversationRepo.findOne({
+      where: { id },
+      relations: ['user', 'messages', 'messages.parts'],
+    });
+    if (!conv) throw new HttpException('Conversation not found', HttpStatus.NOT_FOUND);
+    const sortedMessages = (conv.messages || []).sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+    return {
+      id: conv.id,
+      userId: conv.userId,
+      title: conv.title,
+      modelId: conv.modelId,
+      runStatus: conv.runStatus,
+      pentestJobId: conv.pentestJobId,
+      createdAt: conv.createdAt,
+      updatedAt: conv.updatedAt,
+      user: conv.user ? { id: conv.user.id, email: conv.user.email } : undefined,
+      messages: sortedMessages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        createdAt: m.createdAt,
+        parts: (m.parts || []).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((p) => ({ type: p.type, content: p.content, order: p.order })),
+      })),
+    };
+  }
+
   @Get('jobs/active')
   async getActiveJobs() {
     return this.gwehaiService.getActiveJobsForAdmin();
@@ -176,6 +334,17 @@ export class AdminController {
     if (conversationId) qb.andWhere('h.conversationId = :conversationId', { conversationId });
     const [items, total] = await qb.getManyAndCount();
     return { items, total };
+  }
+
+  /**
+   * Realtime admin hacktivity stream (SSE).
+   * GET /api/admin/hacktivity/stream?token=<JWT>
+   * Uses the same SSE guard/token pattern as gwehai job events.
+   */
+  @Sse('hacktivity/stream')
+  @UseGuards(GwehAISSEGuard)
+  hacktivityStream(): Observable<{ data: any }> {
+    return this.hacktivityService.getAdminStream();
   }
 
   @Get('usage-summary')
@@ -297,8 +466,53 @@ export class AdminController {
       order: { createdAt: 'DESC' },
       skip,
       take,
+      relations: ['user'],
     });
-    return { items, total };
+    return {
+      items: items.map((r) => ({
+        id: r.id,
+        userId: r.userId,
+        user: r.user ? { id: r.user.id, email: r.user.email } : undefined,
+        conversationId: r.conversationId,
+        target: r.target,
+        status: r.status,
+        detail: r.detail,
+        poc: r.poc,
+        fileUrl: r.fileUrl,
+        metadata: r.metadata,
+        startedAt: r.startedAt,
+        finishedAt: r.finishedAt,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+      })),
+      total,
+    };
+  }
+
+  @Get('reports/:id')
+  async getReportById(@Param('id') id: string) {
+    const report = await this.reportRepo.findOne({
+      where: { id },
+      relations: ['user'],
+    });
+    if (!report) throw new HttpException('Report not found', HttpStatus.NOT_FOUND);
+    return {
+      id: report.id,
+      userId: report.userId,
+      user: report.user ? { id: report.user.id, email: report.user.email } : undefined,
+      conversationId: report.conversationId,
+      target: report.target,
+      status: report.status,
+      detail: report.detail,
+      poc: report.poc,
+      jobId: report.jobId,
+      fileUrl: report.fileUrl,
+      metadata: report.metadata,
+      startedAt: report.startedAt,
+      finishedAt: report.finishedAt,
+      createdAt: report.createdAt,
+      updatedAt: report.updatedAt,
+    };
   }
 
   @Get('user-activity')
@@ -339,6 +553,358 @@ export class AdminController {
       environment: process.env.NODE_ENV || 'development',
       apiBaseUrl: process.env.API_BASE_URL || '/api',
     };
+  }
+
+  @Get('cost/summary')
+  async getCostSummary() {
+    const today = new Date().toISOString().slice(0, 10);
+    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10);
+    const [todayRows, monthRows, totalCalls] = await Promise.all([
+      this.usageRepo.createQueryBuilder('u').select('SUM(u.inputTokens)', 'input').addSelect('SUM(u.outputTokens)', 'output').addSelect('SUM(u.costPoints)', 'points').where('u.createdAt >= :today', { today: today + 'T00:00:00.000Z' }).getRawOne<{ input: string; output: string; points: string }>(),
+      this.usageRepo.createQueryBuilder('u').select('SUM(u.inputTokens)', 'input').addSelect('SUM(u.outputTokens)', 'output').addSelect('SUM(u.costPoints)', 'points').where('u.createdAt >= :start', { start: startOfMonth + 'T00:00:00.000Z' }).getRawOne<{ input: string; output: string; points: string }>(),
+      this.usageRepo.count(),
+    ]);
+    const totalTokensToday = Number(todayRows?.input ?? 0) + Number(todayRows?.output ?? 0);
+    const totalTokensMonth = Number(monthRows?.input ?? 0) + Number(monthRows?.output ?? 0);
+    const costToday = Number(todayRows?.points ?? 0) * POINTS_TO_USD;
+    const costMonth = Number(monthRows?.points ?? 0) * POINTS_TO_USD;
+    return {
+      totalTokensToday,
+      totalTokensThisMonth: totalTokensMonth,
+      totalAICalls: totalCalls,
+      estimatedCostUsd: (Number(monthRows?.points ?? 0) * POINTS_TO_USD).toFixed(2),
+      today: { tokens: totalTokensToday, costUsd: costToday.toFixed(2) },
+      month: { tokens: totalTokensMonth, costUsd: costMonth.toFixed(2) },
+    };
+  }
+
+  @Get('cost/users')
+  async getCostUsers(
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('model') model?: string,
+    @Query('plan') plan?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const take = Math.min(200, Math.max(1, parseInt(limit || '50', 10) || 50));
+    const skip = Math.max(0, parseInt(offset || '0', 10) || 0);
+    let qb = this.usageRepo.createQueryBuilder('u').innerJoin('u.user', 'user')
+      .select('u.userId', 'userId').addSelect('user.email', 'user_email').addSelect('user.planId', 'user_planId')
+      .addSelect('SUM(u.inputTokens)', 'inputTokens').addSelect('SUM(u.outputTokens)', 'outputTokens').addSelect('SUM(u.costPoints)', 'costPoints').addSelect('COUNT(*)', 'calls').addSelect('MAX(u.createdAt)', 'lastActive')
+      .groupBy('u.userId').addGroupBy('user.id').addGroupBy('user.email').addGroupBy('user.planId');
+    if (dateFrom) qb = qb.andWhere('u.createdAt >= :dateFrom', { dateFrom: dateFrom + 'T00:00:00.000Z' });
+    if (dateTo) qb = qb.andWhere('u.createdAt <= :dateTo', { dateTo: dateTo + 'T23:59:59.999Z' });
+    if (model) qb = qb.andWhere('u.modelId = :model', { model });
+    if (plan) qb = qb.andWhere('(user.planId = :plan OR (user.planId IS NULL AND :plan = \'FREE\'))', { plan });
+    const raw = await qb.orderBy('MAX(u.createdAt)', 'DESC').skip(skip).take(take).getRawMany();
+    const items = raw.map((r) => ({
+      user: r.user_email ?? r.userId,
+      userId: r.userId,
+      plan: r.user_planId ?? 'FREE',
+      model: model ?? null,
+      inputTokens: Number(r.inputTokens ?? 0),
+      outputTokens: Number(r.outputTokens ?? 0),
+      totalCost: (Number(r.costPoints ?? 0) * POINTS_TO_USD).toFixed(4),
+      calls: Number(r.calls ?? 0),
+      lastActive: r.lastActive,
+    }));
+    const countQb = this.usageRepo.createQueryBuilder('u').innerJoin('u.user', 'user').select('COUNT(DISTINCT u.userId)', 'cnt');
+    if (dateFrom) countQb.andWhere('u.createdAt >= :dateFrom', { dateFrom: dateFrom + 'T00:00:00.000Z' });
+    if (dateTo) countQb.andWhere('u.createdAt <= :dateTo', { dateTo: dateTo + 'T23:59:59.999Z' });
+    if (model) countQb.andWhere('u.modelId = :model', { model });
+    if (plan) countQb.andWhere('(user.planId = :plan OR (user.planId IS NULL AND :plan = \'FREE\'))', { plan });
+    const totalRow = await countQb.getRawOne<{ cnt: string }>();
+    const total = parseInt(totalRow?.cnt ?? '0', 10);
+    return { items, total };
+  }
+
+  @Get('cost/settings')
+  async getCostSettings() {
+    const keys = ['globalDailyTokenCap', 'globalMonthlyTokenCap', 'perUserTokenCap', 'perPlanTokenCap', 'modelEscalationToggle'];
+    const rows = await this.settingsRepo.find({ where: { key: In(keys) } });
+    const map = new Map(rows.map((r) => [r.key, r.value]));
+    const num = (v: string | null | undefined) => (v != null && v !== '' ? parseInt(v, 10) : undefined);
+    const bool = (v: string | null | undefined) => v === 'true' || v === '1';
+    return {
+      globalDailyTokenCap: num(map.get('globalDailyTokenCap')) ?? undefined,
+      globalMonthlyTokenCap: num(map.get('globalMonthlyTokenCap')) ?? undefined,
+      perUserTokenCap: num(map.get('perUserTokenCap')) ?? undefined,
+      perPlanTokenCap: map.get('perPlanTokenCap') ?? undefined,
+      modelEscalationToggle: bool(map.get('modelEscalationToggle')),
+    };
+  }
+
+  @Post('cost/settings')
+  async saveCostSettings(@Body() body: Record<string, unknown>, @Req() req: Request) {
+    const adminUser = req.user as { id: string };
+    const ip = this.adminService.getClientIp(req);
+    const keys = ['globalDailyTokenCap', 'globalMonthlyTokenCap', 'perUserTokenCap', 'perPlanTokenCap', 'modelEscalationToggle'];
+    for (const key of keys) {
+      const v = body[key];
+      if (v === undefined) continue;
+      await this.settingsRepo.upsert({ key, value: typeof v === 'object' ? JSON.stringify(v) : String(v), updatedAt: new Date() }, { conflictPaths: ['key'] });
+    }
+    await this.adminService.log(adminUser.id, 'cost_settings_update', { resource: 'admin/cost/settings', details: JSON.stringify(body), ipAddress: ip });
+    return { ok: true };
+  }
+
+  @Get('abuse/summary')
+  async getAbuseSummary() {
+    const today = new Date().toISOString().slice(0, 10);
+    const [suspiciousToday, rateLimitViolations, repeatedTargets, highVelocity] = await Promise.all([
+      this.abuseRepo.createQueryBuilder('a').select('COUNT(DISTINCT a.userId)', 'c').where('a.createdAt >= :today', { today: today + 'T00:00:00.000Z' }).andWhere('a.riskScore >= 50').getRawOne<{ c: string }>(),
+      this.abuseRepo.count({ where: { eventType: 'rate_limit_violation' } }),
+      this.abuseRepo.count({ where: { eventType: 'repeated_target' } }),
+      this.abuseRepo.count({ where: { eventType: 'high_velocity' } }),
+    ]);
+    return {
+      suspiciousUsersToday: parseInt(suspiciousToday?.c ?? '0', 10),
+      rateLimitViolations: rateLimitViolations ?? 0,
+      repeatedTargetAttempts: repeatedTargets ?? 0,
+      highVelocityRequests: highVelocity ?? 0,
+    };
+  }
+
+  @Get('abuse/events')
+  async getAbuseEvents(@Query('limit') limit?: string, @Query('offset') offset?: string) {
+    const take = Math.min(200, Math.max(1, parseInt(limit || '50', 10) || 50));
+    const skip = Math.max(0, parseInt(offset || '0', 10) || 0);
+    const [items, total] = await this.abuseRepo.findAndCount({ order: { createdAt: 'DESC' }, skip, take });
+    const userIds = [...new Set(items.map((e) => e.userId).filter(Boolean))] as string[];
+    const users = userIds.length ? await this.userRepo.find({ where: userIds.map((id) => ({ id })), select: ['id', 'email'] }) : [];
+    const userMap = new Map(users.map((u) => [u.id, u.email]));
+    return {
+      items: items.map((e) => ({
+        id: e.id,
+        user: e.userId ? userMap.get(e.userId) ?? e.userId : null,
+        userId: e.userId,
+        ip: e.ipAddress,
+        requestsPerMin: e.requestsPerMin,
+        domainsTargeted: e.domainsTargeted,
+        riskScore: Number(e.riskScore),
+        eventType: e.eventType,
+        createdAt: e.createdAt,
+      })),
+      total,
+    };
+  }
+
+  @Post('abuse/action')
+  async postAbuseAction(@Body() body: { userId?: string; action?: string; reason?: string }, @Req() req: Request) {
+    const adminUser = req.user as { id: string };
+    const ip = this.adminService.getClientIp(req);
+    if (!body.userId || !['throttle', 'suspend', 'ban'].includes(body.action || '')) {
+      throw new HttpException('userId and action (throttle|suspend|ban) required', HttpStatus.BAD_REQUEST);
+    }
+    const user = await this.userRepo.findOne({ where: { id: body.userId } });
+    if (!user) throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+    if (body.action === 'ban' || body.action === 'suspend') {
+      user.isActive = false;
+      await this.userRepo.save(user);
+    }
+    await this.adminService.log(adminUser.id, `abuse_${body.action}`, { resource: body.userId, details: JSON.stringify({ reason: body.reason, email: user.email }), ipAddress: ip });
+    return { ok: true, action: body.action };
+  }
+
+  @Get('jobs/live')
+  getJobsLive() {
+    const jobs = this.gwehaiService.getActiveJobsForAdmin();
+    const withMeta = jobs.map((j) => {
+      const duration = j.createdAt ? Math.round((Date.now() - j.createdAt) / 1000) : 0;
+      return {
+        job_id: j.job_id,
+        userId: j.userId,
+        conversationId: j.conversationId,
+        target: j.userMessage?.slice(0, 120) || '—',
+        status: j.status,
+        phase: '—',
+        started: j.createdAt,
+        durationSeconds: duration,
+        workerId: j.job_id,
+        userMessage: j.userMessage,
+      };
+    });
+    return { items: withMeta };
+  }
+
+  @Post('jobs/action')
+  async postJobsAction(@Body() body: { jobId?: string; action?: string }, @Req() req: Request) {
+    const adminUser = req.user as { id: string };
+    const ip = this.adminService.getClientIp(req);
+    if (!body.jobId || !['pause', 'resume', 'cancel', 'retry'].includes(body.action || '')) {
+      throw new HttpException('jobId and action (pause|resume|cancel|retry) required', HttpStatus.BAD_REQUEST);
+    }
+    let stopped = false;
+    try {
+      await this.gwehaiService.stopJob(body.jobId);
+      stopped = true;
+    } catch {
+      // job not found or already stopped
+    }
+    await this.adminService.log(adminUser.id, `ops_job_${body.action}`, { resource: body.jobId, details: JSON.stringify({ action: body.action, stopped }), ipAddress: ip });
+    return { ok: true, action: body.action, stopped: !!stopped };
+  }
+
+  @Get('workers/status')
+  getWorkersStatus() {
+    const jobs = this.gwehaiService.getActiveJobsForAdmin();
+    const activeWorkers = jobs.filter((j) => j.status === 'running').length;
+    return { activeWorkers, maxWorkers: 10, queueSize: 0, stuckJobs: 0 };
+  }
+
+  @Post('workers/restart')
+  async postWorkersRestart(@Req() req: Request) {
+    const adminUser = req.user as { id: string };
+    const ip = this.adminService.getClientIp(req);
+    await this.adminService.log(adminUser.id, 'ops_workers_restart', { resource: 'workers', details: 'Restart workers', ipAddress: ip });
+    return { ok: true };
+  }
+
+  @Get('policies')
+  async getPolicies() {
+    const rows = await this.settingsRepo.find({ where: { key: In(POLICY_KEYS) } });
+    const map = new Map(rows.map((r) => [r.key, r.value]));
+    const bool = (v: string | null | undefined) => v === 'true' || v === '1';
+    const num = (v: string | null | undefined, def: number) => (v != null && v !== '' ? parseInt(v, 10) : def);
+    return {
+      blockLocalhost: bool(map.get('blockLocalhost')),
+      blockRfc1918Ip: bool(map.get('blockRfc1918Ip')),
+      blockMetadataEndpoints: bool(map.get('blockMetadataEndpoints')),
+      blockRepeatedTargetScanning: bool(map.get('blockRepeatedTargetScanning')),
+      enforcePerPlanToolRestrictions: bool(map.get('enforcePerPlanToolRestrictions')),
+      strictExploitModeProOnly: bool(map.get('strictExploitModeProOnly')),
+      maxParallelJobsPerPlan: num(map.get('maxParallelJobsPerPlan'), 2),
+      maxSubAgentsPerPlan: num(map.get('maxSubAgentsPerPlan'), 1),
+      maxToolCallsPerJob: num(map.get('maxToolCallsPerJob'), 500),
+      maxStepsPerConversation: num(map.get('maxStepsPerConversation'), 100),
+    };
+  }
+
+  @Post('promotion/send')
+  async sendPromotion(
+    @Body() body: { subject?: string; bodyHtml?: string; segment?: string },
+    @Req() req: Request,
+  ) {
+    const adminUser = req.user as { id: string };
+    const ip = this.adminService.getClientIp(req);
+    if (!body.subject || !body.bodyHtml) {
+      throw new HttpException('subject and bodyHtml are required', HttpStatus.BAD_REQUEST);
+    }
+    if (!this.mailService.isConfigured()) {
+      throw new HttpException('SMTP is not configured. Cannot send promotion emails.', HttpStatus.SERVICE_UNAVAILABLE);
+    }
+    const segment = (body.segment ?? 'all').toUpperCase();
+    const qb = this.userRepo.createQueryBuilder('u').select('u.id', 'id').addSelect('u.email', 'email').where('u.email IS NOT NULL').andWhere("u.email != ''");
+    if (segment !== 'ALL' && PLAN_IDS.includes(segment as PlanId)) {
+      qb.andWhere('(u.planId = :plan OR (u.planId IS NULL AND :plan = \'FREE\'))', { plan: segment });
+    }
+    const users = await qb.take(500).getRawMany<{ id: string; email: string }>();
+    let sent = 0;
+    let failed = 0;
+    for (const u of users) {
+      const ok = await this.mailService.sendPromotionEmail(u.email, body.subject, body.bodyHtml);
+      if (ok) sent++;
+      else failed++;
+    }
+    await this.adminService.log(adminUser.id, 'promotion_send', {
+      resource: 'promotion',
+      details: JSON.stringify({ subject: body.subject, segment, sent, failed, total: users.length }),
+      ipAddress: ip,
+    });
+    return { ok: true, sent, failed, total: users.length };
+  }
+
+  @Get('plans/definitions')
+  getPlanDefinitions() {
+    return PLAN_IDS.map((id) => {
+      const def = getPlanDefinition(id);
+      return {
+        planId: def.planId,
+        marketing_title: def.marketing_title,
+        monthlyPriceUsd: def.monthlyPriceUsd ?? 0,
+        limits: def.limits,
+      };
+    });
+  }
+
+  @Post('policies/update')
+  async updatePolicies(@Body() body: Record<string, unknown>, @Req() req: Request) {
+    const adminUser = req.user as { id: string };
+    const ip = this.adminService.getClientIp(req);
+    const updates: Record<string, string> = {
+      blockLocalhost: body.blockLocalhost != null ? String(body.blockLocalhost) : undefined,
+      blockRfc1918Ip: body.blockRfc1918Ip != null ? String(body.blockRfc1918Ip) : undefined,
+      blockMetadataEndpoints: body.blockMetadataEndpoints != null ? String(body.blockMetadataEndpoints) : undefined,
+      blockRepeatedTargetScanning: body.blockRepeatedTargetScanning != null ? String(body.blockRepeatedTargetScanning) : undefined,
+      enforcePerPlanToolRestrictions: body.enforcePerPlanToolRestrictions != null ? String(body.enforcePerPlanToolRestrictions) : undefined,
+      strictExploitModeProOnly: body.strictExploitModeProOnly != null ? String(body.strictExploitModeProOnly) : undefined,
+      maxParallelJobsPerPlan: body.maxParallelJobsPerPlan != null ? String(body.maxParallelJobsPerPlan) : undefined,
+      maxSubAgentsPerPlan: body.maxSubAgentsPerPlan != null ? String(body.maxSubAgentsPerPlan) : undefined,
+      maxToolCallsPerJob: body.maxToolCallsPerJob != null ? String(body.maxToolCallsPerJob) : undefined,
+      maxStepsPerConversation: body.maxStepsPerConversation != null ? String(body.maxStepsPerConversation) : undefined,
+    };
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === undefined) continue;
+      await this.settingsRepo.upsert({ key, value, updatedAt: new Date() }, { conflictPaths: ['key'] });
+    }
+    await this.adminService.log(adminUser.id, 'policies_update', { resource: 'admin/policies', details: JSON.stringify(body), ipAddress: ip });
+    return { ok: true };
+  }
+
+  @Get('margin/summary')
+  async getMarginSummary() {
+    const [revenueRows, costRows, userCount] = await Promise.all([
+      this.orderRepo.createQueryBuilder('o').select('COALESCE(SUM(o.amountCents), 0)', 'total').where('o.status = :status', { status: CreditOrderStatus.COMPLETED }).getRawOne<{ total: string }>(),
+      this.usageRepo.createQueryBuilder('u').select('SUM(u.costPoints)', 'points').getRawOne<{ points: string }>(),
+      this.userRepo.count(),
+    ]);
+    const totalRevenueCents = parseInt(revenueRows?.total ?? '0', 10);
+    const totalRevenue = totalRevenueCents / 100;
+    const totalCostPoints = Number(costRows?.points ?? 0);
+    const totalAiCost = totalCostPoints * POINTS_TO_USD;
+    const grossMarginPct = totalRevenue > 0 ? ((totalRevenue - totalAiCost) / totalRevenue) * 100 : 0;
+    const avgCostPerUser = userCount > 0 ? totalAiCost / userCount : 0;
+    return {
+      totalRevenue: totalRevenue.toFixed(2),
+      totalAiCost: totalAiCost.toFixed(2),
+      grossMarginPct: grossMarginPct.toFixed(1),
+      avgCostPerUser: avgCostPerUser.toFixed(4),
+      totalRevenueCents,
+      totalAiCostUsd: totalAiCost,
+    };
+  }
+
+  @Get('margin/users')
+  async getMarginUsers(@Query('limit') limit?: string, @Query('offset') offset?: string) {
+    const take = Math.min(200, Math.max(1, parseInt(limit || '50', 10) || 50));
+    const skip = Math.max(0, parseInt(offset || '0', 10) || 0);
+    const revQb = this.orderRepo.createQueryBuilder('o').select('o.userId', 'userId').addSelect('COALESCE(SUM(o.amountCents), 0)', 'revenueCents').where('o.status = :status', { status: CreditOrderStatus.COMPLETED }).groupBy('o.userId');
+    const revRaw = await revQb.getRawMany<{ userId: string; revenueCents: string }>();
+    const costQb = this.usageRepo.createQueryBuilder('u').select('u.userId', 'userId').addSelect('SUM(u.costPoints)', 'costPoints').groupBy('u.userId');
+    const costRaw = await costQb.getRawMany<{ userId: string; costPoints: string }>();
+    const revMap = new Map(revRaw.map((r) => [r.userId, Number(r.revenueCents) / 100]));
+    const costMap = new Map(costRaw.map((r) => [r.userId, Number(r.costPoints) * POINTS_TO_USD]));
+    const allUserIds = [...new Set([...revMap.keys(), ...costMap.keys()])];
+    const userIds = allUserIds.slice(skip, skip + take);
+    const users = userIds.length ? await this.userRepo.find({ where: userIds.map((id) => ({ id })), select: ['id', 'email', 'planId', 'createdAt'] }) : [];
+    const userMap = new Map(users.map((u) => [u.id, u]));
+    const items = userIds.map((userId) => {
+      const u = userMap.get(userId);
+      const revenue = revMap.get(userId) ?? 0;
+      const aiCost = costMap.get(userId) ?? 0;
+      const marginPct = revenue > 0 ? ((revenue - aiCost) / revenue) * 100 : 0;
+      return {
+        user: u?.email ?? userId,
+        userId,
+        plan: u?.planId ?? 'FREE',
+        revenue: revenue.toFixed(2),
+        aiCost: aiCost.toFixed(4),
+        marginPct: marginPct.toFixed(1),
+        activeSince: u?.createdAt ?? null,
+      };
+    });
+    return { items, total: allUserIds.length };
   }
 
   @Post('wipe-chat-and-reports')

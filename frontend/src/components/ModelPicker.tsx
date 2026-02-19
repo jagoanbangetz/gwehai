@@ -3,9 +3,9 @@ import './ModelPicker.css'
 
 export type ModelKey = 'auto' | 'deepseek' | 'openai_gpt5' | 'claude'
 
+/** Auto uses DeepSeek under the hood; DeepSeek is not shown as a separate option. */
 export const MODEL_OPTIONS: { key: ModelKey; label: string }[] = [
   { key: 'auto', label: 'Auto' },
-  { key: 'deepseek', label: 'DeepSeek' },
   { key: 'openai_gpt5', label: 'OpenAI GPT5' },
   { key: 'claude', label: 'Claude' },
 ]
@@ -15,6 +15,7 @@ const STORAGE_KEY = 'gwehai_model_key'
 export function getStoredModelKey(): ModelKey {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw === 'deepseek') return 'auto' // Auto uses DeepSeek; migrate stored deepseek to auto
     if (raw && MODEL_OPTIONS.some(o => o.key === raw)) return raw as ModelKey
   } catch (_) {}
   return 'auto'
@@ -27,6 +28,7 @@ export function setStoredModelKey(key: ModelKey): void {
 }
 
 export function getModelLabel(key: ModelKey): string {
+  if (key === 'deepseek') return 'Auto' // Auto uses DeepSeek; treat stored "deepseek" as Auto
   return MODEL_OPTIONS.find(o => o.key === key)?.label ?? key
 }
 
@@ -38,7 +40,7 @@ export interface ModelPickerProps {
 }
 
 /**
- * Compact pill/dropdown for model selection (Auto, DeepSeek, OpenAI GPT5, Claude).
+ * Compact pill/dropdown for model selection (Auto, OpenAI GPT5, Claude). Auto uses DeepSeek.
  * Persists to localStorage; parent should sync to backend user preference if available.
  */
 const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, className }) => {

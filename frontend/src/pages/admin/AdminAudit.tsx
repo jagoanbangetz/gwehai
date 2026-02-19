@@ -115,10 +115,22 @@ export default function AdminAudit() {
             </div>
             {data.items.length === 0 && <p style={{ margin: 0, color: 'oklch(0.6 0 0)' }}>No audit entries yet.</p>}
             {data.total > limit && (
-              <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem' }}>
-                <button type="button" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Prev</button>
+              <div className="admin-page-controls">
+                <button
+                  type="button"
+                  disabled={page === 0}
+                  onClick={() => setPage((p) => p - 1)}
+                >
+                  Prev
+                </button>
                 <span>Page {page + 1}</span>
-                <button type="button" disabled={(page + 1) * limit >= data.total} onClick={() => setPage((p) => p + 1)}>Next</button>
+                <button
+                  type="button"
+                  disabled={(page + 1) * limit >= data.total}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next
+                </button>
               </div>
             )}
           </>

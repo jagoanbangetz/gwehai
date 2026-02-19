@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { GwehAIService } from './gwehai.service';
+import { normalizeLlmErrorMessage } from '../llm/provider-router.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GwehAISSEGuard } from './gwehai-sse.guard';
 import { getModelOptions } from '../config/model-options.config';
@@ -75,9 +76,10 @@ export class GwehAIController {
       );
     }
 
-    const validModelKey = model_key && ['auto', 'deepseek', 'openai_gpt5', 'claude'].includes(model_key)
-      ? (model_key as 'auto' | 'deepseek' | 'openai_gpt5' | 'claude')
-      : undefined;
+    // Auto = DeepSeek. Default to 'auto' so we never run without a model (avoids "Model not found").
+    const validModelKey = (model_key && ['auto', 'deepseek', 'openai_gpt5', 'claude'].includes(model_key)
+      ? model_key
+      : 'auto') as 'auto' | 'deepseek' | 'openai_gpt5' | 'claude';
     return this.gwehaiService.createJob(user.id, messages, stream, conversation_id || job_id, validModelKey);
   }
 
@@ -160,12 +162,14 @@ export class GwehAIController {
   }
 
   /**
-   * List model options for the Model Provider Selector (Auto, DeepSeek, OpenAI GPT5, Claude).
+   * List model options for the Model Provider Selector (Auto, OpenAI GPT5, Claude).
+   * Auto uses DeepSeek; DeepSeek is not exposed as a separate option.
    * GET /api/gwehai/models
    */
   @Get('models')
   async listModels() {
-    return { options: getModelOptions() };
+    const options = getModelOptions().filter((o) => o.key !== 'deepseek');
+    return { options };
   }
 
   /**
@@ -248,7 +252,24 @@ export class GwehAIController {
       const events = currentJob.events ?? job.events;
       for (let i = lastSentIndex; i < events.length; i++) {
         const ev = events[i];
-        sendEvent(ev.type, ev.data, i + 1);
+        // Always send error events with a normalized message only; never forward raw API error object
+        const payload =
+          ev.type === 'error' && ev.data
+            ? (() => {
+                const raw =
+                  ev.data.message ??
+                  ev.data.error?.message ??
+                  (typeof ev.data.error === 'string' ? ev.data.error : JSON.stringify(ev.data.error ?? ev.data));
+                const message = normalizeLlmErrorMessage(raw);
+                return {
+                  message,
+                  ...(ev.data.agent_index != null && { agent_index: ev.data.agent_index }),
+                  ...(ev.data.agent_label != null && { agent_label: ev.data.agent_label }),
+                  ...(ev.data.error_code != null && { error_code: ev.data.error_code }),
+                };
+              })()
+            : ev.data;
+        sendEvent(ev.type, payload, i + 1);
         lastSentIndex = i + 1;
         // Do not close stream on sub-agent done; only close when main/global run is done.
         const hasAgentIndex = ev?.data?.agent_index != null;

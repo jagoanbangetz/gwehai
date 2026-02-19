@@ -10,21 +10,21 @@ describe('CostManagerService', () => {
   };
 
   describe('getCaps', () => {
-    it('returns decision caps for auto (groq): 300 output, 6000 input by default', () => {
+    it('returns decision caps for auto (DeepSeek): 300 output, 8000 input by default', () => {
       const service = createService();
       const caps = service.getCaps('auto', 'decision');
       expect(caps.maxOutputTokens).toBe(300);
-      expect(caps.maxInputTokens).toBe(6000);
+      expect(caps.maxInputTokens).toBe(8000);
     });
 
     it('returns long caps for auto: 800 output when mode is long', () => {
       const service = createService({ MAX_OUTPUT_TOKENS_LONG: '800' });
       const caps = service.getCaps('auto', 'long');
       expect(caps.maxOutputTokens).toBe(800);
-      expect(caps.maxInputTokens).toBe(6000);
+      expect(caps.maxInputTokens).toBe(8000);
     });
 
-    it('returns paid input budget for non-auto (e.g. deepseek)', () => {
+    it('returns paid input budget for deepseek', () => {
       const service = createService({ MAX_INPUT_TOKENS_PAID: '8000' });
       const caps = service.getCaps('deepseek', 'decision');
       expect(caps.maxOutputTokens).toBe(300);
@@ -32,51 +32,27 @@ describe('CostManagerService', () => {
     });
   });
 
-  describe('getInputBudget', () => {
-    it('returns 6000 for auto by default', () => {
+  describe('getToolsOutputCap', () => {
+    it('returns null when MAX_OUTPUT_TOKENS_TOOLS is not set', () => {
       const service = createService();
-      expect(service.getInputBudget('auto')).toBe(6000);
+      expect(service.getToolsOutputCap()).toBe(null);
     });
 
-    it('returns 8000 for paid model by default', () => {
-      const service = createService();
-      expect(service.getInputBudget('deepseek')).toBe(8000);
-    });
-
-    it('respects MAX_INPUT_TOKENS_AUTO env', () => {
-      const service = createService({ MAX_INPUT_TOKENS_AUTO: '4000' });
-      expect(service.getInputBudget('auto')).toBe(4000);
+    it('returns number when MAX_OUTPUT_TOKENS_TOOLS is set', () => {
+      const service = createService({ MAX_OUTPUT_TOKENS_TOOLS: '15000' });
+      expect(service.getToolsOutputCap()).toBe(15000);
     });
   });
 
-  describe('shouldUseCheapModelForAuto', () => {
-    it('returns true for short simple message', () => {
+  describe('getInputBudget', () => {
+    it('returns 8000 for auto by default', () => {
       const service = createService();
-      expect(service.shouldUseCheapModelForAuto('Hi')).toBe(true);
-      expect(service.shouldUseCheapModelForAuto('  Pentest example.com  ')).toBe(true);
+      expect(service.getInputBudget('auto')).toBe(8000);
     });
 
-    it('returns false for long message (>1200 chars)', () => {
+    it('returns 8000 for deepseek by default', () => {
       const service = createService();
-      const long = 'a'.repeat(1201);
-      expect(service.shouldUseCheapModelForAuto(long)).toBe(false);
-    });
-
-    it('returns false when message has code block', () => {
-      const service = createService();
-      expect(service.shouldUseCheapModelForAuto('Check this:\n```\ncode\n```')).toBe(false);
-    });
-
-    it('returns false when message has multiple numbered requirements', () => {
-      const service = createService();
-      expect(service.shouldUseCheapModelForAuto('1. First\n2. Second\n3. Third')).toBe(false);
-    });
-
-    it('returns false for deep reasoning phrases', () => {
-      const service = createService();
-      expect(service.shouldUseCheapModelForAuto('Explain in detail how it works')).toBe(false);
-      expect(service.shouldUseCheapModelForAuto('Reason step by step')).toBe(false);
-      expect(service.shouldUseCheapModelForAuto('Analyze the code')).toBe(false);
+      expect(service.getInputBudget('deepseek')).toBe(8000);
     });
   });
 
@@ -86,9 +62,9 @@ describe('CostManagerService', () => {
       expect(service.estimateCost('unknown', 1000, 500)).toBe(null);
     });
 
-    it('returns number for groq', () => {
+    it('returns number for deepseek', () => {
       const service = createService();
-      const cost = service.estimateCost('groq', 1_000_000, 1_000_000);
+      const cost = service.estimateCost('deepseek', 1_000_000, 1_000_000);
       expect(cost).not.toBe(null);
       expect(typeof cost).toBe('number');
     });

@@ -22,7 +22,7 @@ export class LlmService {
     model: Model,
     messages: LlmMessage[],
     tools: LlmToolDef[],
-    options?: { tool_choice?: 'auto' | 'required' | 'none' },
+    options?: { tool_choice?: 'auto' | 'required' | 'none'; max_tokens?: number },
   ): Promise<LlmResponse | null> {
     const provider = this.providers.find((candidate) => candidate.canHandle(model));
     if (!provider) {

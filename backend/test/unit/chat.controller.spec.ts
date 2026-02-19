@@ -35,10 +35,11 @@ describe('ChatController', () => {
   });
 
   it('returns a conversation by id', async () => {
-    chatService.getConversation = jest.fn().mockResolvedValue({ id: 'c1' });
-    const result = await controller.getConversation({ user: { id: 'u1' } } as any, 'c1');
+    const convId = '550e8400-e29b-41d4-a716-446655440000';
+    chatService.getConversation = jest.fn().mockResolvedValue({ id: convId });
+    const result = await controller.getConversation({ user: { id: 'u1' } } as any, convId);
 
-    expect(result.id).toBe('c1');
+    expect(result.id).toBe(convId);
   });
 
   it('returns models', async () => {

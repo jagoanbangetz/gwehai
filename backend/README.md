@@ -64,6 +64,10 @@ GROQ_API_KEY=          # for "Auto" option
 DEEPSEEK_API_KEY=     # for "DeepSeek"
 OPENAI_API_KEY=       # for "OpenAI GPT5"
 ANTHROPIC_API_KEY=    # for "Claude"
+
+# Optional: higher output token cap for tool-call requests (pentest, etc.). E.g. 15000 helps Groq return valid tool_calls.
+# MAX_OUTPUT_TOKENS_TOOLS=15000
+# Or raise the default for all requests: MAX_OUTPUT_TOKENS_DEFAULT=15000
 ```
 
 ### Skills loading (local first, then CDN)
@@ -245,6 +249,48 @@ if (existing) {
 - **Migrations**: Database migrations in `src/migrations/`
 - **Guards**: JWT authentication guards
 - **Strategies**: Passport strategies for OAuth
+
+## Testing the API (request / response)
+
+To see exactly what request is sent and what the API returns (including SSE events):
+
+1. **Start the backend** (e.g. `npm run start:dev`).
+2. **Get a bearer token** (either method):
+   - **From script (recommended):**  
+     `npm run generate-bearer-token -- <your-email>`  
+     Example: `npm run generate-bearer-token -- you@example.com`  
+     Requires the user to exist in the DB and `.env` with `JWT_SECRET` (and DB_* for lookup).
+   - **From browser:** log in via the frontend, then in the browser console:  
+     `JSON.parse(localStorage.getItem('scout_user') || '{}').token`
+3. **Run the test script**:
+   ```bash
+   GWEHAI_TEST_JWT=<paste-token-here> npm run test:gwehai-api
+   ```
+   Or with a custom base URL:
+   ```bash
+   API_URL=http://localhost:3001 GWEHAI_TEST_JWT=<token> npm run test:gwehai-api
+   ```
+
+The script will print:
+
+- **REQUEST: POST /api/gwehai/chat** – method, URL, headers (auth redacted), and body (e.g. `messages`, `model_key`).
+- **RESPONSE: POST /api/gwehai/chat** – status code and body (e.g. `job_id`, `stream_id`).
+- **REQUEST: GET /api/gwehai/chat/stream** – stream URL.
+- **RESPONSE: Stream (SSE)** – status and content-type, then each SSE event (`status`, `error`, `done`, etc.) with its data.
+
+Use this to verify payloads and that error events return a normalized message instead of raw provider JSON.
+
+### Groq request/response only
+
+To see the **exact payload sent to Groq** and the **raw response from Groq** when a user says *"Please pentest this website http://testphp.vulnweb.com/"*:
+
+```bash
+npm run test:groq-request-response
+```
+
+The script runs a **multi-turn tool loop** like a real user: send request → get `tool_calls` → mock tool results → send back → repeat. Each turn logs **REQUEST** (full payload) and **RESPONSE** (status + body). Uses the same system prompt, user message, and tools as the app. Requires `GROQ_API_KEY` in `.env`. Optional: `DEFAULT_AUTO_MODEL`, `MAX_OUTPUT_TOKENS_TOOLS`, `GROQ_TEST_MAX_TURNS` (default 10).
+
+**If you see** `npm error arg Argument starts with non-ascii dash`: you likely pasted a command that uses an en dash (–) instead of a regular hyphen (-). Type the command manually or replace the dash with a normal hyphen, e.g. `npm run test:groq-request-response` or `GROQ_TEST_MAX_TURNS=2 npm run test:groq-request-response`.
 
 ## Development Notes
 

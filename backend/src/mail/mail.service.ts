@@ -155,6 +155,13 @@ export class MailService {
     return this.send({ to, subject, text, html });
   }
 
+  /** Promotion / broadcast: custom subject and HTML body, wrapped in app layout */
+  async sendPromotionEmail(to: string, subject: string, bodyHtml: string): Promise<boolean> {
+    const html = emailLayout(subject, bodyHtml, this.appName);
+    const text = bodyHtml.replace(/<[^>]*>/g, '').trim().slice(0, 2000);
+    return this.send({ to, subject, text, html });
+  }
+
   /** Reset password: link only */
   async sendPasswordResetLink(to: string, resetLink: string): Promise<boolean> {
     const subject = 'Reset your password';

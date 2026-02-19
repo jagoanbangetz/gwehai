@@ -27,6 +27,7 @@ Use during **Recon** / early mapping phases.
 | Path | Purpose |
 |------|---------|
 | **skills/recon/SKILL.md** | Core recon — map targets, enumerate paths, check headers/tech, WAF hints (curl, nmap, dirsearch, wfuzz). |
+| **skills/api-docs/SKILL.md** | API docs — for API targets: fetch /docs/, /swagger.json, /openapi.json and parse endpoints/params; do not skip reading API docs (e.g. rest.vulnweb.com, user says "this is API"). |
 | **skills/enumeration/SKILL.md** | Enumeration slice — parameter discovery (query/body), auth surface mapping, light hidden-param fuzzing; outputs to Parameters.discovered. |
 | **skills/dns-intel/SKILL.md** | DNS intel — records, whois, reverse whois/domain relationships. |
 | **skills/check-host/SKILL.md** | Check-host — distributed ping/http/tcp/dns checks from multiple global nodes. |

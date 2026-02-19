@@ -1,4 +1,14 @@
 import { useEffect, useState } from 'react'
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts'
 import apiClient from '../../utils/api'
 import './Admin.css'
 
@@ -23,8 +33,19 @@ interface DashboardSummary {
   }>
 }
 
+interface ChartDataset {
+  label: string
+  data: number[]
+}
+
+interface ChartData {
+  labels: string[]
+  datasets: ChartDataset[]
+}
+
 export default function AdminOverview() {
   const [data, setData] = useState<DashboardSummary | null>(null)
+  const [chartData, setChartData] = useState<ChartData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -32,8 +53,12 @@ export default function AdminOverview() {
     const load = async () => {
       try {
         setLoading(true)
-        const res = await apiClient.get('/admin/dashboard')
-        setData(res.data)
+        const [dashboardRes, chartRes] = await Promise.all([
+          apiClient.get('/admin/dashboard'),
+          apiClient.get('/admin/dashboard/chart?days=14').catch(() => ({ data: null })),
+        ])
+        setData(dashboardRes.data)
+        if (chartRes.data?.labels?.length) setChartData(chartRes.data)
       } catch (e: any) {
         setError(e?.response?.data?.message || e?.message || 'Failed to load')
       } finally {
@@ -46,6 +71,21 @@ export default function AdminOverview() {
   if (loading) return <div className="admin-loading">Loading dashboard…</div>
   if (error) return <div className="admin-error">{error}</div>
   if (!data) return null
+
+  const barData = chartData
+    ? chartData.labels.map((label, i) => {
+        const point: Record<string, string | number> = {
+          name: label.slice(5),
+          fullDate: label,
+        }
+        chartData.datasets.forEach((ds) => {
+          point[ds.label] = ds.data[i] ?? 0
+        })
+        return point
+      })
+    : []
+
+  const barColors = ['oklch(0.65 0.2 250)', 'oklch(0.7 0.18 160)', 'oklch(0.65 0.2 330)']
 
   return (
     <>
@@ -84,6 +124,59 @@ export default function AdminOverview() {
           <div className="admin-stat-value">{data.payments}</div>
         </div>
       </div>
+
+      {barData.length > 0 && (
+        <div className="admin-card admin-chart-card">
+          <h3 className="admin-chart-title">Activity over the last 14 days</h3>
+          <div className="admin-chart-wrap">
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart
+                data={barData}
+                margin={{ top: 12, right: 12, bottom: 24, left: 8 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.25 0 0 / 0.5)" vertical={false} />
+                <XAxis
+                  dataKey="name"
+                  tick={{ fill: 'oklch(0.7 0 0)', fontSize: 11 }}
+                  axisLine={{ stroke: 'oklch(0.3 0 0)' }}
+                  tickLine={false}
+                />
+                <YAxis
+                  tick={{ fill: 'oklch(0.7 0 0)', fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  allowDecimals={false}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: 'oklch(0.14 0 0)',
+                    border: '1px solid oklch(0.28 0 0)',
+                    borderRadius: 8,
+                  }}
+                  labelStyle={{ color: 'oklch(0.9 0 0)' }}
+                  labelFormatter={(label, payload) => {
+                    const p = payload?.[0] as { payload?: { fullDate?: string } } | undefined
+                    return p?.payload?.fullDate ?? label
+                  }}
+                />
+                <Legend
+                  wrapperStyle={{ paddingTop: 8 }}
+                  formatter={(value) => <span style={{ color: 'oklch(0.8 0 0)' }}>{value}</span>}
+                />
+                {chartData?.datasets.map((ds, idx) => (
+                  <Bar
+                    key={ds.label}
+                    dataKey={ds.label}
+                    fill={barColors[idx % barColors.length]}
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={48}
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {data.activeJobs && data.activeJobs.length > 0 && (
         <div className="admin-card">

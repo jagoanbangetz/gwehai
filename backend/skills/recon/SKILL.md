@@ -19,8 +19,8 @@ This skill focuses on **safe, low-impact reconnaissance** and building a high-qu
 ## Preconditions & Scope
 
 - **Scope enforcement**
-  - Preferably confirm scope via **memory_get(path: "SCOPE.md")** if present, and/or user instructions.
-  - Target **must be explicitly in-scope** according to the user and the Pentest State (`daily/<target>/<YYYY-MM-DD>`).
+  - Scope comes from **Pentest State** (`daily/<target>/<YYYY-MM-DD>`, allowed_hosts, allowed_urls) and the **user's target**. Optionally call **memory_get(path: "SCOPE.md")** once; if the response is **empty** (file does not exist), use Pentest State and user-provided target — do not keep loading SCOPE.md.
+  - Target **must be explicitly in-scope** according to the user and the Pentest State.
   - If scope is unclear: **ask the user** before calling **exec**.
 
 - **Pentest State & ReconLocked**

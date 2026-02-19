@@ -8,6 +8,6 @@ export interface LlmProvider {
     model: Model,
     messages: LlmMessage[],
     tools: LlmToolDef[],
-    options?: { tool_choice?: 'auto' | 'required' | 'none' },
+    options?: { tool_choice?: 'auto' | 'required' | 'none'; max_tokens?: number },
   ): Promise<LlmResponse>;
 }

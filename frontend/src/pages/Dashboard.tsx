@@ -69,20 +69,51 @@ interface ChatHistory {
   jobId?: string
 }
 
-/** One row in the Report menu: grouped by conversation */
+/** One row in the Report menu: unique by (domain, conversationId, date) */
 interface ReportGroupRow {
-  conversationId: string
-  website: string
+  domain: string
+  date: string
+  conversationId: string | null
   findingsCount: number
   createdAt: string
-  runStatus?: 'running' | 'finished' | 'error' | 'stopped' | string
-  startedAt?: string | null
-  finishedAt?: string | null
+  firstAt: string
+  lastAt: string
 }
 
-/** Tree row: run with agents (children) */
-interface ReportTreeRow extends ReportGroupRow {
-  agents?: { conversationId: string; agentRole: string | null; findingsCount: number }[]
+/** Derive YYYY-MM-DD from ISO string when date is missing. */
+function dateFromIso(iso: string | null | undefined): string {
+  if (!iso || typeof iso !== 'string') return '—'
+  try {
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return '—'
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  } catch {
+    return '—'
+  }
+}
+
+/** Normalize API report row to ReportGroupRow (accepts camelCase or snake_case from backend). */
+function normalizeReportGroupRow(raw: Record<string, unknown>): ReportGroupRow {
+  let domain = String(raw.domain ?? '').trim() || '—'
+  let date = String(raw.date ?? '').trim() || '—'
+  const conversationId = raw.conversationId != null ? String(raw.conversationId).trim() || null : (raw.conversation_id != null ? String(raw.conversation_id).trim() || null : null)
+  const findingsCount = Number(raw.findingsCount ?? raw.findings_count ?? 0)
+  const createdAt = String(raw.createdAt ?? raw.created_at ?? '')
+  const firstAt = String(raw.firstAt ?? raw.first_at ?? raw.createdAt ?? raw.created_at ?? '')
+  const lastAt = String(raw.lastAt ?? raw.last_at ?? raw.createdAt ?? raw.created_at ?? '')
+  if (date === '—' && (firstAt || lastAt)) date = dateFromIso(firstAt || lastAt)
+  return {
+    domain,
+    date,
+    conversationId: conversationId || null,
+    findingsCount: Number.isFinite(findingsCount) ? findingsCount : 0,
+    createdAt,
+    firstAt,
+    lastAt,
+  }
 }
 
 /** Conversation id from API is a UUID; reject timestamps (e.g. "1771200395728") to avoid backend error. */
@@ -146,15 +177,26 @@ interface HacktivityConversationRow {
   count: number
 }
 
+const PENTEST_CHECKLIST_ORDER = ['recon', 'input_handling', 'auth_session', 'access_control', 'business_logic', 'other'] as const
+const PENTEST_SECTION_LABELS: Record<string, string> = {
+  recon: 'Recon',
+  input_handling: 'Input handling',
+  auth_session: 'Auth & session',
+  access_control: 'Access control',
+  business_logic: 'Business logic',
+  other: 'Other',
+}
+
 /** Compare job lists so we only update state when something actually changed (avoids flicker). */
 function jobsEqual(
-  a: Array<{ job_id: string; status: string; phase_display?: string; current_section_display?: string | null }>,
-  b: Array<{ job_id: string; status: string; phase_display?: string; current_section_display?: string | null }>,
+  a: Array<{ job_id: string; status: string; phase_display?: string; current_section_display?: string | null; checklist?: Record<string, boolean>; last_action_summary?: string | null }>,
+  b: Array<{ job_id: string; status: string; phase_display?: string; current_section_display?: string | null; checklist?: Record<string, boolean>; last_action_summary?: string | null }>,
 ): boolean {
   if (a.length !== b.length) return false
   return a.every((x, i) => {
     const y = b[i]
-    return x.job_id === y.job_id && x.status === y.status && (x.phase_display ?? '') === (y.phase_display ?? '') && (x.current_section_display ?? '') === (y.current_section_display ?? '')
+    const checklistSame = JSON.stringify(x.checklist ?? {}) === JSON.stringify(y.checklist ?? {})
+    return x.job_id === y.job_id && x.status === y.status && (x.phase_display ?? '') === (y.phase_display ?? '') && (x.current_section_display ?? '') === (y.current_section_display ?? '') && checklistSame && (x.last_action_summary ?? '') === (y.last_action_summary ?? '')
   })
 }
 
@@ -279,7 +321,7 @@ const Dashboard = () => {
   const [selectedHacktivity, setSelectedHacktivity] = useState<HacktivityRow | null>(null)
   const [showPlanModal, setShowPlanModal] = useState(false)
   const [showCurrentPentestModal, setShowCurrentPentestModal] = useState(false)
-  /** List of current user's pentest jobs (running first). Each may have phase_display after fetch. */
+  /** List of current user's pentest jobs (running first). Enriched with phase_display, checklist, last_action_summary. */
   const [currentPentestJobs, setCurrentPentestJobs] = useState<Array<{
     job_id: string
     status: string
@@ -287,6 +329,8 @@ const Dashboard = () => {
     conversation_id?: string
     phase_display?: string
     current_section_display?: string | null
+    checklist?: Record<string, boolean>
+    last_action_summary?: string | null
     createdAt?: number
   }>>([])
   const [currentPentestLoading, setCurrentPentestLoading] = useState(false)
@@ -305,10 +349,9 @@ const Dashboard = () => {
   const [toasts, setToasts] = useState<Toast[]>([])
   const [isVoiceRecording, setIsVoiceRecording] = useState(false)
   const [voiceTranscript, setVoiceTranscript] = useState('')
-  const [reports, setReports] = useState<ReportTreeRow[]>([])
+  const [reports, setReports] = useState<ReportGroupRow[]>([])
   const [isLoadingReports, setIsLoadingReports] = useState(false)
-  const [expandedReportIds, setExpandedReportIds] = useState<Set<string>>(new Set())
-  const [reportDetailConversationId, setReportDetailConversationId] = useState<string | null>(null)
+  const [reportDetailKey, setReportDetailKey] = useState<{ domain: string; date: string; conversationId: string | null } | null>(null)
   const [reportFindings, setReportFindings] = useState<FindingRow[]>([])
   const [reportFindingsLoading, setReportFindingsLoading] = useState(false)
   const [_selectedFindingId, setSelectedFindingId] = useState<string | null>(null)
@@ -418,19 +461,10 @@ const Dashboard = () => {
   const loadReports = async () => {
     try {
       setIsLoadingReports(true)
-      const res = await apiClient.get('/reports?format=tree')
-      const rows = res.data || []
-      setReports(rows)
-      setConversationRunStatus(prev => {
-        const next = { ...prev }
-        for (const r of rows as ReportTreeRow[]) {
-          const status = String(r.runStatus || '').toLowerCase()
-          if (status === 'running' || status === 'finished' || status === 'error' || status === 'stopped') {
-            next[r.conversationId] = status
-          }
-        }
-        return next
-      })
+      const res = await apiClient.get('/reports')
+      const raw = res.data
+      const rows = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' && Array.isArray((raw as any).items) ? (raw as any).items : [])
+      setReports(rows.map((r: Record<string, unknown>) => normalizeReportGroupRow(r)))
     } catch (error: any) {
       console.error('Failed to load reports:', error)
       showToast(error.response?.data?.message || 'Failed to load reports.', 'error')
@@ -439,10 +473,12 @@ const Dashboard = () => {
     }
   }
 
-  const loadFindingsForConversation = async (conversationId: string) => {
+  const loadFindingsForDomainAndDate = async (domain: string, date: string, conversationId?: string | null) => {
     try {
       setReportFindingsLoading(true)
-      const res = await apiClient.get(`/reports/by-run/${conversationId}`)
+      const params: { domain: string; date: string; conversationId?: string } = { domain, date }
+      if (conversationId) params.conversationId = conversationId
+      const res = await apiClient.get('/reports/by-domain-date', { params })
       setReportFindings(res.data || [])
     } catch (error: any) {
       console.error('Failed to load findings:', error)
@@ -464,7 +500,7 @@ const Dashboard = () => {
 
   const closeReportModal = () => {
     setShowReportModal(false)
-    setReportDetailConversationId(null)
+    setReportDetailKey(null)
     setReportFindings([])
     setSelectedFindingId(null)
     setSelectedFinding(null)
@@ -480,10 +516,13 @@ const Dashboard = () => {
     }
   }
 
-  const loadHacktivity = async (page: number = 1, conversationId: string | null = null) => {
+  const loadHacktivity = async (page: number = 1, conversationId: string | null = null, options?: { isBackgroundPoll?: boolean }) => {
+    const isBackgroundPoll = options?.isBackgroundPoll === true
     try {
-      setIsLoadingHacktivity(true)
-      setHacktivityLoadError(null)
+      if (!isBackgroundPoll) {
+        setIsLoadingHacktivity(true)
+        setHacktivityLoadError(null)
+      }
       const params = new URLSearchParams()
       params.set('limit', String(hacktivityPageSize))
       params.set('offset', String((page - 1) * hacktivityPageSize))
@@ -492,17 +531,30 @@ const Dashboard = () => {
       const data = res.data || {}
       const items = Array.isArray(data.items) ? data.items : []
       const total = typeof data.total === 'number' ? data.total : 0
-      setHacktivityList((prev) => (hacktivityListEqual(prev, items) ? prev : items))
+      setHacktivityList((prev) => {
+        if (hacktivityListEqual(prev, items)) return prev
+        if (isBackgroundPoll && page === 1 && prev.length > 0) {
+          const prevIds = new Set(prev.map((p) => p.id))
+          const newRows = items.filter((i) => !prevIds.has(i.id))
+          if (newRows.length === 0) return items
+          const apiOrder = items.map((i) => i.id)
+          const merged = apiOrder.map((id) => items.find((i) => i.id === id) ?? prev.find((p) => p.id === id)).filter(Boolean) as HacktivityRow[]
+          return merged
+        }
+        return items
+      })
       setHacktivityTotal(total)
       setHacktivityPage(page)
     } catch (error: any) {
       console.error('Failed to load Hacktivity', error)
       setHacktivityLoadError(error.response?.data?.message || error?.message || 'Failed to load activity.')
-      setHacktivityList([])
-      setHacktivityTotal(0)
-      showToast('Could not load Hacktivity. Check your connection.', 'error')
+      if (!isBackgroundPoll) {
+        setHacktivityList([])
+        setHacktivityTotal(0)
+        showToast('Could not load Hacktivity. Check your connection.', 'error')
+      }
     } finally {
-      setIsLoadingHacktivity(false)
+      if (!isBackgroundPoll) setIsLoadingHacktivity(false)
     }
   }
 
@@ -667,7 +719,7 @@ const Dashboard = () => {
     const t = setInterval(() => {
       loadHacktivityConversations().catch(() => {})
       const { page, conversationId } = hacktivityPollRef.current
-      loadHacktivity(page, conversationId)
+      loadHacktivity(page, conversationId, { isBackgroundPoll: true })
     }, intervalMs)
     return () => clearInterval(t)
   }, [showHacktivityModal])
@@ -678,7 +730,7 @@ const Dashboard = () => {
     }
   }, [showPlanModal])
 
-  /** Enrich raw job list with phase_display from pentest-jobs by-conversation. */
+  /** Enrich raw job list with phase_display, checklist, last_action_summary from pentest-jobs by-conversation. */
   const enrichJobsWithPhase = useCallback(async (
     list: Array<{ job_id: string; status: string; user_message?: string; conversation_id?: string; createdAt?: number }>,
   ) => {
@@ -686,13 +738,20 @@ const Dashboard = () => {
       list.map(async (job) => {
         let phase_display = 'Recon'
         let current_section_display: string | null = null
+        let checklist: Record<string, boolean> = {}
+        let last_action_summary: string | null = null
         if (job.conversation_id) {
           try {
-            const { data: phaseData } = await apiClient.get<{ phase_display?: string; current_section_display?: string | null }>(
-              `/pentest-jobs/by-conversation/${encodeURIComponent(job.conversation_id)}`,
-            )
+            const { data: phaseData } = await apiClient.get<{
+              phase_display?: string
+              current_section_display?: string | null
+              checklist?: Record<string, boolean>
+              last_action_summary?: string | null
+            }>(`/pentest-jobs/by-conversation/${encodeURIComponent(job.conversation_id)}`)
             phase_display = phaseData.phase_display ?? 'Recon'
             current_section_display = phaseData.current_section_display ?? null
+            checklist = phaseData.checklist ?? {}
+            last_action_summary = phaseData.last_action_summary ?? null
           } catch {
             // no pentest job linked; keep defaults
           }
@@ -701,6 +760,8 @@ const Dashboard = () => {
           ...job,
           phase_display,
           current_section_display,
+          checklist,
+          last_action_summary,
         }
       }),
     )
@@ -3074,15 +3135,15 @@ const Dashboard = () => {
           <div className="modal-content report-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2 className="modal-title">
-                {reportDetailConversationId ? 'Findings for this report' : 'Security Reports'}
+                {reportDetailKey ? 'Findings for this report' : 'Security Reports'}
               </h2>
               <div className="modal-header-actions">
-                {reportDetailConversationId && (
+                {reportDetailKey && (
                   <button
                     type="button"
                     className="report-back-btn"
                     onClick={() => {
-                      setReportDetailConversationId(null)
+                      setReportDetailKey(null)
                       setReportFindings([])
                       setSelectedFindingId(null)
                       setSelectedFinding(null)
@@ -3100,18 +3161,18 @@ const Dashboard = () => {
               </div>
             </div>
             <div className="modal-body">
-              {!reportDetailConversationId ? (
+              {!reportDetailKey ? (
                 <div className="report-table-container">
                   <table className="report-table">
                     <thead>
                       <tr>
-                        <th>Conversation ID</th>
-                        <th>Website</th>
+                        <th>Domain</th>
+                        <th>Date</th>
+                        <th>Conversation</th>
                         <th>Findings</th>
-                        <th>Start time</th>
-                        <th>End time</th>
+                        <th>First</th>
+                        <th>Last</th>
                         <th>Duration</th>
-                        <th>Status</th>
                         <th></th>
                       </tr>
                     </thead>
@@ -3128,96 +3189,56 @@ const Dashboard = () => {
                             No reports yet. Run a pentest to see findings here.
                           </td>
                         </tr>
-                      ) : (
-                        reports.flatMap((report) => {
-                          const agents = (report as ReportTreeRow).agents ?? []
-                          const hasChildren = agents.length > 1
-                          const expanded = expandedReportIds.has(report.conversationId)
-                          const toggleExpand = () => {
-                            setExpandedReportIds((prev) => {
-                              const next = new Set(prev)
-                              if (next.has(report.conversationId)) next.delete(report.conversationId)
-                              else next.add(report.conversationId)
-                              return next
-                            })
+                      ) : (() => {
+                          const byDomain = new Map<string, ReportGroupRow[]>()
+                          for (const r of reports) {
+                            const key = r.domain || '—'
+                            if (!byDomain.has(key)) byDomain.set(key, [])
+                            byDomain.get(key)!.push(r)
                           }
-                          const runRow = (
-                            <tr key={report.conversationId} className="report-run-row">
-                              <td className="report-conversation-id" title={report.conversationId}>
-                                {hasChildren ? (
-                                  <button
-                                    type="button"
-                                    className="report-expand-btn"
-                                    onClick={(e) => { e.stopPropagation(); toggleExpand() }}
-                                    aria-expanded={expanded}
-                                    title={expanded ? 'Collapse' : 'Expand'}
-                                  >
-                                    <span className={`report-chevron ${expanded ? 'expanded' : ''}`}>▸</span>
-                                  </button>
-                                ) : null}
-                                <span className={hasChildren ? 'report-id-with-expand' : ''}>
-                                  {report.conversationId.slice(0, 8)}…
-                                </span>
-                              </td>
-                              <td className="target">{report.website}</td>
-                              <td className="report-findings-count">{report.findingsCount}</td>
-                              <td className="report-time">{formatReportTime(report.startedAt)}</td>
-                              <td className="report-time">{formatReportTime(report.finishedAt)}</td>
-                              <td className="report-duration">{formatReportDuration(report.startedAt, report.finishedAt)}</td>
-                              <td>
-                                {(() => {
-                                  const status = (conversationRunStatus[report.conversationId] || String(report.runStatus || 'finished').toLowerCase() || 'finished') as string
-                                  const tone = status === 'running'
-                                    ? 'info'
-                                    : status === 'error'
-                                      ? 'high'
-                                      : status === 'stopped'
-                                        ? 'info'
-                                        : 'low'
-                                  return (
-                                    <span className={`severity-badge severity-${tone}`}>
-                                      {String(status).toUpperCase()}
-                                    </span>
-                                  )
-                                })()}
-                              </td>
-                              <td className="report-actions">
-                                <button
-                                  type="button"
-                                  className="report-detail-btn"
-                                  onClick={() => {
-                                    setReportDetailConversationId(report.conversationId)
-                                    loadFindingsForConversation(report.conversationId)
-                                  }}
-                                >
-                                  Detail
-                                </button>
-                              </td>
-                            </tr>
-                          )
-                          const agentRows = expanded && hasChildren
-                            ? agents.map((agent) => (
-                                <tr key={agent.conversationId} className="report-agent-row">
-                                  <td className="report-conversation-id report-agent-cell" title={agent.conversationId}>
-                                    <span className="report-agent-indent">└</span>
-                                    <span title={agent.conversationId}>{agent.conversationId.slice(0, 8)}…</span>
-                                    <span className="report-agent-role">
-                                      {agent.agentRole ? ` (${agent.agentRole})` : ''}
-                                    </span>
+                          const domains = Array.from(byDomain.entries()).sort((a, b) => (a[0] === '—' ? 1 : b[0] === '—' ? -1 : a[0].localeCompare(b[0])))
+                          return domains.flatMap(([domain, rows]) => {
+                            const totalFindings = rows.reduce((s, r) => s + r.findingsCount, 0)
+                            const headerRow = (
+                              <tr key={`domain-${domain}`} className="report-domain-header-row">
+                                <td colSpan={8} className="report-domain-header">
+                                  <span className="report-domain-header-label">{domain}</span>
+                                  <span className="report-domain-header-meta">{rows.length} report{rows.length !== 1 ? 's' : ''}, {totalFindings} finding{totalFindings !== 1 ? 's' : ''}</span>
+                                </td>
+                              </tr>
+                            )
+                            const dataRows = rows.map((report) => {
+                              const rowKey = `${report.domain}|${report.conversationId ?? ''}|${report.date}|${report.createdAt || ''}`
+                              const convDisplay = report.conversationId ? `${report.conversationId.slice(0, 8)}…` : '—'
+                              return (
+                                <tr key={rowKey} className="report-run-row">
+                                  <td className="report-domain report-domain-sub" title={report.domain || '—'}></td>
+                                  <td className="report-date">{report.date || '—'}</td>
+                                  <td className="report-conversation" title={report.conversationId ?? ''}>
+                                    {convDisplay}
                                   </td>
-                                  <td className="target">—</td>
-                                  <td className="report-findings-count">{agent.findingsCount}</td>
-                                  <td className="report-time">—</td>
-                                  <td className="report-time">—</td>
-                                  <td className="report-duration">—</td>
-                                  <td>—</td>
-                                  <td className="report-actions"></td>
+                                  <td className="report-findings-count">{report.findingsCount}</td>
+                                  <td className="report-time">{formatReportTime(report.firstAt || null)}</td>
+                                  <td className="report-time">{formatReportTime(report.lastAt || null)}</td>
+                                  <td className="report-duration">{formatReportDuration(report.firstAt || null, report.lastAt || null)}</td>
+                                  <td className="report-actions">
+                                    <button
+                                      type="button"
+                                      className="report-detail-btn"
+                                      onClick={() => {
+                                        setReportDetailKey({ domain: report.domain, date: report.date, conversationId: report.conversationId })
+                                        loadFindingsForDomainAndDate(report.domain, report.date, report.conversationId ?? undefined)
+                                      }}
+                                    >
+                                      Detail
+                                    </button>
+                                  </td>
                                 </tr>
-                              ))
-                            : []
-                          return [runRow, ...agentRows]
-                        })
-                      )}
+                              )
+                            })
+                            return [headerRow, ...dataRows]
+                          })
+                        })()}
                     </tbody>
                   </table>
                 </div>
@@ -3567,6 +3588,12 @@ const Dashboard = () => {
                           {formatWorkersLabel(myPlan.limits_summary.workers)} • {myPlan.limits_summary.scans} • {myPlan.limits_summary.steps}{myPlan.limits_summary.sub_agents != null ? ` • ${myPlan.limits_summary.sub_agents} sub-agent${myPlan.limits_summary.sub_agents === '1' ? '' : 's'}` : ''}
                         </span>
                       </div>
+                      <div className="plan-detail-item plan-limits-explainer">
+                        <span className="detail-label">What this means:</span>
+                        <span className="detail-value">
+                          <strong>Workers</strong> = concurrent pentest targets; <strong>Scans</strong> = scan runs; <strong>Steps</strong> = AI actions per scan; <strong>Sub-agents</strong> = parallel AI workers. <strong>Unlimited*</strong> = no fixed cap; usage is subject to a fair usage policy so the service stays fast and reliable for everyone.
+                        </span>
+                      </div>
                       <div className="plan-detail-item">
                         <span className="detail-label">Note:</span>
                         <span className="detail-value">{myPlan.plan.marketing_footnote}</span>
@@ -3613,14 +3640,7 @@ const Dashboard = () => {
                   {myPlan?.usage ? (
                     <>
                       <div className="usage-stat-card">
-                        <div className="stat-label">Steps this session</div>
-                        <div className="stat-value">
-                          {myPlan.usage.session.steps_used}
-                          {myPlan.usage.session.steps_remaining != null ? ` / ${myPlan.usage.session.steps_used + myPlan.usage.session.steps_remaining}` : ''}
-                        </div>
-                      </div>
-                      <div className="usage-stat-card">
-                        <div className="stat-label">Tokens today</div>
+                        <div className="stat-label">Credit</div>
                         <div className="stat-value">
                           {myPlan.usage.day.tokens_used}
                           {myPlan.usage.day.tokens_remaining != null ? ` / ${myPlan.usage.day.tokens_used + myPlan.usage.day.tokens_remaining}` : ''}
@@ -3628,12 +3648,6 @@ const Dashboard = () => {
                       </div>
                     </>
                   ) : null}
-                  {pointsBalance != null && (
-                    <div className="usage-stat-card">
-                      <div className="stat-label">Wallet Points</div>
-                      <div className="stat-value">{pointsBalance}</div>
-                    </div>
-                  )}
                   {currentPlan && (
                     <>
                       <div className="usage-stat-card">
@@ -3716,6 +3730,30 @@ const Dashboard = () => {
                           {job.status === 'running' && job.current_section_display ? ` • ${job.current_section_display}` : ''}
                         </span>
                       </div>
+                      {job.conversation_id && (
+                        <div className="current-pentest-row">
+                          <span className="current-pentest-label">Conversation</span>
+                          <code className="current-pentest-conversation-id" title={job.conversation_id}>{job.conversation_id.slice(0, 8)}…</code>
+                        </div>
+                      )}
+                      {(job.checklist && Object.keys(job.checklist).length > 0) && (
+                        <div className="current-pentest-row current-pentest-checklist-wrap">
+                          <span className="current-pentest-label">Checklist</span>
+                          <span className="current-pentest-checklist">
+                            {PENTEST_CHECKLIST_ORDER.filter((k) => job.checklist && k in job.checklist).map((k) => (
+                              <span key={k} className="current-pentest-checklist-item" title={job.checklist![k] ? 'Done' : 'Not done'}>
+                                {job.checklist![k] ? '✓' : '○'} {PENTEST_SECTION_LABELS[k] ?? k}
+                              </span>
+                            ))}
+                          </span>
+                        </div>
+                      )}
+                      {job.last_action_summary && (
+                        <div className="current-pentest-row current-pentest-last-action-wrap">
+                          <span className="current-pentest-label">Last action</span>
+                          <span className="current-pentest-last-action">{job.last_action_summary}</span>
+                        </div>
+                      )}
                       <div className="current-pentest-row">
                         <span className="current-pentest-label">Job ID</span>
                         <code className="current-pentest-job-id">{job.job_id}</code>

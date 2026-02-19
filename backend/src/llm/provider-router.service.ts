@@ -1,8 +1,7 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { generateText } from 'ai';
-import { groq } from '@ai-sdk/groq';
-import { getOptionByKey, getModelOptions, getAutoCheapModel, type ModelOptionKey } from '../config/model-options.config';
+import { getOptionByKey, getModelOptions, type ModelOptionKey } from '../config/model-options.config';
 import { CostManagerService, type CostMode } from './cost-manager.service';
 import type { LlmMessage, LlmResponse, LlmToolDef } from './llm.types';
 
@@ -40,13 +39,17 @@ export interface GenerateWithToolsResult {
   meta: ChatCompletionMeta;
 }
 
+/** User-friendly message when Groq/LLM returns tool_use_failed or malformed tool call. */
+export const TOOL_USE_FAILED_MESSAGE =
+  'The model returned an invalid response. Try again or use a different model (e.g. DeepSeek or Claude) for this task.';
+
 /** Parse API error response body and return a user-friendly message. */
 function parseApiErrorResponse(body: string, provider: string, fallback: string): string {
   try {
     const json = JSON.parse(body);
     const msg = json?.error?.message ?? json?.message ?? json?.error;
     if (typeof msg === 'string' && msg.trim()) {
-      if (/failed to call a function|invalid.*function|malformed.*tool/i.test(msg)) {
+      if (/failed to call a function|invalid.*function|malformed.*tool|tool_use_failed/i.test(msg)) {
         return `The ${provider} model returned an invalid response. Try again or use a different model (e.g. DeepSeek or Claude) for this task.`;
       }
       return msg.length > 500 ? msg.slice(0, 500) + '...' : msg;
@@ -55,6 +58,26 @@ function parseApiErrorResponse(body: string, provider: string, fallback: string)
     // ignore parse errors
   }
   return fallback;
+}
+
+/** Normalize any LLM/API error string before sending to client (SSE). Handles raw JSON and tool_use_failed. */
+export function normalizeLlmErrorMessage(raw: string): string {
+  const s = (raw || '').trim();
+  if (!s) return 'An error occurred. Please try again.';
+  if (/failed to call a function|tool_use_failed|failed_generation/i.test(s)) {
+    return TOOL_USE_FAILED_MESSAGE;
+  }
+  try {
+    const json = JSON.parse(s);
+    const msg = json?.error?.message ?? json?.message;
+    if (typeof msg === 'string' && msg.trim()) {
+      if (/failed to call a function|tool_use_failed/i.test(msg)) return TOOL_USE_FAILED_MESSAGE;
+      return msg.length > 500 ? msg.slice(0, 500) + '...' : msg;
+    }
+  } catch {
+    // not JSON
+  }
+  return s.length > 500 ? s.slice(0, 500) + '...' : s;
 }
 
 /** Sanitize OpenAI-style tool_calls: filter by name, ensure valid JSON arguments. */
@@ -88,7 +111,7 @@ export class ProviderRouterService {
 
   /**
    * Single entry: run chat completion with the selected model key.
-   * Routes to Groq (Auto), DeepSeek, OpenAI, or Anthropic.
+   * Routes to DeepSeek (Auto), OpenAI, or Anthropic.
    */
   async runChatCompletion(opts: RunChatCompletionOptions): Promise<RunChatCompletionResult> {
     const { selectedModelKey, messages, mode } = opts;
@@ -106,9 +129,6 @@ export class ProviderRouterService {
     let outputTokens = 0;
 
     switch (option.provider) {
-      case 'groq':
-        ({ text, provider, model, inputTokens, outputTokens } = await this.callGroq(option, messages, caps, opts));
-        break;
       case 'deepseek':
         ({ text, provider, model, inputTokens, outputTokens } = await this.callDeepSeek(option, messages, caps));
         break;
@@ -149,7 +169,11 @@ export class ProviderRouterService {
     if (!option) {
       throw new HttpException(`Unknown model key: ${selectedModelKey}`, HttpStatus.BAD_REQUEST);
     }
-    const caps = this.costManager.getCaps(selectedModelKey, mode);
+    let caps = this.costManager.getCaps(selectedModelKey, mode);
+    const toolsCap = this.costManager.getToolsOutputCap();
+    if (toolsCap != null && toolsCap > 0) {
+      caps = { ...caps, maxOutputTokens: toolsCap };
+    }
     const start = Date.now();
 
     let content: string;
@@ -160,15 +184,6 @@ export class ProviderRouterService {
     let outputTokens = 0;
 
     switch (option.provider) {
-      case 'groq':
-        ({ content, tool_calls, provider, model, inputTokens, outputTokens } = await this.callGroqWithTools(
-          option,
-          messages,
-          tools,
-          caps,
-          tool_choice,
-        ));
-        break;
       case 'deepseek':
         ({ content, tool_calls, provider, model, inputTokens, outputTokens } = await this.callDeepSeekWithTools(
           option,
@@ -224,108 +239,7 @@ export class ProviderRouterService {
     return getModelOptions();
   }
 
-  // --- Groq (Auto) ---
-  private async callGroq(
-    option: { defaultModel: string; apiKeyEnv: string },
-    messages: LlmMessage[],
-    caps: { maxOutputTokens: number; maxInputTokens: number },
-    opts: RunChatCompletionOptions,
-  ): Promise<{ text: string; provider: string; model: string; inputTokens: number; outputTokens: number }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
-    if (!apiKey) {
-      throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
-    }
-    let modelId = option.defaultModel;
-    if (opts.messages?.length) {
-      const lastUser = [...opts.messages].reverse().find((m) => m.role === 'user');
-      const userContent = typeof lastUser?.content === 'string' ? lastUser.content : '';
-      if (this.costManager.shouldUseCheapModelForAuto(userContent)) {
-        modelId = this.costManager.getAutoCheapModelId();
-      }
-    }
-    const coreMessages = messages
-      .filter((m) => m.role !== 'tool')
-      .map((m) => ({ role: m.role as 'system' | 'user' | 'assistant', content: typeof m.content === 'string' ? m.content : '' }));
-    const result = await generateText({
-      model: groq(modelId),
-      messages: coreMessages,
-      maxOutputTokens: caps.maxOutputTokens,
-    });
-    const usage = (result as any).usage;
-    return {
-      text: result.text ?? '',
-      provider: 'groq',
-      model: modelId,
-      inputTokens: usage?.promptTokens ?? 0,
-      outputTokens: usage?.completionTokens ?? Math.ceil((result.text?.length ?? 0) / 4),
-    };
-  }
-
-  private async callGroqWithTools(
-    option: { defaultModel: string; apiKeyEnv: string },
-    messages: LlmMessage[],
-    tools: LlmToolDef[],
-    caps: { maxOutputTokens: number; maxInputTokens: number },
-    tool_choice?: 'auto' | 'required' | 'none',
-  ): Promise<{
-    content: string;
-    tool_calls: LlmResponse['tool_calls'];
-    provider: string;
-    model: string;
-    inputTokens: number;
-    outputTokens: number;
-  }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
-    if (!apiKey) {
-      throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
-    }
-    const modelId = option.defaultModel;
-    const apiMessages = this.llmMessagesToOpenAI(messages);
-    const apiTools = tools.map((t) => ({
-      type: 'function' as const,
-      function: {
-        name: t.function.name,
-        description: t.function.description,
-        parameters: t.function.parameters,
-      },
-    }));
-
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: modelId,
-        messages: apiMessages,
-        tools: apiTools,
-        tool_choice: tool_choice === 'required' ? 'required' : tool_choice === 'none' ? 'none' : 'auto',
-        max_tokens: caps.maxOutputTokens,
-      }),
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      const message = parseApiErrorResponse(errText, 'Groq', errText || 'Groq API error');
-      throw new HttpException(message, res.status);
-    }
-    const data = await res.json();
-    const msg = data?.choices?.[0]?.message || {};
-    const content = msg.content ?? '';
-    const rawToolCalls = msg.tool_calls || [];
-    const tool_calls = sanitizeToolCalls(rawToolCalls);
-    const usage = data?.usage || {};
-    return {
-      content,
-      tool_calls: tool_calls.length ? tool_calls : undefined,
-      provider: 'groq',
-      model: modelId,
-      inputTokens: usage.prompt_tokens ?? 0,
-      outputTokens: usage.completion_tokens ?? 0,
-    };
-  }
-
-  // --- DeepSeek (direct) ---
+  // --- DeepSeek (Auto + DeepSeek) ---
   private async callDeepSeek(
     option: { defaultModel: string; apiKeyEnv: string },
     messages: LlmMessage[],
@@ -412,6 +326,12 @@ export class ProviderRouterService {
       throw new HttpException(message, res.status);
     }
     const data = await res.json();
+    // API can return 200 with error in body (e.g. tool_use_failed)
+    if (data?.error) {
+      const errBody = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+      const message = parseApiErrorResponse(errBody, 'DeepSeek', errBody || 'DeepSeek API error');
+      throw new HttpException(message, 400);
+    }
     const msg = data?.choices?.[0]?.message || {};
     const content = msg.content ?? '';
     const rawToolCalls = msg.tool_calls || [];

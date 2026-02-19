@@ -1,6 +1,6 @@
 import { HttpException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ProviderRouterService } from '../../src/llm/provider-router.service';
+import { ProviderRouterService, normalizeLlmErrorMessage } from '../../src/llm/provider-router.service';
 import { CostManagerService } from '../../src/llm/cost-manager.service';
 
 const mockGenerateText = jest.fn();
@@ -11,16 +11,15 @@ jest.mock('ai', () => ({
 describe('ProviderRouterService', () => {
   const mockConfig = {
     get: jest.fn((key: string) => {
-      if (key === 'GROQ_API_KEY') return 'test-groq-key';
+      if (key === 'DEEPSEEK_API_KEY') return 'test-deepseek-key';
       return undefined;
     }),
   };
   const mockCostManager = {
-    getCaps: jest.fn(() => ({ maxOutputTokens: 300, maxInputTokens: 6000 })),
+    getCaps: jest.fn(() => ({ maxOutputTokens: 300, maxInputTokens: 8000 })),
+    getToolsOutputCap: jest.fn(() => null),
     estimateCost: jest.fn(() => null),
     isCostDebug: jest.fn(() => false),
-    shouldUseCheapModelForAuto: jest.fn(() => false),
-    getAutoCheapModelId: jest.fn(() => 'llama-3.3-70b-versatile'),
   };
 
   let service: ProviderRouterService;
@@ -40,21 +39,29 @@ describe('ProviderRouterService', () => {
     );
   });
 
-  describe('runChatCompletion (Auto/Groq)', () => {
+  describe('runChatCompletion (Auto/DeepSeek)', () => {
     it('returns text and meta on success', async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            choices: [{ message: { content: 'Hello' } }],
+            usage: { prompt_tokens: 10, completion_tokens: 5 },
+          }),
+      });
       const result = await service.runChatCompletion({
         selectedModelKey: 'auto',
         messages: [{ role: 'user', content: 'Hi' }],
         mode: 'decision',
       });
       expect(result.text).toBe('Hello');
-      expect(result.meta.provider).toBe('groq');
+      expect(result.meta.provider).toBe('deepseek');
       expect(result.meta.tokens?.input).toBe(10);
       expect(result.meta.tokens?.output).toBe(5);
     });
   });
 
-  describe('generateWithTools (Auto/Groq)', () => {
+  describe('generateWithTools (Auto/DeepSeek)', () => {
     const tools = [
       {
         type: 'function' as const,
@@ -72,7 +79,7 @@ describe('ProviderRouterService', () => {
       mode: 'decision' as const,
     };
 
-    it('throws user-friendly message when Groq returns "Failed to call a function"', async () => {
+    it('throws user-friendly message when API returns "Failed to call a function"', async () => {
       const groqErrorBody = JSON.stringify({
         error: {
           message: 'Failed to call a function. Pl...ls/WEB_CHECKLIST.md"></function>\n',
@@ -82,6 +89,24 @@ describe('ProviderRouterService', () => {
         ok: false,
         status: 400,
         text: () => Promise.resolve(groqErrorBody),
+      });
+      const err = await service.generateWithTools(opts).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpException);
+      expect((err as HttpException).message).toMatch(/Try again or use a different model/);
+    });
+
+    it('throws user-friendly message when API returns 200 with error in body (tool_use_failed)', async () => {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            error: {
+              message: "Failed to call a function. Please adjust your prompt. See 'failed_generation' for more details.",
+              type: 'invalid_request_error',
+              code: 'tool_use_failed',
+              failed_generation: '<function=memory_get({"path": "skills/WEB_CHECKLIST.md"})</function>\n',
+            },
+          }),
       });
       const err = await service.generateWithTools(opts).catch((e) => e);
       expect(err).toBeInstanceOf(HttpException);
@@ -181,6 +206,24 @@ describe('ProviderRouterService', () => {
       });
       expect(result.tool_calls).toHaveLength(1);
       expect(result.tool_calls![0].name).toBe('valid_tool');
+    });
+  });
+
+  describe('normalizeLlmErrorMessage', () => {
+    it('returns friendly message for raw tool_use_failed JSON', () => {
+      const raw = JSON.stringify({
+        error: {
+          message: "Failed to call a function. See 'failed_generation' for more details.",
+          code: 'tool_use_failed',
+        },
+      });
+      expect(normalizeLlmErrorMessage(raw)).toMatch(/Try again or use a different model/);
+    });
+    it('returns friendly message for plain text containing tool_use_failed', () => {
+      expect(normalizeLlmErrorMessage('Error: tool_use_failed - invalid output')).toMatch(/Try again or use a different model/);
+    });
+    it('returns original message for unrelated errors', () => {
+      expect(normalizeLlmErrorMessage('Rate limit exceeded')).toBe('Rate limit exceeded');
     });
   });
 });

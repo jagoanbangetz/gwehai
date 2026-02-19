@@ -11,7 +11,7 @@ import { UsageEvent } from '../entities/usage-event.entity';
 import { PointsService } from '../points/points.service';
 import { PointLedgerReason } from '../entities/point-ledger.entity';
 import { LlmService } from '../llm/llm.service';
-import { ProviderRouterService } from '../llm/provider-router.service';
+import { ProviderRouterService, normalizeLlmErrorMessage } from '../llm/provider-router.service';
 import { CostManagerService } from '../llm/cost-manager.service';
 import type { ModelOptionKey } from '../config/model-options.config';
 import { PENTEST_SYSTEM_PROMPT, SIMPLE_SECURITY_SYSTEM_PROMPT } from '../prompt/pentest.system-prompt';
@@ -263,12 +263,14 @@ export class ChatService {
   };
 
   /**
-   * Get or create conversation
+   * Get or create conversation.
+   * When skipDefaultModel is true (e.g. caller uses model picker / Auto), new conversations are created with modelId = null so we never depend on a DB model.
    */
   async getOrCreateConversation(
     userId: string,
     conversationId?: string,
     modelId?: string,
+    skipDefaultModel?: boolean,
   ): Promise<Conversation> {
     if (conversationId) {
       const conversation = await this.conversationRepo.findOne({
@@ -281,8 +283,8 @@ export class ChatService {
       throw new NotFoundException('Conversation not found');
     }
 
-    // Get default model if not specified (prefer DeepSeek when no default set)
-    if (!modelId) {
+    // When using model picker (Auto), don't attach a DB model so we never hit "Model not found"
+    if (!skipDefaultModel && !modelId) {
       let defaultModel = await this.modelRepo.findOne({
         where: { isDefault: true, isActive: true },
       });
@@ -299,7 +301,7 @@ export class ChatService {
     // Create new conversation
     const conversation = this.conversationRepo.create({
       userId,
-      modelId,
+      modelId: skipDefaultModel ? undefined : modelId,
       title: 'New Conversation',
     });
     return await this.conversationRepo.save(conversation);
@@ -362,7 +364,9 @@ export class ChatService {
       });
 
       if (!model || !model.isActive) {
-        throw new NotFoundException('Model not found or inactive');
+        throw new NotFoundException(
+          'Model not found or inactive. Use Auto (DeepSeek) in the model picker and ensure DEEPSEEK_API_KEY is set.',
+        );
       }
 
       // Calculate cost (fixed per call or token-based)
@@ -470,15 +474,17 @@ export class ChatService {
   ): Promise<{ conversationId: string; messageId: string; response: string }> {
     const useModelPicker = !!options?.model_key;
     const result = await this.dataSource.transaction(async (manager) => {
-      const conversation = await this.getOrCreateConversation(userId, conversationId);
-      let model = await manager.findOne(Model, {
-        where: { id: conversation.modelId },
-      });
+      const conversation = await this.getOrCreateConversation(userId, conversationId, undefined, useModelPicker);
+      let model = conversation.modelId
+        ? await manager.findOne(Model, { where: { id: conversation.modelId } })
+        : null;
       if (!model || !model.isActive) {
         if (useModelPicker) {
           model = null as any;
         } else {
-          throw new NotFoundException('Model not found or inactive');
+          throw new NotFoundException(
+            'Model not found or inactive. Use Auto (DeepSeek) in the model picker and ensure DEEPSEEK_API_KEY is set.',
+          );
         }
       }
 
@@ -566,7 +572,8 @@ export class ChatService {
       { role: 'user', content: message },
     ];
     let content: string;
-    const modelKey = options?.model_key;
+    // Auto = DeepSeek. Use provider router when model_key is set or when we have no DB model.
+    const modelKey = options?.model_key || (!model ? 'auto' : undefined);
     if (modelKey) {
       const result = await this.providerRouter.runChatCompletion({
         selectedModelKey: modelKey,
@@ -625,15 +632,17 @@ export class ChatService {
   ): Promise<{ conversationId: string; messageId: string; response: string }> {
     const useModelPicker = !!options?.model_key;
     const result = await this.dataSource.transaction(async (manager) => {
-      const conversation = await this.getOrCreateConversation(userId, conversationId);
-      let model = await manager.findOne(Model, {
-        where: { id: conversation.modelId },
-      });
+      const conversation = await this.getOrCreateConversation(userId, conversationId, undefined, useModelPicker);
+      let model = conversation.modelId
+        ? await manager.findOne(Model, { where: { id: conversation.modelId } })
+        : null;
       if (!model || !model.isActive) {
         if (useModelPicker) {
           model = null as any;
         } else {
-          throw new NotFoundException('Model not found or inactive');
+          throw new NotFoundException(
+            'Model not found or inactive. Use Auto (DeepSeek) in the model picker and ensure DEEPSEEK_API_KEY is set.',
+          );
         }
       }
 
@@ -788,8 +797,12 @@ export class ChatService {
 
       // Turn 1: require tools so the agent starts with tools. After that, model chooses tools or text freely.
       const toolChoice = turn === 1 ? ('required' as const) : undefined;
-      const modelKey = options?.model_key;
+      // Auto = DeepSeek. Default to 'auto' when no key so we never try to use a missing DB model.
+      const modelKey = options?.model_key || 'auto';
 
+      const toolsCap = this.costManager.getToolsOutputCap();
+      const fallbackCaps = this.costManager.getCaps('auto', 'decision');
+      const maxTokensForTools = toolsCap ?? fallbackCaps.maxOutputTokens;
       const response = modelKey
         ? await this.providerRouter
             .generateWithTools({
@@ -804,7 +817,7 @@ export class ChatService {
             model,
             truncateMessagesForContext(messages),
             PENTEST_TOOL_DEFS,
-            toolChoice ? { tool_choice: toolChoice } : undefined,
+            { tool_choice: toolChoice, max_tokens: maxTokensForTools },
           );
       if (!response) {
         finalContent = this.generateLocalResponse(message);
@@ -847,14 +860,19 @@ export class ChatService {
             toolResult = `Error: ${err?.message || String(err)}`;
           }
 
+          // Wait for tool to finish, then save output to DB so Hacktivity shows tool content before we continue.
           if (userId) {
             const domain = this.extractDomainFromArgs(args);
-            this.hacktivityService.create(userId, {
-              conversationId: cid ?? null,
-              domain: domain ?? null,
-              result: toolResult,
-              toolArgs: args,
-            }).catch((err) => console.warn('[Hacktivity] log failed', err?.message));
+            try {
+              await this.hacktivityService.create(userId, {
+                conversationId: cid ?? null,
+                domain: domain ?? null,
+                result: toolResult,
+                toolArgs: args,
+              });
+            } catch (err: any) {
+              console.warn('[Hacktivity] log failed', err?.message);
+            }
           }
 
           messages.push({
@@ -885,7 +903,7 @@ export class ChatService {
     }
 
     // If we hit MAX_TURNS or step limit without any text reply, ask the model once for a summary (no tools).
-    const modelKeySummary = options?.model_key;
+    const modelKeySummary = options?.model_key || 'auto';
     if (!finalContent?.trim()) {
       push({ type: 'status', data: { message: 'Writing response...' } });
       const summaryPrompt = stepLimitReached
@@ -896,6 +914,7 @@ export class ChatService {
         content: summaryPrompt,
       };
       const summaryMessages = truncateMessagesForContext([...messages, summaryMessage]);
+      const summaryCaps = this.costManager.getToolsOutputCap() ?? this.costManager.getCaps('auto', 'decision').maxOutputTokens;
       const summaryResponse = modelKeySummary
         ? await this.providerRouter
             .generateWithTools({
@@ -906,7 +925,10 @@ export class ChatService {
               tool_choice: 'none',
             })
             .then((r) => ({ content: r.content }))
-        : await this.llmService.generateWithTools(model, summaryMessages, PENTEST_TOOL_DEFS, { tool_choice: 'none' });
+        : await this.llmService.generateWithTools(model, summaryMessages, PENTEST_TOOL_DEFS, {
+            tool_choice: 'none',
+            max_tokens: summaryCaps,
+          });
       if (summaryResponse?.content?.trim()) {
         finalContent = summaryResponse.content;
       } else {
@@ -1561,10 +1583,11 @@ export class ChatService {
       await onSubAgentDone?.();
     }).catch(async (err: any) => {
       if (mainPushEvent && agentInfo) {
+        const raw = err?.message ?? err?.response?.message ?? String(err);
         mainPushEvent({
           type: 'error',
           data: {
-            message: err?.message || String(err),
+            message: normalizeLlmErrorMessage(raw),
             agent_index: agentInfo.index,
             agent_label: agentInfo.label,
           },

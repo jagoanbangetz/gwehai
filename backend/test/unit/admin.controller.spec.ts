@@ -38,6 +38,13 @@ describe('AdminController', () => {
   const gwehaiService = {
     getActiveJobsForAdmin: jest.fn().mockReturnValue([]),
   };
+  const hacktivityService = {
+    getAdminStream: jest.fn().mockReturnValue({ subscribe: jest.fn() }),
+  };
+  const settingsRepo = repo() as any;
+  const abuseRepo = repo() as any;
+  const planUsageService = {} as any;
+  const mailService = { isConfigured: jest.fn().mockReturnValue(false), sendPromotionEmail: jest.fn().mockResolvedValue(true) } as any;
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -53,8 +60,13 @@ describe('AdminController', () => {
       conversationRepo,
       memoryRepo,
       hacktivityRepo,
+      settingsRepo,
+      abuseRepo,
       adminService as any,
       gwehaiService as any,
+      hacktivityService as any,
+      planUsageService,
+      mailService,
     );
   });
 

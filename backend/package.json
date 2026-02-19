@@ -32,10 +32,12 @@
     "db:delete-all-data": "ts-node src/scripts/delete-all-data.ts",
     "db:delete-all-data:confirm": "ts-node src/scripts/delete-all-data.ts --confirm",
     "make-admin": "ts-node src/scripts/make-admin.ts",
-    "set-plan": "ts-node src/scripts/set-plan.ts"
+    "set-plan": "ts-node src/scripts/set-plan.ts",
+    "test:gwehai-api": "ts-node -r tsconfig-paths/register src/scripts/test-gwehai-api.ts",
+    "generate-bearer-token": "ts-node -r tsconfig-paths/register src/scripts/generate-bearer-token.ts",
+    "test:groq-request-response": "ts-node -r tsconfig-paths/register src/scripts/test-groq-request-response.ts"
   },
   "dependencies": {
-    "@ai-sdk/groq": "^3.0.24",
     "@mariozechner/pi-agent-core": "0.52.8",
     "@mariozechner/pi-ai": "0.52.8",
     "@mariozechner/pi-coding-agent": "0.52.8",

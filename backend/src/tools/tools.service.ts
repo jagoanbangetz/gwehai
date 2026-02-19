@@ -394,6 +394,17 @@ export class ToolsService {
   }
 
   /**
+   * Whether to prefer refreshing skills from CDN instead of using local cache.
+   * Controlled by PENTEST_SKILLS_ALWAYS_REFRESH (\"true\"/\"1\"/\"yes\").
+   */
+  private shouldRefreshSkillsFromCdn(): boolean {
+    const v = this.configService.get<string>('PENTEST_SKILLS_ALWAYS_REFRESH');
+    if (!v) return false;
+    const t = v.trim().toLowerCase();
+    return t === '1' || t === 'true' || t === 'yes';
+  }
+
+  /**
    * Read skill content: check local dir (/opt/skills) first; if not found, fetch from CDN
    * (https://skills.gweh.sh) and cache to local. Same path structure everywhere (skills/AGENTS.md, etc.).
    */
@@ -404,9 +415,10 @@ export class ToolsService {
     const suffix = filePath.replace(/^skills\/?/, '');
     const localDir = this.getSkillsLocalDir();
     const localPath = path.join(localDir, suffix);
+    const forceCdn = this.shouldRefreshSkillsFromCdn();
 
-    // 1) Check local /opt/skills (or PENTEST_SKILLS_LOCAL_DIR) first
-    if (existsSync(localPath) && statSync(localPath).isFile()) {
+    // 1) Check local /opt/skills (or PENTEST_SKILLS_LOCAL_DIR) first (unless forced to refresh from CDN)
+    if (!forceCdn && existsSync(localPath) && statSync(localPath).isFile()) {
       return this.readExistingFile(localPath, allowMissing);
     }
 
@@ -430,8 +442,13 @@ export class ToolsService {
         }
         return content;
       } catch (err: any) {
-        if (allowMissing && (err?.name === 'NotFoundError' || err?.message?.includes('404')))
+        // If we're forcing CDN refresh but it failed and a local cached copy exists, fall back to local.
+        if (forceCdn && existsSync(localPath) && statSync(localPath).isFile()) {
+          return this.readExistingFile(localPath, allowMissing);
+        }
+        if (allowMissing && (err?.name === 'NotFoundError' || err?.message?.includes('404'))) {
           return '';
+        }
         throw err;
       }
     }

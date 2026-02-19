@@ -3,7 +3,8 @@ import { ReportsService } from '../../src/reports/reports.service';
 
 describe('ReportsController', () => {
   const reportsService = {
-    listGroupedByConversation: jest.fn(),
+    listGroupedByDomainAndDate: jest.fn(),
+    listFindingsByDomainAndDate: jest.fn(),
     listFindingsByConversation: jest.fn(),
     getReportForUser: jest.fn(),
     createReportForUser: jest.fn(),
@@ -17,22 +18,35 @@ describe('ReportsController', () => {
   });
 
   describe('listReports', () => {
-    it('returns reports grouped by conversation for the Report menu', async () => {
+    it('returns reports grouped by domain, date, conversationId for the Report menu', async () => {
       const grouped = [
-        { conversationId: 'c1', website: 'https://example.com', findingsCount: 3, createdAt: '2026-02-10T12:00:00.000Z' },
+        {
+          domain: 'example.com',
+          date: '2026-02-17',
+          conversationId: 'c1-uuid',
+          findingsCount: 3,
+          createdAt: '2026-02-17T12:00:00.000Z',
+          firstAt: '2026-02-17T10:00:00.000Z',
+          lastAt: '2026-02-17T12:00:00.000Z',
+        },
       ];
-      (reportsService.listGroupedByConversation as jest.Mock).mockResolvedValue(grouped);
+      (reportsService.listGroupedByDomainAndDate as jest.Mock).mockResolvedValue(grouped);
 
-      const result = await controller.listReports({ user: { id: 'u1' } } as any, undefined, undefined);
+      const result = await controller.listReports({ user: { id: 'u1' } } as any);
 
-      expect(reportsService.listGroupedByConversation).toHaveBeenCalledWith('u1', { groupByParent: false });
+      expect(reportsService.listGroupedByDomainAndDate).toHaveBeenCalledWith('u1');
       expect(result).toEqual(grouped);
       expect(result).toHaveLength(1);
-      expect(result[0]).toMatchObject({ conversationId: 'c1', website: 'https://example.com', findingsCount: 3 });
+      expect(result[0]).toMatchObject({
+        domain: 'example.com',
+        date: '2026-02-17',
+        conversationId: 'c1-uuid',
+        findingsCount: 3,
+      });
     });
 
     it('returns empty array when user has no reports', async () => {
-      (reportsService.listGroupedByConversation as jest.Mock).mockResolvedValue([]);
+      (reportsService.listGroupedByDomainAndDate as jest.Mock).mockResolvedValue([]);
 
       const result = await controller.listReports({ user: { id: 'u2' } } as any);
 
@@ -40,7 +54,60 @@ describe('ReportsController', () => {
     });
   });
 
-  describe('listFindingsByConversation', () => {
+  describe('listFindingsByDomainAndDate (by-domain-date)', () => {
+    it('returns findings for domain and date', async () => {
+      const findings = [
+        { id: 'f1', detail: 'SQL injection', target: 'https://example.com', metadata: { title: 'SQLi', severity: 'high' }, poc: 'curl ...' },
+      ];
+      (reportsService.listFindingsByDomainAndDate as jest.Mock).mockResolvedValue(findings);
+
+      const result = await controller.listFindingsByDomainAndDate(
+        { user: { id: 'u1' } } as any,
+        'example.com',
+        '2026-02-17',
+        undefined,
+      );
+
+      expect(reportsService.listFindingsByDomainAndDate).toHaveBeenCalledWith('u1', 'example.com', '2026-02-17', undefined);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({ id: 'f1', detail: 'SQL injection' });
+    });
+
+    it('passes conversationId when provided', async () => {
+      (reportsService.listFindingsByDomainAndDate as jest.Mock).mockResolvedValue([]);
+
+      await controller.listFindingsByDomainAndDate(
+        { user: { id: 'u1' } } as any,
+        'example.com',
+        '2026-02-17',
+        'conv-123',
+      );
+
+      expect(reportsService.listFindingsByDomainAndDate).toHaveBeenCalledWith('u1', 'example.com', '2026-02-17', 'conv-123');
+    });
+
+    it('returns empty array when domain or date is missing', async () => {
+      const resultEmptyDomain = await controller.listFindingsByDomainAndDate(
+        { user: { id: 'u1' } } as any,
+        '',
+        '2026-02-17',
+        undefined,
+      );
+      expect(resultEmptyDomain).toEqual([]);
+      expect(reportsService.listFindingsByDomainAndDate).not.toHaveBeenCalled();
+
+      const resultEmptyDate = await controller.listFindingsByDomainAndDate(
+        { user: { id: 'u1' } } as any,
+        'example.com',
+        '',
+        undefined,
+      );
+      expect(resultEmptyDate).toEqual([]);
+      expect(reportsService.listFindingsByDomainAndDate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('listFindingsByConversation (legacy)', () => {
     it('returns findings for a conversation', async () => {
       const findings = [
         { id: 'f1', detail: 'SQL injection', metadata: { title: 'SQLi', severity: 'high' }, poc: 'curl ...' },
