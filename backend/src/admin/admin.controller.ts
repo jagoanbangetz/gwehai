@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Patch, Body, Query, Param, UseGuards, Req, HttpException, HttpStatus, Sse } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, MoreThanOrEqual } from 'typeorm';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -26,6 +26,7 @@ import { PlanUsageService } from '../plans/plan-usage.service';
 import { getPlanDefinition, type PlanId } from '../config/plans.config';
 import { Observable } from 'rxjs';
 import { MailService } from '../mail/mail.service';
+import { PentestJobsService } from '../pentest-jobs/pentest-jobs.service';
 import * as bcrypt from 'bcrypt';
 
 const WIPE_CONFIRM_PHRASE = 'WIPE_ALL_DATA';
@@ -73,20 +74,58 @@ export class AdminController {
     private readonly hacktivityService: HacktivityService,
     private readonly planUsageService: PlanUsageService,
     private readonly mailService: MailService,
+    private readonly pentestJobsService: PentestJobsService,
   ) {}
 
   @Get('dashboard')
-  async getDashboardSummary() {
-    const [userCount, adminCount, modelCount, orderCount, reportCount, conversationCount, hacktivityCount] =
-      await Promise.all([
-        this.userRepo.count(),
-        this.userRepo.count({ where: { role: UserRole.ADMIN } }),
-        this.modelRepo.count(),
-        this.orderRepo.count(),
-        this.reportRepo.count(),
-        this.conversationRepo.count(),
-        this.hacktivityRepo.count(),
-      ]);
+  async getDashboardSummary(@Query('days') days?: string) {
+    const rangeDays = [1, 7, 30].includes(parseInt(days || '0', 10))
+      ? parseInt(days!, 10)
+      : 0;
+    const start = rangeDays
+      ? (() => {
+          const s = new Date();
+          s.setDate(s.getDate() - rangeDays);
+          s.setHours(0, 0, 0, 0);
+          return s;
+        })()
+      : null;
+
+    const [
+      userCount,
+      adminCount,
+      modelCount,
+      orderCount,
+      reportCount,
+      conversationCount,
+      hacktivityCount,
+      usageCount,
+      usersInRange,
+      conversationsInRange,
+      reportsInRange,
+      usageInRange,
+    ] = await Promise.all([
+      this.userRepo.count(),
+      this.userRepo.count({ where: { role: UserRole.ADMIN } }),
+      this.modelRepo.count(),
+      this.orderRepo.count(),
+      this.reportRepo.count(),
+      this.conversationRepo.count(),
+      this.hacktivityRepo.count(),
+      this.usageRepo.count(),
+      start
+        ? this.userRepo.count({ where: { createdAt: MoreThanOrEqual(start) as any } })
+        : Promise.resolve(0),
+      start
+        ? this.conversationRepo.count({ where: { createdAt: MoreThanOrEqual(start) as any } })
+        : Promise.resolve(0),
+      start
+        ? this.reportRepo.count({ where: { createdAt: MoreThanOrEqual(start) as any } })
+        : Promise.resolve(0),
+      start
+        ? this.usageRepo.count({ where: { createdAt: MoreThanOrEqual(start) as any } })
+        : Promise.resolve(0),
+    ]);
 
     const activeJobs = this.gwehaiService.getActiveJobsForAdmin();
     const recentActivity = await this.usageRepo.find({
@@ -96,13 +135,14 @@ export class AdminController {
     });
 
     return {
-      users: userCount,
+      users: rangeDays ? usersInRange : userCount,
       admins: adminCount,
       aiAgents: modelCount,
       payments: orderCount,
-      reports: reportCount,
-      conversations: conversationCount,
+      reports: rangeDays ? reportsInRange : reportCount,
+      conversations: rangeDays ? conversationsInRange : conversationCount,
       hacktivityTotal: hacktivityCount,
+      usage: rangeDays ? usageInRange : usageCount,
       activeJobsCount: activeJobs.filter((j) => j.status === 'running').length,
       activeJobs: activeJobs.slice(0, 50),
       recentActivity: recentActivity.map((e) => ({
@@ -119,7 +159,7 @@ export class AdminController {
 
   @Get('dashboard/chart')
   async getDashboardChart(@Query('days') days?: string) {
-    const numDays = Math.min(31, Math.max(7, parseInt(days || '14', 10) || 14));
+    const numDays = Math.min(31, Math.max(1, parseInt(days || '7', 10) || 7));
     const start = new Date();
     start.setDate(start.getDate() - numDays);
     start.setHours(0, 0, 0, 0);
@@ -349,25 +389,62 @@ export class AdminController {
 
   @Get('usage-summary')
   async getUsageSummary() {
-    const [usageByUser, totalUsage] = await Promise.all([
+    const [usageByUserRaw, totalRaw, byModelRaw] = await Promise.all([
       this.usageRepo
         .createQueryBuilder('u')
+        .innerJoin('u.user', 'user')
         .select('u.userId', 'userId')
+        .addSelect('user.email', 'userEmail')
         .addSelect('SUM(u.inputTokens)', 'inputTokens')
         .addSelect('SUM(u.outputTokens)', 'outputTokens')
         .addSelect('COUNT(*)', 'calls')
         .groupBy('u.userId')
-        .orderBy('calls', 'DESC')
+        .addGroupBy('user.id')
+        .addGroupBy('user.email')
+        .orderBy('COUNT(*)', 'DESC')
         .limit(100)
-        .getRawMany(),
+        .getRawMany<{ userId: string; userEmail: string; inputTokens: string; outputTokens: string; calls: string }>(),
       this.usageRepo
         .createQueryBuilder('u')
-        .select('SUM(u.inputTokens)', 'inputTokens')
+        .select('COALESCE(SUM(u.inputTokens), 0)', 'inputTokens')
+        .addSelect('COALESCE(SUM(u.outputTokens), 0)', 'outputTokens')
+        .addSelect('COALESCE(COUNT(*), 0)', 'calls')
+        .getRawOne<{ inputTokens: string; outputTokens: string; calls: string }>(),
+      this.usageRepo
+        .createQueryBuilder('u')
+        .leftJoin('u.model', 'model')
+        .select('u.modelId', 'modelId')
+        .addSelect('model.name', 'modelName')
+        .addSelect('model.displayName', 'modelDisplayName')
+        .addSelect('SUM(u.inputTokens)', 'inputTokens')
         .addSelect('SUM(u.outputTokens)', 'outputTokens')
         .addSelect('COUNT(*)', 'calls')
-        .getRawOne(),
+        .groupBy('u.modelId')
+        .addGroupBy('model.id')
+        .addGroupBy('model.name')
+        .addGroupBy('model.displayName')
+        .orderBy('COUNT(*)', 'DESC')
+        .getRawMany<{ modelId: string; modelName: string; modelDisplayName: string; inputTokens: string; outputTokens: string; calls: string }>(),
     ]);
-    return { byUser: usageByUser, total: totalUsage };
+    const total = totalRaw
+      ? { inputTokens: String(totalRaw.inputTokens ?? 0), outputTokens: String(totalRaw.outputTokens ?? 0), calls: String(totalRaw.calls ?? 0) }
+      : { inputTokens: '0', outputTokens: '0', calls: '0' };
+    const byUser = usageByUserRaw.map((r) => ({
+      userId: r.userId,
+      userEmail: r.userEmail ?? null,
+      inputTokens: String(r.inputTokens ?? 0),
+      outputTokens: String(r.outputTokens ?? 0),
+      calls: String(r.calls ?? 0),
+    }));
+    const byModel = byModelRaw.map((r) => ({
+      modelId: r.modelId,
+      modelName: r.modelName ?? null,
+      modelDisplayName: r.modelDisplayName ?? null,
+      inputTokens: String(r.inputTokens ?? 0),
+      outputTokens: String(r.outputTokens ?? 0),
+      calls: String(r.calls ?? 0),
+    }));
+    return { byUser, total, byModel };
   }
 
   @Get('health')
@@ -589,33 +666,42 @@ export class AdminController {
   ) {
     const take = Math.min(200, Math.max(1, parseInt(limit || '50', 10) || 50));
     const skip = Math.max(0, parseInt(offset || '0', 10) || 0);
-    let qb = this.usageRepo.createQueryBuilder('u').innerJoin('u.user', 'user')
-      .select('u.userId', 'userId').addSelect('user.email', 'user_email').addSelect('user.planId', 'user_planId')
-      .addSelect('SUM(u.inputTokens)', 'inputTokens').addSelect('SUM(u.outputTokens)', 'outputTokens').addSelect('SUM(u.costPoints)', 'costPoints').addSelect('COUNT(*)', 'calls').addSelect('MAX(u.createdAt)', 'lastActive')
-      .groupBy('u.userId').addGroupBy('user.id').addGroupBy('user.email').addGroupBy('user.planId');
-    if (dateFrom) qb = qb.andWhere('u.createdAt >= :dateFrom', { dateFrom: dateFrom + 'T00:00:00.000Z' });
-    if (dateTo) qb = qb.andWhere('u.createdAt <= :dateTo', { dateTo: dateTo + 'T23:59:59.999Z' });
-    if (model) qb = qb.andWhere('u.modelId = :model', { model });
-    if (plan) qb = qb.andWhere('(user.planId = :plan OR (user.planId IS NULL AND :plan = \'FREE\'))', { plan });
-    const raw = await qb.orderBy('MAX(u.createdAt)', 'DESC').skip(skip).take(take).getRawMany();
-    const items = raw.map((r) => ({
-      user: r.user_email ?? r.userId,
-      userId: r.userId,
-      plan: r.user_planId ?? 'FREE',
-      model: model ?? null,
-      inputTokens: Number(r.inputTokens ?? 0),
-      outputTokens: Number(r.outputTokens ?? 0),
-      totalCost: (Number(r.costPoints ?? 0) * POINTS_TO_USD).toFixed(4),
-      calls: Number(r.calls ?? 0),
-      lastActive: r.lastActive,
-    }));
-    const countQb = this.usageRepo.createQueryBuilder('u').innerJoin('u.user', 'user').select('COUNT(DISTINCT u.userId)', 'cnt');
-    if (dateFrom) countQb.andWhere('u.createdAt >= :dateFrom', { dateFrom: dateFrom + 'T00:00:00.000Z' });
-    if (dateTo) countQb.andWhere('u.createdAt <= :dateTo', { dateTo: dateTo + 'T23:59:59.999Z' });
-    if (model) countQb.andWhere('u.modelId = :model', { model });
-    if (plan) countQb.andWhere('(user.planId = :plan OR (user.planId IS NULL AND :plan = \'FREE\'))', { plan });
-    const totalRow = await countQb.getRawOne<{ cnt: string }>();
-    const total = parseInt(totalRow?.cnt ?? '0', 10);
+
+    const usageQb = this.usageRepo
+      .createQueryBuilder('u')
+      .select('u.userId', 'userId')
+      .addSelect('SUM(u.inputTokens)', 'inputTokens')
+      .addSelect('SUM(u.outputTokens)', 'outputTokens')
+      .addSelect('SUM(u.costPoints)', 'costPoints')
+      .addSelect('COUNT(*)', 'calls')
+      .addSelect('MAX(u.createdAt)', 'lastActive')
+      .groupBy('u.userId');
+    if (dateFrom) usageQb.andWhere('u.createdAt >= :dateFrom', { dateFrom: dateFrom + 'T00:00:00.000Z' });
+    if (dateTo) usageQb.andWhere('u.createdAt <= :dateTo', { dateTo: dateTo + 'T23:59:59.999Z' });
+    if (model) usageQb.andWhere('u.modelId = :model', { model });
+    const usageRaw = await usageQb.getRawMany<{ userId: string; inputTokens: string; outputTokens: string; costPoints: string; calls: string; lastActive: string }>();
+    const usageByUser = new Map(usageRaw.map((r) => [r.userId, r]));
+
+    let userQb = this.userRepo.createQueryBuilder('user').select('user.id', 'id').addSelect('user.email', 'email').addSelect('user.planId', 'planId').addSelect('user.createdAt', 'createdAt').orderBy('user.createdAt', 'DESC');
+    if (plan) userQb = userQb.andWhere('(user.planId = :plan OR (user.planId IS NULL AND :plan = \'FREE\'))', { plan });
+    const allUsers = await userQb.getRawMany<{ id: string; email: string; planId: string; createdAt: string }>();
+    const total = allUsers.length;
+    const usersPage = allUsers.slice(skip, skip + take);
+
+    const items = usersPage.map((u) => {
+      const usage = usageByUser.get(u.id);
+      return {
+        user: u.email ?? u.id,
+        userId: u.id,
+        plan: u.planId ?? 'FREE',
+        model: model ?? null,
+        inputTokens: usage ? Number(usage.inputTokens ?? 0) : 0,
+        outputTokens: usage ? Number(usage.outputTokens ?? 0) : 0,
+        totalCost: (usage ? Number(usage.costPoints ?? 0) * POINTS_TO_USD : 0).toFixed(4),
+        calls: usage ? Number(usage.calls ?? 0) : 0,
+        lastActive: usage?.lastActive ?? null,
+      };
+    });
     return { items, total };
   }
 
@@ -708,9 +794,12 @@ export class AdminController {
   }
 
   @Get('jobs/live')
-  getJobsLive() {
-    const jobs = this.gwehaiService.getActiveJobsForAdmin();
-    const withMeta = jobs.map((j) => {
+  async getJobsLive() {
+    const [memJobs, dbPentestJobs] = await Promise.all([
+      Promise.resolve(this.gwehaiService.getActiveJobsForAdmin()),
+      this.pentestJobsService.listRecentForAdmin(50),
+    ]);
+    const liveItems = memJobs.map((j) => {
       const duration = j.createdAt ? Math.round((Date.now() - j.createdAt) / 1000) : 0;
       return {
         job_id: j.job_id,
@@ -723,9 +812,30 @@ export class AdminController {
         durationSeconds: duration,
         workerId: j.job_id,
         userMessage: j.userMessage,
+        source: 'live' as const,
       };
     });
-    return { items: withMeta };
+    const liveConvIds = new Set(liveItems.map((i) => i.conversationId).filter(Boolean));
+    const dbItems = dbPentestJobs
+      .filter((p) => !p.conversationId || !liveConvIds.has(p.conversationId))
+      .map((p) => {
+        const started = p.createdAt instanceof Date ? p.createdAt.getTime() : new Date(p.createdAt).getTime();
+        const duration = Math.round((Date.now() - started) / 1000);
+        return {
+          job_id: p.id,
+          userId: p.userId,
+          conversationId: p.conversationId || '',
+          target: p.targetBaseUrl?.slice(0, 120) || '—',
+          status: p.status,
+          phase: '—',
+          started,
+          durationSeconds: duration,
+          workerId: p.id,
+          userMessage: p.seedPromptRedacted?.slice(0, 120) || '—',
+          source: 'db' as const,
+        };
+      });
+    return { items: [...liveItems, ...dbItems] };
   }
 
   @Post('jobs/action')
@@ -879,32 +989,30 @@ export class AdminController {
   async getMarginUsers(@Query('limit') limit?: string, @Query('offset') offset?: string) {
     const take = Math.min(200, Math.max(1, parseInt(limit || '50', 10) || 50));
     const skip = Math.max(0, parseInt(offset || '0', 10) || 0);
-    const revQb = this.orderRepo.createQueryBuilder('o').select('o.userId', 'userId').addSelect('COALESCE(SUM(o.amountCents), 0)', 'revenueCents').where('o.status = :status', { status: CreditOrderStatus.COMPLETED }).groupBy('o.userId');
-    const revRaw = await revQb.getRawMany<{ userId: string; revenueCents: string }>();
-    const costQb = this.usageRepo.createQueryBuilder('u').select('u.userId', 'userId').addSelect('SUM(u.costPoints)', 'costPoints').groupBy('u.userId');
-    const costRaw = await costQb.getRawMany<{ userId: string; costPoints: string }>();
+    const [revRaw, costRaw, allUsers] = await Promise.all([
+      this.orderRepo.createQueryBuilder('o').select('o.userId', 'userId').addSelect('COALESCE(SUM(o.amountCents), 0)', 'revenueCents').where('o.status = :status', { status: CreditOrderStatus.COMPLETED }).groupBy('o.userId').getRawMany<{ userId: string; revenueCents: string }>(),
+      this.usageRepo.createQueryBuilder('u').select('u.userId', 'userId').addSelect('SUM(u.costPoints)', 'costPoints').groupBy('u.userId').getRawMany<{ userId: string; costPoints: string }>(),
+      this.userRepo.find({ order: { createdAt: 'DESC' }, select: ['id', 'email', 'planId', 'createdAt'] }),
+    ]);
     const revMap = new Map(revRaw.map((r) => [r.userId, Number(r.revenueCents) / 100]));
     const costMap = new Map(costRaw.map((r) => [r.userId, Number(r.costPoints) * POINTS_TO_USD]));
-    const allUserIds = [...new Set([...revMap.keys(), ...costMap.keys()])];
-    const userIds = allUserIds.slice(skip, skip + take);
-    const users = userIds.length ? await this.userRepo.find({ where: userIds.map((id) => ({ id })), select: ['id', 'email', 'planId', 'createdAt'] }) : [];
-    const userMap = new Map(users.map((u) => [u.id, u]));
-    const items = userIds.map((userId) => {
-      const u = userMap.get(userId);
-      const revenue = revMap.get(userId) ?? 0;
-      const aiCost = costMap.get(userId) ?? 0;
+    const total = allUsers.length;
+    const usersPage = allUsers.slice(skip, skip + take);
+    const items = usersPage.map((u) => {
+      const revenue = revMap.get(u.id) ?? 0;
+      const aiCost = costMap.get(u.id) ?? 0;
       const marginPct = revenue > 0 ? ((revenue - aiCost) / revenue) * 100 : 0;
       return {
-        user: u?.email ?? userId,
-        userId,
-        plan: u?.planId ?? 'FREE',
+        user: u.email ?? u.id,
+        userId: u.id,
+        plan: u.planId ?? 'FREE',
         revenue: revenue.toFixed(2),
         aiCost: aiCost.toFixed(4),
         marginPct: marginPct.toFixed(1),
-        activeSince: u?.createdAt ?? null,
+        activeSince: u.createdAt ?? null,
       };
     });
-    return { items, total: allUserIds.length };
+    return { items, total };
   }
 
   @Post('wipe-chat-and-reports')

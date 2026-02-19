@@ -2,6 +2,8 @@
 
 This document summarizes what **users** (authenticated or public) can do versus what **admins** can do in the app.
 
+**Default timezone:** The app uses **GMT+8 (Asia/Singapore)** by default. The backend sets `TZ=Asia/Singapore` at startup so server-side date logic (e.g. "today", dashboard ranges) is in GMT+8. The frontend displays all dates/times in GMT+8 via `frontend/src/utils/date.ts` (`formatDateTime`, `formatDate`, `formatTime`). To use another timezone, set the `TZ` environment variable for the backend and change `DEFAULT_TIMEZONE` in `date.ts`.
+
 ---
 
 ## User features
@@ -97,3 +99,56 @@ npm run make-admin -- <email> [password]
 Example: `npm run make-admin -- admin@example.com MySecurePass123`
 
 After that, the user must **log out and log back in** so the frontend receives a new JWT with `role: admin`; then `/admin` and all admin routes will be accessible.
+
+---
+
+## Limits: per-plan vs global (Guardrails & Cost)
+
+### What is “per plan” and what is “global”?
+
+- **Per-plan limits (source of truth)**  
+  Defined in backend config (`plans.config.ts`). Each plan (FREE, PRO, PRO_PLUS, ULTRA) has its own limits, for example:
+  - **workers** — max concurrent scans per user on that plan  
+  - **sessions_per_day** — max scans per day  
+  - **tokens_per_day**, **steps_per_session**, **max_sub_agents**, etc.  
+
+  These are the base limits for the plan. They are **not** editable in the admin UI; change them in code/config.
+
+- **Global limits (Guardrails “policy overrides”)**  
+  Set in **Admin → Guardrails** (“Global limits (policy overrides)”). They **cap** what any plan can do:
+  - **Max parallel jobs per plan** — effective max concurrent scans = `min(plan.workers, this value)`. **Applied by the system** when starting a scan (gwehai and pentest-jobs).
+  - **Max sub-agents per plan** — cap on sub-agents (reserved for future use).
+  - **Max tool calls per job** — cap per job (reserved for future use).
+  - **Max steps per conversation** — cap per conversation (reserved for future use).
+
+  So: **per-plan** = “what this plan allows”; **global** = “admin cap that applies on top of the plan.” The system uses the **stricter** of the two (e.g. effective workers = min(plan limit, Guardrails value)).
+
+### What is “counting” and what is “stored”?
+
+- **Guardrails**  
+  Saving the four global limit values stores them in the database. **Max parallel jobs per plan** is already used when starting a scan (effective workers = min(plan.workers, saved value)). The other three are stored and will be enforced when those code paths are wired.
+
+- **Cost Center**  
+  **Total Tokens Today/Month**, **Total AI Calls**, **Estimated Cost**, and the per-user table are filled from **real usage** (usage_events, plan quota). So they are **already counting** with the system.  
+  **Cost settings** (global daily/monthly token cap, per-user cap, per-plan token cap JSON) are **saved** in admin settings. Enforcement of these caps in the LLM/usage pipeline can be added later; the UI and storage are in place.
+
+- **Margin & Revenue**  
+  **Total Revenue**, **Total AI Cost**, **Gross Margin %**, and **By user** come from **real data** (orders and usage). If you see **$0.00** or empty rows, it means there are no completed payments or no usage yet; the system is already counting where data exists.
+
+### Is usage counting correct? (Yes)
+
+- **Where usage is recorded**  
+  Every time a user consumes AI (chat or pentest), the backend writes a row to **usage_events** (table backed by `UsageEvent`). This happens in **ChatService** in all three paths that spend points:
+  1. Non-streaming response (`generateResponse`)
+  2. Streaming simple chat (`processMessageSimple`)
+  3. Streaming agent/pentest run (`runAgent`)
+
+  Each row has: `userId`, `modelId`, `inputTokens`, `outputTokens`, `costPoints`, `conversationId`, `messageId`, and `createdAt`. No other code paths spend points without creating a usage event.
+
+- **Where it is read**  
+  Admin endpoints all read from the same **usage_events** table (and orders for revenue):
+  - **Usage & plans** — total and by user / by model from `usage_events` (COALESCE so 0 when empty).
+  - **Cost Center** — today/month totals and per-user usage in date range from `usage_events`.
+  - **Margin & Revenue** — AI cost from `usage_events`; revenue from `credit_orders`.
+
+So the function **is already counting the data properly**: one usage event per AI consumption, and all admin totals and breakdowns use that same data.

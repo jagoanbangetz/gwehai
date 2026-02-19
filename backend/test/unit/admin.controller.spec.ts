@@ -45,6 +45,7 @@ describe('AdminController', () => {
   const abuseRepo = repo() as any;
   const planUsageService = {} as any;
   const mailService = { isConfigured: jest.fn().mockReturnValue(false), sendPromotionEmail: jest.fn().mockResolvedValue(true) } as any;
+  const pentestJobsService = { listRecentForAdmin: jest.fn().mockResolvedValue([]) } as any;
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -67,6 +68,7 @@ describe('AdminController', () => {
       hacktivityService as any,
       planUsageService,
       mailService,
+      pentestJobsService,
     );
   });
 

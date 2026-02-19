@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository, IsNull } from 'typeorm';
+import { DataSource, Repository, IsNull, EntityManager } from 'typeorm';
 import { Conversation } from '../entities/conversation.entity';
 import { ConversationMemory } from '../entities/conversation-memory.entity';
 import { Message, MessageRole } from '../entities/message.entity';
@@ -263,6 +263,18 @@ export class ChatService {
   };
 
   /**
+   * Resolve a model to use for usage recording when the conversation has no DB model (e.g. Auto / model picker).
+   * Uses default active model or first active model so we can always write UsageEvent and spend points.
+   */
+  private async getDefaultModelForUsage(manager: EntityManager): Promise<Model | null> {
+    const repo = manager.getRepository(Model);
+    let m = await repo.findOne({ where: { isDefault: true, isActive: true } });
+    if (!m) m = await repo.findOne({ where: { name: 'deepseek/deepseek-chat', isActive: true } });
+    if (!m) m = await repo.findOne({ where: { isActive: true } });
+    return m;
+  }
+
+  /**
    * Get or create conversation.
    * When skipDefaultModel is true (e.g. caller uses model picker / Auto), new conversations are created with modelId = null so we never depend on a DB model.
    */
@@ -480,7 +492,7 @@ export class ChatService {
         : null;
       if (!model || !model.isActive) {
         if (useModelPicker) {
-          model = null as any;
+          model = (await this.getDefaultModelForUsage(manager)) as any;
         } else {
           throw new NotFoundException(
             'Model not found or inactive. Use Auto (DeepSeek) in the model picker and ensure DEEPSEEK_API_KEY is set.',
@@ -488,6 +500,7 @@ export class ChatService {
         }
       }
 
+      let usageForEvent: { modelId: string; inputTokens: number; outputTokens: number; costPoints: number } | null = null;
       if (model && model.isActive) {
         const inputTokens = Math.ceil(message.length / 4);
         const outputTokens = 500;
@@ -510,6 +523,7 @@ export class ChatService {
           null,
           { modelId: model.id, conversationId: conversation.id },
         );
+        usageForEvent = { modelId: model.id, inputTokens, outputTokens, costPoints: finalCostPoints };
       }
 
       const userMessage = manager.create(Message, {
@@ -541,6 +555,18 @@ export class ChatService {
         order: 0,
       });
       await manager.save(assistantMessagePart);
+
+      if (usageForEvent) {
+        const u = manager.create(UsageEvent, {
+          userId,
+          modelId: usageForEvent.modelId,
+          messageId: assistantMessage.id,
+          inputTokens: usageForEvent.inputTokens,
+          outputTokens: usageForEvent.outputTokens,
+          costPoints: usageForEvent.costPoints,
+        });
+        await manager.save(u);
+      }
 
       if (!conversation.title || conversation.title === 'New Conversation') {
         conversation.title = message.substring(0, 50);
@@ -628,7 +654,7 @@ export class ChatService {
     pushEvent: (ev: { type: string; data: Record<string, any> }) => void,
     agentInfo?: { index: number; label: string },
     memoryScopeIdOverride?: string,
-    options?: { emitDoneEvent?: boolean; abortSignal?: AbortSignal; model_key?: ModelOptionKey },
+    options?: { emitDoneEvent?: boolean; abortSignal?: AbortSignal; model_key?: ModelOptionKey; maxAgentsForRun?: number },
   ): Promise<{ conversationId: string; messageId: string; response: string }> {
     const useModelPicker = !!options?.model_key;
     const result = await this.dataSource.transaction(async (manager) => {
@@ -638,7 +664,7 @@ export class ChatService {
         : null;
       if (!model || !model.isActive) {
         if (useModelPicker) {
-          model = null as any;
+          model = (await this.getDefaultModelForUsage(manager)) as any;
         } else {
           throw new NotFoundException(
             'Model not found or inactive. Use Auto (DeepSeek) in the model picker and ensure DEEPSEEK_API_KEY is set.',
@@ -646,6 +672,7 @@ export class ChatService {
         }
       }
 
+      let usageForEvent: { modelId: string; inputTokens: number; outputTokens: number; costPoints: number } | null = null;
       if (model && model.isActive) {
         const inputTokens = Math.ceil(message.length / 4);
         const outputTokens = 500;
@@ -668,6 +695,7 @@ export class ChatService {
           null,
           { modelId: model.id, conversationId: conversation.id },
         );
+        usageForEvent = { modelId: model.id, inputTokens, outputTokens, costPoints: finalCostPoints };
       }
 
       const userMessage = manager.create(Message, {
@@ -699,6 +727,18 @@ export class ChatService {
         order: 0,
       });
       await manager.save(assistantMessagePart);
+
+      if (usageForEvent) {
+        const u = manager.create(UsageEvent, {
+          userId,
+          modelId: usageForEvent.modelId,
+          messageId: assistantMessage.id,
+          inputTokens: usageForEvent.inputTokens,
+          outputTokens: usageForEvent.outputTokens,
+          costPoints: usageForEvent.costPoints,
+        });
+        await manager.save(u);
+      }
 
       if (conversation.title === 'New Conversation' || !conversation.title) {
         conversation.title = message.substring(0, 50);
@@ -855,7 +895,7 @@ export class ChatService {
 
           let toolResult: string;
           try {
-            toolResult = await this.runTool(tc.name, args, jobId, cid, userId, push, memoryScopeId, nextAgentIndexRef, abortSignal, options?.model_key);
+            toolResult = await this.runTool(tc.name, args, jobId, cid, userId, push, memoryScopeId, nextAgentIndexRef, abortSignal, options?.model_key, options?.maxAgentsForRun);
           } catch (err: any) {
             toolResult = `Error: ${err?.message || String(err)}`;
           }
@@ -1112,6 +1152,7 @@ export class ChatService {
     nextAgentIndexRef?: { current: number },
     abortSignal?: AbortSignal,
     modelKey?: ModelOptionKey,
+    maxAgentsForRun?: number,
   ): Promise<string> {
     if (abortSignal?.aborted) {
       return JSON.stringify({ error: 'Job stopped by user' });
@@ -1296,19 +1337,23 @@ export class ChatService {
         if (!userId || !conversationId) return JSON.stringify({ error: 'sessions_spawn requires an active conversation' });
         const planIdForSpawn = await this.planResolution.getUserPlan(userId);
         const defForSpawn = this.planResolution.getPlanDefinition(planIdForSpawn);
-        const maxSubAgents = defForSpawn.limits.max_sub_agents;
-        if (maxSubAgents === 0) {
+        const planMaxSubAgents = defForSpawn.limits.max_sub_agents;
+        const effectiveMaxSubAgents =
+          maxAgentsForRun != null
+            ? planMaxSubAgents === -1
+              ? maxAgentsForRun
+              : Math.min(planMaxSubAgents, maxAgentsForRun)
+            : planMaxSubAgents;
+        if (effectiveMaxSubAgents === 0) {
           return JSON.stringify({
             error: 'Your plan does not allow spawning sub-agents. Upgrade to Pro or higher to use multiple agents.',
           });
         }
-        if (maxSubAgents !== -1) {
-          const existingSubs = await this.listSessions(userId, { parent_id: conversationId, last: 100 });
-          if (existingSubs.length >= maxSubAgents) {
-            return JSON.stringify({
-              error: `Plan limit: maximum ${maxSubAgents} sub-agent(s) per run. You have ${existingSubs.length}. Upgrade for more.`,
-            });
-          }
+        const existingSubs = await this.listSessions(userId, { parent_id: conversationId, last: 100 });
+        if (effectiveMaxSubAgents !== -1 && existingSubs.length >= effectiveMaxSubAgents) {
+          return JSON.stringify({
+            error: `Maximum ${effectiveMaxSubAgents} sub-agent(s) for this run${maxAgentsForRun != null ? ' (scan setting)' : ''}. You have ${existingSubs.length}.`,
+          });
         }
         const result = await this.spawnSession(
           userId,

@@ -582,6 +582,84 @@
   border-color: oklch(0.4 0.05 250);
 }
 
+/* Cost Center: filters and date picker */
+.admin-cost-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+}
+
+.admin-cost-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.admin-cost-filter-label {
+  font-size: 0.8rem;
+  color: oklch(0.65 0 0);
+  font-weight: 500;
+}
+
+.admin-date-input {
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid oklch(0.3 0 0);
+  background: oklch(0.14 0 0);
+  color: oklch(0.95 0 0);
+  font-size: 0.9rem;
+  min-width: 160px;
+  cursor: pointer;
+}
+
+.admin-date-input:hover {
+  border-color: oklch(0.4 0.05 250);
+}
+
+.admin-date-input:focus {
+  outline: none;
+  border-color: oklch(0.45 0.1 250);
+  box-shadow: 0 0 0 2px oklch(0.3 0.1 250 / 0.3);
+}
+
+/* Native date picker popup: use light scheme so calendar is readable */
+.admin-date-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.8;
+  filter: invert(1);
+}
+
+.admin-cost-text-input {
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid oklch(0.3 0 0);
+  background: oklch(0.12 0 0);
+  color: oklch(0.95 0 0);
+  font-size: 0.9rem;
+  width: 140px;
+}
+
+.admin-cost-empty {
+  margin: 0.75rem 0 0;
+  color: oklch(0.6 0 0);
+  font-size: 0.9rem;
+}
+
+.admin-usage-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  font-size: 0.95rem;
+  color: oklch(0.9 0 0);
+}
+
+.admin-usage-totals strong {
+  color: oklch(0.7 0 0);
+  margin-right: 0.35rem;
+}
+
 .admin-promo-result {
   margin: 0 0 0.75rem 0;
   font-size: 0.9rem;
@@ -614,6 +692,47 @@
   font-size: 1.5rem;
   font-weight: 700;
   font-family: 'JetBrains Mono', monospace;
+  color: oklch(0.95 0 0);
+}
+
+.admin-stat-sublabel {
+  font-size: 0.65rem;
+  color: oklch(0.55 0 0);
+  margin-top: 0.2rem;
+}
+
+.admin-overview-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.admin-range-tabs {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.admin-range-tab {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.85rem;
+  border: 1px solid oklch(0.3 0 0);
+  background: oklch(0.14 0 0);
+  color: oklch(0.75 0 0);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.admin-range-tab:hover {
+  background: oklch(0.2 0 0);
+  color: oklch(0.9 0 0);
+}
+
+.admin-range-tab.active {
+  background: oklch(0.35 0.15 250);
+  border-color: oklch(0.45 0.2 250);
   color: oklch(0.95 0 0);
 }
 

@@ -29,6 +29,15 @@ describe('GwehAIService plan validation', () => {
     }),
   };
 
+  const policyOverrides = {
+    getOverrides: jest.fn().mockResolvedValue({
+      maxParallelJobsPerPlan: 2,
+      maxSubAgentsPerPlan: 1,
+      maxToolCallsPerJob: 500,
+      maxStepsPerConversation: 100,
+    }),
+  };
+
   const jobsEvents = {
     emitJobListUpdate: jest.fn(),
   };
@@ -39,10 +48,17 @@ describe('GwehAIService plan validation', () => {
     jest.clearAllMocks();
     workerCount = 0;
     planUsage.getSessionsStartedToday.mockResolvedValue(0);
+    policyOverrides.getOverrides.mockResolvedValue({
+      maxParallelJobsPerPlan: 2,
+      maxSubAgentsPerPlan: 1,
+      maxToolCallsPerJob: 500,
+      maxStepsPerConversation: 100,
+    });
     service = new GwehAIService(
       chatService as any,
       planResolution as any,
       planUsage as any,
+      policyOverrides as any,
       jobsEvents as any,
       { ensureJobForConversation: jest.fn().mockResolvedValue(null) } as any,
     );

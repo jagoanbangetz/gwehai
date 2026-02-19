@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import apiClient from '../../utils/api'
+import { formatDateTime } from '../../utils/date'
 import './Admin.css'
 
 interface ConvItem {
@@ -119,7 +120,7 @@ export default function AdminConversations() {
                     <td>{(c.title || '—').slice(0, 40)}{(c.title && c.title.length > 40) ? '…' : ''}</td>
                     <td>{c.user?.email ?? c.userId?.slice(0, 8)}</td>
                     <td>{c.messageCount}</td>
-                    <td>{new Date(c.createdAt).toLocaleString()}</td>
+                    <td>{formatDateTime(c.createdAt)}</td>
                     <td><code style={{ fontSize: '0.75rem' }}>{c.id.slice(0, 8)}…</code></td>
                     <td>
                       <button
@@ -156,7 +157,7 @@ export default function AdminConversations() {
               </div>
               {detail && (
                 <p className="admin-modal-subtitle">
-                  {detail.title || 'Untitled'} · {detail.user?.email ?? detail.userId} · {detail.runStatus} · {new Date(detail.createdAt).toLocaleString()}
+                  {detail.title || 'Untitled'} · {detail.user?.email ?? detail.userId} · {detail.runStatus} · {formatDateTime(detail.createdAt)}
                 </p>
               )}
             </div>
@@ -185,7 +186,7 @@ export default function AdminConversations() {
                       <div key={m.id} className={`admin-detail-msg admin-detail-msg-${m.role}`}>
                         <div className="admin-detail-msg-meta">
                           <span className="admin-detail-msg-role">{m.role}</span>
-                          <span className="admin-detail-msg-date">{new Date(m.createdAt).toLocaleString()}</span>
+                          <span className="admin-detail-msg-date">{formatDateTime(m.createdAt)}</span>
                         </div>
                         <pre className="admin-detail-msg-content">{getMessageText(m)}</pre>
                       </div>

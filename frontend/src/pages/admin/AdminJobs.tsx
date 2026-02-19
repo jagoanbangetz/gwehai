@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import apiClient from '../../utils/api'
+import { formatDateTime } from '../../utils/date'
 import './Admin.css'
 
 interface JobRow {
@@ -60,7 +61,7 @@ export default function AdminJobs() {
                   <td><code style={{ fontSize: '0.8rem' }}>{j.userId.slice(0, 8)}…</code></td>
                   <td><code style={{ fontSize: '0.8rem' }}>{j.conversationId?.slice(0, 8) || '—'}…</code></td>
                   <td>{j.status}</td>
-                  <td>{new Date(j.createdAt).toLocaleString()}</td>
+                  <td>{formatDateTime(typeof j.createdAt === 'number' ? new Date(j.createdAt) : j.createdAt)}</td>
                   <td style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}>{j.userMessage || '—'}</td>
                 </tr>
               ))}

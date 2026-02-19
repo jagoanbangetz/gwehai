@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import apiClient from '../../utils/api'
+import { formatDateTime } from '../../utils/date'
 import './Admin.css'
 
 interface AuditRow {
@@ -103,7 +104,7 @@ export default function AdminAudit() {
                 <tbody>
                   {data.items.map((a) => (
                     <tr key={a.id}>
-                      <td>{new Date(a.createdAt).toLocaleString()}</td>
+                      <td>{formatDateTime(a.createdAt)}</td>
                       <td><code style={{ fontSize: '0.8rem' }}>{a.adminUserId?.slice(0, 8)}…</code></td>
                       <td>{a.action}</td>
                       <td>{a.resource ?? '—'}</td>

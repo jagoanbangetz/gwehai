@@ -110,6 +110,9 @@ export default function AdminGuardrails() {
           ))}
         </div>
         <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Global limits (policy overrides)</h3>
+        <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.82rem', color: 'oklch(0.6 0 0)' }}>
+          These cap all plans. <strong>Max parallel jobs per plan</strong> is applied when starting a scan: effective max = min(plan limit, value below). Others are stored and will be enforced as those paths are wired.
+        </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
             <span style={{ fontSize: '0.8rem', color: 'oklch(0.65 0 0)' }}>Max parallel jobs per plan</span>

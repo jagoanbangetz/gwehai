@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import apiClient from '../../utils/api'
+import { formatDateTime } from '../../utils/date'
 import './Admin.css'
 
 interface ReportRow {
@@ -103,7 +104,7 @@ export default function AdminReports() {
               <tbody>
                 {data.items.map((r) => (
                   <tr key={r.id}>
-                    <td>{new Date(r.createdAt).toLocaleString()}</td>
+                    <td>{formatDateTime(r.createdAt)}</td>
                     <td>{r.user?.email ?? r.userId?.slice(0, 8)}</td>
                     <td><code style={{ fontSize: '0.8rem' }}>{r.conversationId?.slice(0, 8) ?? '—'}…</code></td>
                     <td style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.target ?? '—'}</td>
@@ -144,7 +145,7 @@ export default function AdminReports() {
               </div>
               {detail && (
                 <p className="admin-modal-subtitle">
-                  {detail.target ?? 'No target'} · {detail.status} · {new Date(detail.createdAt).toLocaleString()}
+                  {detail.target ?? 'No target'} · {detail.status} · {formatDateTime(detail.createdAt)}
                 </p>
               )}
             </div>
@@ -166,13 +167,13 @@ export default function AdminReports() {
                     {detail.startedAt && (
                       <>
                         <dt>Started</dt>
-                        <dd>{new Date(detail.startedAt).toLocaleString()}</dd>
+                        <dd>{formatDateTime(detail.startedAt)}</dd>
                       </>
                     )}
                     {detail.finishedAt && (
                       <>
                         <dt>Finished</dt>
-                        <dd>{new Date(detail.finishedAt).toLocaleString()}</dd>
+                        <dd>{formatDateTime(detail.finishedAt)}</dd>
                       </>
                     )}
                     {detail.fileUrl && (

@@ -18,6 +18,7 @@ import { AdminAuditLog } from '../entities/admin-audit-log.entity';
 import { AdminSetting } from '../entities/admin-setting.entity';
 import { AbuseEvent } from '../entities/abuse-event.entity';
 import { GwehAIModule } from '../gwehai/gwehai.module';
+import { PentestJobsModule } from '../pentest-jobs/pentest-jobs.module';
 import { PlansModule } from '../plans/plans.module';
 import { AdminService } from './admin.service';
 import { HacktivityModule } from '../hacktivity/hacktivity.module';
@@ -52,6 +53,7 @@ import { GwehAISSEGuard } from '../gwehai/gwehai-sse.guard';
     }),
     AuthModule,
     GwehAIModule,
+    PentestJobsModule,
     PlansModule,
     HacktivityModule,
     MailModule,

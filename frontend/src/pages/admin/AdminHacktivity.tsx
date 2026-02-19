@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import apiClient from '../../utils/api'
+import { formatDateTime } from '../../utils/date'
 import './Admin.css'
 
 interface HacktivityRow {
@@ -140,7 +141,7 @@ export default function AdminHacktivity() {
                     className={`admin-row-clickable${selected?.id === h.id ? ' admin-row-selected' : ''}`}
                     onClick={() => setSelected(h)}
                   >
-                    <td>{new Date(h.createdAt).toLocaleString()}</td>
+                    <td>{formatDateTime(h.createdAt)}</td>
                     <td>{h.user?.email ?? h.userId?.slice(0, 8)}</td>
                     <td><code style={{ fontSize: '0.8rem' }}>{actionLabel(h.toolArgs)}</code></td>
                     <td style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.domain ?? '—'}</td>
@@ -198,7 +199,7 @@ export default function AdminHacktivity() {
                 <div className="admin-modal-title">Hacktivity event</div>
                 <div className="admin-modal-subtitle">
                   {selected.user?.email ?? selected.userId?.slice(0, 8)} ·{' '}
-                  {new Date(selected.createdAt).toLocaleString()}
+                  {formatDateTime(selected.createdAt)}
                 </div>
               </div>
               <button

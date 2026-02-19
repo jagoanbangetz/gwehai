@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { formatDate } from '../utils/date'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
 import AnimatedBackground from '../components/AnimatedBackground'
@@ -12,7 +13,7 @@ const Terms = () => {
       <main className="legal-content">
         <div className="legal-container">
           <h1 className="legal-title">Terms of Service</h1>
-          <p className="legal-updated">Last updated: {new Date().toLocaleDateString()}</p>
+          <p className="legal-updated">Last updated: {formatDate(new Date())}</p>
 
           <section className="legal-section">
             <h2>1. Acceptance of Terms</h2>

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { logo } from '../assets/images'
 import './Dashboard.css'
 import apiClient from '../utils/api'
+import { formatDateTime } from '../utils/date'
 import { ToastContainer, Toast } from '../components/Toast'
 import { getModelIcon, isProModel } from '../utils/modelIcons'
 import { gwehaiClient, GwehAIEvent } from '../utils/gwehaiApi'
@@ -121,15 +122,9 @@ function isConversationUuid(id: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id).trim())
 }
 
-/** Format ISO date string for display (e.g. "Feb 10, 2026 14:30") */
+/** Format ISO date string for display in GMT+8 (e.g. "Feb 10, 2026 14:30") */
 function formatReportTime(iso: string | null | undefined): string {
-  if (!iso) return '—'
-  try {
-    const d = new Date(iso)
-    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-  } catch {
-    return '—'
-  }
+  return formatDateTime(iso)
 }
 
 /** Format duration between two ISO date strings (e.g. "2h 15m", "45m") */

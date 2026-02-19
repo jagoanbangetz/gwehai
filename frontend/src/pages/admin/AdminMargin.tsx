@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import apiClient from '../../utils/api'
+import { formatDate } from '../../utils/date'
 import './Admin.css'
 
 interface MarginSummary {
@@ -54,6 +55,9 @@ export default function AdminMargin() {
   return (
     <>
       <h2 className="admin-page-title">Margin & Revenue</h2>
+      <p style={{ margin: '0 0 1rem 0', fontSize: '0.88rem', color: 'oklch(0.65 0 0)' }}>
+        Revenue from completed orders; AI cost from usage (recorded when users use chat/pentest). All users are listed below with their totals.
+      </p>
       {error && <div className="admin-error">{error}</div>}
       {summary && (
         <div className="admin-stats-grid">
@@ -103,12 +107,13 @@ export default function AdminMargin() {
                   <td>${row.revenue}</td>
                   <td>${row.aiCost}</td>
                   <td>{row.marginPct}%</td>
-                  <td>{row.activeSince ? new Date(row.activeSince).toLocaleDateString() : '—'}</td>
+                  <td>{row.activeSince ? formatDate(row.activeSince) : '—'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        {users.length === 0 && !loading && <p style={{ margin: '0.5rem 0 0', color: 'oklch(0.6 0 0)', fontSize: '0.9rem' }}>No users in the system yet.</p>}
         {total > limit && (
           <div className="admin-page-controls">
             <button type="button" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Prev</button>

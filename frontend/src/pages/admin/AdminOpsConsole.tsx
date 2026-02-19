@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import apiClient from '../../utils/api'
+import { formatDateTime } from '../../utils/date'
 import './Admin.css'
 
 interface JobRow {
@@ -31,16 +32,22 @@ export default function AdminOpsConsole() {
   const [submitting, setSubmitting] = useState(false)
 
   const load = async () => {
+    setError(null)
     try {
-      setError(null)
-      const [jobsRes, workersRes] = await Promise.all([
-        apiClient.get('/admin/jobs/live'),
-        apiClient.get('/admin/workers/status'),
-      ])
-      setJobs(jobsRes.data.items ?? [])
-      setWorkers(workersRes.data)
+      const jobsRes = await apiClient.get('/admin/jobs/live').catch((e: any) => {
+        setError(e?.response?.data?.message || e?.message || 'Failed to load jobs')
+        return { data: { items: [] } }
+      })
+      setJobs(jobsRes.data?.items ?? [])
     } catch (e: any) {
       setError(e?.response?.data?.message || e?.message || 'Failed to load')
+    }
+    try {
+      const workersRes = await apiClient.get('/admin/workers/status')
+      setWorkers(workersRes.data)
+    } catch (e: any) {
+      setWorkers(null)
+      setError((prev) => prev || (e?.response?.data?.message || e?.message || 'Workers status failed'))
     } finally {
       setLoading(false)
     }
@@ -80,7 +87,7 @@ export default function AdminOpsConsole() {
   }
 
   if (loading && jobs.length === 0) return <div className="admin-loading">Loading ops console…</div>
-  if (error && !workers) return <div className="admin-error">{error}</div>
+  if (error && jobs.length === 0 && !workers) return <div className="admin-error">{error}</div>
 
   return (
     <>
@@ -138,7 +145,7 @@ export default function AdminOpsConsole() {
                   <td style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }} title={j.target}>{j.target || '—'}</td>
                   <td>{j.status}</td>
                   <td>{j.phase}</td>
-                  <td>{j.started ? new Date(j.started).toLocaleString() : '—'}</td>
+                  <td>{j.started ? formatDateTime(new Date(j.started)) : '—'}</td>
                   <td>{j.durationSeconds != null ? `${j.durationSeconds}s` : '—'}</td>
                   <td><code style={{ fontSize: '0.8rem' }}>{j.workerId?.slice(0, 8) || '—'}…</code></td>
                   <td>

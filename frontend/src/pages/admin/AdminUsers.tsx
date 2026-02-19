@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import apiClient from '../../utils/api'
+import { formatDateTime } from '../../utils/date'
 import './Admin.css'
 
 const PLAN_IDS = ['FREE', 'PRO', 'PRO_PLUS', 'ULTRA'] as const
@@ -150,7 +151,7 @@ export default function AdminUsers() {
                     <td>{u.name ?? '—'}</td>
                     <td>{u.role}</td>
                     <td>{u.planId ?? 'FREE'}</td>
-                    <td>{new Date(u.createdAt).toLocaleString()}</td>
+                    <td>{formatDateTime(u.createdAt)}</td>
                     <td><code style={{ fontSize: '0.75rem' }}>{u.id.slice(0, 8)}…</code></td>
                     <td>
                       <div className="admin-user-actions">

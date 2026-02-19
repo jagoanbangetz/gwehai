@@ -5,6 +5,7 @@ import { getAgentLabel } from '../chat/agent-names';
 import { PENTEST_SYSTEM_PROMPT } from '../prompt/pentest.system-prompt';
 import { PlanResolutionService } from '../plans/plan-resolution.service';
 import { PlanUsageService } from '../plans/plan-usage.service';
+import { PolicyOverridesService } from '../plans/policy-overrides.service';
 import { validateScanStart } from '../plans/plan-limits.validation';
 import { getPlanPayload } from '../config/plans.config';
 import type { PlanId } from '../config/plans.config';
@@ -23,6 +24,7 @@ export class GwehAIService {
     private readonly chatService: ChatService,
     private readonly planResolution: PlanResolutionService,
     private readonly planUsage: PlanUsageService,
+    private readonly policyOverrides: PolicyOverridesService,
     private readonly jobsEvents: JobsEventsService,
     private readonly pentestJobs: PentestJobsService,
   ) {}
@@ -58,15 +60,17 @@ export class GwehAIService {
     const planId: PlanId = await this.planResolution.getUserPlan(userId);
     const def = this.planResolution.getPlanDefinition(planId);
     const limits = def.limits;
+    const overrides = await this.policyOverrides.getOverrides();
+    const effectiveWorkers = Math.min(limits.workers, overrides.maxParallelJobsPerPlan);
 
     const sessionsToday = await this.planUsage.getSessionsStartedToday(userId);
     const currentWorkerCount = this.planUsage.getActiveWorkerCount(userId);
-    validateScanStart(planId, limits, {
+    validateScanStart(planId, { ...limits, workers: effectiveWorkers }, {
       currentWorkerCount,
       sessionsStartedToday: sessionsToday,
     });
     await this.planUsage.recordSessionStart(userId);
-    const { release: releaseWorker } = this.planUsage.reserveWorkerSlot(userId, limits.workers);
+    const { release: releaseWorker } = this.planUsage.reserveWorkerSlot(userId, effectiveWorkers);
 
     const jobId = randomUUID();
     const now = Date.now();
@@ -351,9 +355,9 @@ export class GwehAIService {
     job.updatedAt = Date.now();
     job.abortController?.abort();
     await this.chatService.setConversationRunStatus(job.conversationId, 'stopped');
-    if (job.conversationId && userId) {
+    if (job.conversationId) {
       try {
-        await this.pentestJobs.updateJobStatusByConversationId(userId, job.conversationId, 'failed');
+        await this.pentestJobs.updateJobStatusByConversationId(job.userId, job.conversationId, 'failed');
       } catch (e) {
         // non-fatal
       }
@@ -407,6 +411,35 @@ export class GwehAIService {
       throw new HttpException('Job not found', HttpStatus.NOT_FOUND);
     }
     return job;
+  }
+
+  /**
+   * Register a pentest run as a live job so it appears in ops-console and can be stopped via stopJob.
+   * Returns the job's abort signal to pass to ChatService.processMessageWithTools.
+   */
+  registerPentestJob(
+    pentestJobId: string,
+    userId: string,
+    conversationId: string,
+    userMessage: string,
+  ): AbortSignal {
+    const now = Date.now();
+    const job: LocalAIJob = {
+      id: pentestJobId,
+      userId,
+      conversationId,
+      messageId: '',
+      response: '',
+      status: 'running',
+      createdAt: now,
+      updatedAt: now,
+      systemPrompt: PENTEST_SYSTEM_PROMPT,
+      userMessage: (userMessage || '').slice(0, 500),
+      events: [],
+      abortController: new AbortController(),
+    };
+    this.jobs.set(pentestJobId, job);
+    return job.abortController!.signal;
   }
 
   /**

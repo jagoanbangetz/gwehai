@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import apiClient from '../../utils/api'
+import { formatDateTime } from '../../utils/date'
 import './Admin.css'
 
 interface DashboardSummary {
@@ -19,6 +20,7 @@ interface DashboardSummary {
   payments: number
   reports: number
   conversations: number
+  usage?: number
   hacktivityTotal: number
   activeJobsCount: number
   activeJobs: Array<{ job_id: string; userId: string; status: string; createdAt: number; userMessage: string }>
@@ -43,19 +45,22 @@ interface ChartData {
   datasets: ChartDataset[]
 }
 
+type RangeDays = 1 | 7 | 30
+
 export default function AdminOverview() {
   const [data, setData] = useState<DashboardSummary | null>(null)
   const [chartData, setChartData] = useState<ChartData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [range, setRange] = useState<RangeDays>(7)
 
   useEffect(() => {
     const load = async () => {
       try {
         setLoading(true)
         const [dashboardRes, chartRes] = await Promise.all([
-          apiClient.get('/admin/dashboard'),
-          apiClient.get('/admin/dashboard/chart?days=14').catch(() => ({ data: null })),
+          apiClient.get('/admin/dashboard', { params: { days: range } }),
+          apiClient.get('/admin/dashboard/chart', { params: { days: range } }).catch(() => ({ data: null })),
         ])
         setData(dashboardRes.data)
         if (chartRes.data?.labels?.length) setChartData(chartRes.data)
@@ -66,7 +71,7 @@ export default function AdminOverview() {
       }
     }
     load()
-  }, [])
+  }, [range])
 
   if (loading) return <div className="admin-loading">Loading dashboard…</div>
   if (error) return <div className="admin-error">{error}</div>
@@ -87,13 +92,30 @@ export default function AdminOverview() {
 
   const barColors = ['oklch(0.65 0.2 250)', 'oklch(0.7 0.18 160)', 'oklch(0.65 0.2 330)']
 
+  const rangeLabel = range === 1 ? '1 day' : range === 7 ? '1 week' : '1 month'
+
   return (
     <>
-      <h2 className="admin-page-title">Overview</h2>
+      <div className="admin-overview-header">
+        <h2 className="admin-page-title">Overview</h2>
+        <div className="admin-range-tabs">
+          {([1, 7, 30] as const).map((d) => (
+            <button
+              key={d}
+              type="button"
+              className={'admin-range-tab' + (range === d ? ' active' : '')}
+              onClick={() => setRange(d)}
+            >
+              {d === 1 ? '1 day' : d === 7 ? '1 week' : '1 month'}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="admin-stats-grid">
         <div className="admin-stat-card">
           <div className="admin-stat-label">Users</div>
           <div className="admin-stat-value">{data.users}</div>
+          <div className="admin-stat-sublabel">in last {rangeLabel}</div>
         </div>
         <div className="admin-stat-card">
           <div className="admin-stat-label">Admins</div>
@@ -102,11 +124,20 @@ export default function AdminOverview() {
         <div className="admin-stat-card">
           <div className="admin-stat-label">Conversations</div>
           <div className="admin-stat-value">{data.conversations}</div>
+          <div className="admin-stat-sublabel">in last {rangeLabel}</div>
         </div>
         <div className="admin-stat-card">
           <div className="admin-stat-label">Reports</div>
           <div className="admin-stat-value">{data.reports}</div>
+          <div className="admin-stat-sublabel">in last {rangeLabel}</div>
         </div>
+        {typeof data.usage === 'number' && (
+          <div className="admin-stat-card">
+            <div className="admin-stat-label">User usage (AI calls)</div>
+            <div className="admin-stat-value">{data.usage}</div>
+            <div className="admin-stat-sublabel">in last {rangeLabel}</div>
+          </div>
+        )}
         <div className="admin-stat-card">
           <div className="admin-stat-label">Hacktivity</div>
           <div className="admin-stat-value">{data.hacktivityTotal}</div>
@@ -127,7 +158,7 @@ export default function AdminOverview() {
 
       {barData.length > 0 && (
         <div className="admin-card admin-chart-card">
-          <h3 className="admin-chart-title">Activity over the last 14 days</h3>
+          <h3 className="admin-chart-title">Activity over the last {rangeLabel}</h3>
           <div className="admin-chart-wrap">
             <ResponsiveContainer width="100%" height={320}>
               <BarChart
@@ -222,7 +253,7 @@ export default function AdminOverview() {
               <tbody>
                 {data.recentActivity.slice(0, 15).map((a) => (
                   <tr key={a.id}>
-                    <td>{new Date(a.createdAt).toLocaleString()}</td>
+                    <td>{formatDateTime(a.createdAt)}</td>
                     <td>{a.user?.email ?? a.userId?.slice(0, 8)}</td>
                     <td><code style={{ fontSize: '0.8rem' }}>{a.modelId?.slice(0, 8)}…</code></td>
                     <td>{a.inputTokens} / {a.outputTokens}</td>

@@ -1,3 +1,6 @@
+// Default timezone GMT+8 (Asia/Singapore); set before any date usage
+if (!process.env.TZ) process.env.TZ = 'Asia/Singapore';
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { WsAdapter } from '@nestjs/platform-ws';

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import apiClient from '../../utils/api'
+import { formatDateTime } from '../../utils/date'
 import './Admin.css'
 
 interface CostSummary {
@@ -22,6 +23,8 @@ interface CostUserRow {
   calls: number
   lastActive: string | null
 }
+
+const today = new Date().toISOString().slice(0, 10)
 
 export default function AdminCostCenter() {
   const [summary, setSummary] = useState<CostSummary | null>(null)
@@ -123,6 +126,9 @@ export default function AdminCostCenter() {
   return (
     <>
       <h2 className="admin-page-title">Cost Center</h2>
+      <p style={{ margin: '0 0 1rem 0', fontSize: '0.88rem', color: 'oklch(0.65 0 0)' }}>
+        Usage is recorded when users use chat or pentest. Totals below are from usage; the table lists all users and their usage in the selected date range. Cost settings are saved for future enforcement.
+      </p>
       {error && <div className="admin-error">{error}</div>}
       {summary && (
         <div className="admin-stats-grid">
@@ -146,45 +152,66 @@ export default function AdminCostCenter() {
       )}
 
       <div className="admin-card">
-        <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Filters</h3>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', marginBottom: '1rem' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.85rem', color: 'oklch(0.7 0 0)' }}>Date from</span>
+        <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Usage by user</h3>
+        <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.82rem', color: 'oklch(0.6 0 0)' }}>
+          Filter by date range (click the field to open the date picker), model, or plan. Leave dates empty for all-time.
+        </p>
+        <div className="admin-cost-filters">
+          <label className="admin-cost-filter-group">
+            <span className="admin-cost-filter-label">Date from</span>
             <input
               type="date"
+              className="admin-date-input"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              style={{ padding: '0.35rem 0.5rem', borderRadius: 6, background: 'oklch(0.12 0 0)', border: '1px solid oklch(0.3 0 0)', color: 'inherit' }}
+              max={dateTo || today}
+              aria-label="From date"
             />
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.85rem', color: 'oklch(0.7 0 0)' }}>Date to</span>
+          <label className="admin-cost-filter-group">
+            <span className="admin-cost-filter-label">Date to</span>
             <input
               type="date"
+              className="admin-date-input"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              style={{ padding: '0.35rem 0.5rem', borderRadius: 6, background: 'oklch(0.12 0 0)', border: '1px solid oklch(0.3 0 0)', color: 'inherit' }}
+              min={dateFrom || undefined}
+              max={today}
+              aria-label="To date"
             />
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.85rem', color: 'oklch(0.7 0 0)' }}>Model</span>
+          <button
+            type="button"
+            className="admin-btn admin-btn-secondary"
+            onClick={() => { setDateFrom(''); setDateTo(''); }}
+            style={{ alignSelf: 'flex-end' }}
+          >
+            Clear dates
+          </button>
+          <label className="admin-cost-filter-group">
+            <span className="admin-cost-filter-label">Model ID</span>
             <input
               type="text"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder="Model ID"
-              style={{ padding: '0.35rem 0.5rem', width: 140, borderRadius: 6, background: 'oklch(0.12 0 0)', border: '1px solid oklch(0.3 0 0)', color: 'inherit' }}
+              placeholder="Optional"
+              className="admin-cost-text-input"
             />
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ fontSize: '0.85rem', color: 'oklch(0.7 0 0)' }}>Plan</span>
-            <input
-              type="text"
+          <label className="admin-cost-filter-group">
+            <span className="admin-cost-filter-label">Plan</span>
+            <select
               value={plan}
               onChange={(e) => setPlan(e.target.value)}
-              placeholder="FREE / PRO"
-              style={{ padding: '0.35rem 0.5rem', width: 100, borderRadius: 6, background: 'oklch(0.12 0 0)', border: '1px solid oklch(0.3 0 0)', color: 'inherit' }}
-            />
+              className="admin-cost-text-input"
+              style={{ width: 120 }}
+            >
+              <option value="">All</option>
+              <option value="FREE">FREE</option>
+              <option value="PRO">PRO</option>
+              <option value="PRO_PLUS">PRO_PLUS</option>
+              <option value="ULTRA">ULTRA</option>
+            </select>
           </label>
         </div>
         <div className="admin-table-wrap">
@@ -211,12 +238,13 @@ export default function AdminCostCenter() {
                   <td>{row.outputTokens.toLocaleString()}</td>
                   <td>${row.totalCost}</td>
                   <td>{row.calls}</td>
-                  <td>{row.lastActive ? new Date(row.lastActive).toLocaleString() : '—'}</td>
+                  <td>{row.lastActive ? formatDateTime(row.lastActive) : '—'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        {users.length === 0 && !loading && <p className="admin-cost-empty">No users in the system yet.</p>}
         {total > limit && (
           <div className="admin-page-controls">
             <button type="button" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Prev</button>
