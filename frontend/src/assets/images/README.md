@@ -1,30 +1,24 @@
 # Images Directory
 
-This directory contains all image assets for the GwehAI application.
+This directory contains image asset exports for the GwehAI application.
 
-## Structure
+## Logo
 
-- `logo.png` - Main GwehAI logo
+The app logo is served from CDN: `https://cdn.gweh.sh/logo.png`. It is exported from `index.ts` so all pages use the same URL.
 
 ## Usage
 
-Import images in your components like this:
+Import the logo in your components:
 
 ```typescript
-import logo from '../assets/images/logo.png'
+import { logo } from '../assets/images'
 
 // Then use it in JSX:
 <img src={logo} alt="GwehAI Logo" />
 ```
 
-Or use it directly in CSS:
-
-```css
-background-image: url('../assets/images/logo.png');
-```
-
 ## Adding New Images
 
-1. Place image files in this directory
-2. Use descriptive filenames (e.g., `logo.png`, `icon-hero.svg`)
+1. Place image files in this directory (or use external URLs in `index.ts`)
+2. Export from `index.ts` for centralized use
 3. Update this README if adding new image categories

@@ -389,27 +389,32 @@ export class AdminController {
 
   @Get('usage-summary')
   async getUsageSummary() {
-    const [usageByUserRaw, totalRaw, byModelRaw] = await Promise.all([
+    const today = new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z';
+    const [usageByUserRaw, totalRaw, byModelRaw, todayTokensByUser] = await Promise.all([
       this.usageRepo
         .createQueryBuilder('u')
         .innerJoin('u.user', 'user')
         .select('u.userId', 'userId')
         .addSelect('user.email', 'userEmail')
+        .addSelect('user.planId', 'planId')
         .addSelect('SUM(u.inputTokens)', 'inputTokens')
         .addSelect('SUM(u.outputTokens)', 'outputTokens')
+        .addSelect('SUM(u.costPoints)', 'costPoints')
         .addSelect('COUNT(*)', 'calls')
         .groupBy('u.userId')
         .addGroupBy('user.id')
         .addGroupBy('user.email')
+        .addGroupBy('user.planId')
         .orderBy('COUNT(*)', 'DESC')
         .limit(100)
-        .getRawMany<{ userId: string; userEmail: string; inputTokens: string; outputTokens: string; calls: string }>(),
+        .getRawMany<{ userId: string; userEmail: string; planId: string | null; inputTokens: string; outputTokens: string; costPoints: string; calls: string }>(),
       this.usageRepo
         .createQueryBuilder('u')
         .select('COALESCE(SUM(u.inputTokens), 0)', 'inputTokens')
         .addSelect('COALESCE(SUM(u.outputTokens), 0)', 'outputTokens')
+        .addSelect('COALESCE(SUM(u.costPoints), 0)', 'costPoints')
         .addSelect('COALESCE(COUNT(*), 0)', 'calls')
-        .getRawOne<{ inputTokens: string; outputTokens: string; calls: string }>(),
+        .getRawOne<{ inputTokens: string; outputTokens: string; costPoints: string; calls: string }>(),
       this.usageRepo
         .createQueryBuilder('u')
         .leftJoin('u.model', 'model')
@@ -418,32 +423,65 @@ export class AdminController {
         .addSelect('model.displayName', 'modelDisplayName')
         .addSelect('SUM(u.inputTokens)', 'inputTokens')
         .addSelect('SUM(u.outputTokens)', 'outputTokens')
+        .addSelect('SUM(u.costPoints)', 'costPoints')
         .addSelect('COUNT(*)', 'calls')
         .groupBy('u.modelId')
         .addGroupBy('model.id')
         .addGroupBy('model.name')
         .addGroupBy('model.displayName')
         .orderBy('COUNT(*)', 'DESC')
-        .getRawMany<{ modelId: string; modelName: string; modelDisplayName: string; inputTokens: string; outputTokens: string; calls: string }>(),
+        .getRawMany<{ modelId: string; modelName: string; modelDisplayName: string; inputTokens: string; outputTokens: string; costPoints: string; calls: string }>(),
+      this.usageRepo
+        .createQueryBuilder('u')
+        .select('u.userId', 'userId')
+        .addSelect('SUM(u.inputTokens) + SUM(u.outputTokens)', 'tokensToday')
+        .where('u.createdAt >= :today', { today })
+        .groupBy('u.userId')
+        .getRawMany<{ userId: string; tokensToday: string }>(),
     ]);
+    const totalCostPoints = Number(totalRaw?.costPoints ?? 0);
     const total = totalRaw
-      ? { inputTokens: String(totalRaw.inputTokens ?? 0), outputTokens: String(totalRaw.outputTokens ?? 0), calls: String(totalRaw.calls ?? 0) }
-      : { inputTokens: '0', outputTokens: '0', calls: '0' };
-    const byUser = usageByUserRaw.map((r) => ({
-      userId: r.userId,
-      userEmail: r.userEmail ?? null,
-      inputTokens: String(r.inputTokens ?? 0),
-      outputTokens: String(r.outputTokens ?? 0),
-      calls: String(r.calls ?? 0),
-    }));
-    const byModel = byModelRaw.map((r) => ({
-      modelId: r.modelId,
-      modelName: r.modelName ?? null,
-      modelDisplayName: r.modelDisplayName ?? null,
-      inputTokens: String(r.inputTokens ?? 0),
-      outputTokens: String(r.outputTokens ?? 0),
-      calls: String(r.calls ?? 0),
-    }));
+      ? {
+          inputTokens: String(totalRaw.inputTokens ?? 0),
+          outputTokens: String(totalRaw.outputTokens ?? 0),
+          calls: String(totalRaw.calls ?? 0),
+          costPoints: String(totalCostPoints),
+          costUsd: (totalCostPoints * POINTS_TO_USD).toFixed(4),
+        }
+      : { inputTokens: '0', outputTokens: '0', calls: '0', costPoints: '0', costUsd: '0.0000' };
+    const todayMap = new Map(todayTokensByUser.map((r) => [r.userId, Number(r.tokensToday ?? 0)]));
+    const byUser = usageByUserRaw.map((r) => {
+      const planId = (r.planId?.trim()?.toUpperCase() || 'FREE') as PlanId;
+      const def = getPlanDefinition(planId);
+      const limit = def.limits.tokens_per_day === -1 ? null : def.limits.tokens_per_day;
+      const tokensUsedToday = todayMap.get(r.userId) ?? 0;
+      const costPts = Number(r.costPoints ?? 0);
+      return {
+        userId: r.userId,
+        userEmail: r.userEmail ?? null,
+        planId,
+        inputTokens: String(r.inputTokens ?? 0),
+        outputTokens: String(r.outputTokens ?? 0),
+        calls: String(r.calls ?? 0),
+        costPoints: String(costPts),
+        costUsd: (costPts * POINTS_TO_USD).toFixed(4),
+        tokensUsedToday,
+        tokensPerDayLimit: limit,
+      };
+    });
+    const byModel = byModelRaw.map((r) => {
+      const costPts = Number(r.costPoints ?? 0);
+      return {
+        modelId: r.modelId,
+        modelName: r.modelName ?? null,
+        modelDisplayName: r.modelDisplayName ?? null,
+        inputTokens: String(r.inputTokens ?? 0),
+        outputTokens: String(r.outputTokens ?? 0),
+        calls: String(r.calls ?? 0),
+        costPoints: String(costPts),
+        costUsd: (costPts * POINTS_TO_USD).toFixed(4),
+      };
+    });
     return { byUser, total, byModel };
   }
 

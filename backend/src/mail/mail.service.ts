@@ -9,13 +9,15 @@ export interface SendMailOptions {
   html?: string;
 }
 
-/** Logo URL for email header: LOGO_URL env, or FRONTEND_URL/logo.png (system logo in frontend/public) */
+/** Logo URL for email header: LOGO_URL env, or FRONTEND_URL/logo.png, or CDN default */
+const DEFAULT_LOGO_CDN = 'https://cdn.gweh.sh/logo.png';
+
 function getLogoUrl(): string {
   const url = process.env.LOGO_URL?.trim();
   if (url) return url;
   const base = process.env.FRONTEND_URL?.trim();
   if (base) return base.replace(/\/$/, '') + '/logo.png';
-  return '';
+  return DEFAULT_LOGO_CDN;
 }
 
 /** Cursor-style email wrapper: dark header with system logo, clean typography, footer */

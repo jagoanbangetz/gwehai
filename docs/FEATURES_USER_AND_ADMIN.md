@@ -152,3 +152,10 @@ After that, the user must **log out and log back in** so the frontend receives a
   - **Margin & Revenue** — AI cost from `usage_events`; revenue from `credit_orders`.
 
 So the function **is already counting the data properly**: one usage event per AI consumption, and all admin totals and breakdowns use that same data.
+
+### Is “credit” the same as token (AI) usage? (Yes)
+
+- In this app, **credit** in the plan/usage sense means **daily AI token usage**.
+- **User Dashboard:** The “Credit” / usage section shows **tokens used today** and **tokens remaining** — i.e. `tokens_used` and `tokens_remaining` from the plan’s **tokens_per_day** limit.
+- **Admin → Usage & plans:** The “Credit (used / limit)” column is **tokens used today / tokens per day limit** — same underlying data (input + output tokens summed per user per day, compared to the plan’s `tokens_per_day`).
+- So: **credit = token usage** for the purpose of daily quota. There is also a separate **points** system (cost in points per request, credit packs that grant points); the **plan limit** that users see as “credit” is the **token** limit (`tokens_per_day`).

@@ -1,15 +1,14 @@
 /**
  * Image Assets
- * 
+ *
  * Centralized exports for all image assets.
- * This makes it easy to import images throughout the application.
+ * Logo is served from CDN for consistency and caching.
  */
 
-import logo from './logo.png'
+export const LOGO_CDN_URL = 'https://cdn.gweh.sh/logo.png'
 
-export { logo }
+/** Logo URL for use in <img src={logo} /> — points to CDN */
+export const logo = LOGO_CDN_URL
 
 // Example usage:
 // import { logo } from '../assets/images'
-// or
-// import logoImg from '../assets/images/logo.png'

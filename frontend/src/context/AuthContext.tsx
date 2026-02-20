@@ -182,7 +182,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const logout = () => {
     setUser(null)
-    localStorage.removeItem('scout_user')
+    try {
+      localStorage.clear()
+      sessionStorage.clear()
+    } catch (_) {
+      localStorage.removeItem('scout_user')
+    }
   }
 
   return (
