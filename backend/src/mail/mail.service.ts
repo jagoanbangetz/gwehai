@@ -9,18 +9,16 @@ export interface SendMailOptions {
   html?: string;
 }
 
-/** Logo URL for email header: LOGO_URL env, or FRONTEND_URL/logo.png, or CDN default */
-const DEFAULT_LOGO_CDN = 'https://cdn.gweh.sh/logo.png';
+/** Logo URL for all emails: CDN by default. Override with LOGO_URL env. */
+export const EMAIL_LOGO_CDN = 'https://cdn.gweh.sh/logo.png';
 
 function getLogoUrl(): string {
   const url = process.env.LOGO_URL?.trim();
   if (url) return url;
-  const base = process.env.FRONTEND_URL?.trim();
-  if (base) return base.replace(/\/$/, '') + '/logo.png';
-  return DEFAULT_LOGO_CDN;
+  return EMAIL_LOGO_CDN;
 }
 
-/** Cursor-style email wrapper: dark header with system logo, clean typography, footer */
+/** Shared layout for all outgoing emails. Logo is always an img src (CDN or LOGO_URL). */
 function emailLayout(title: string, bodyHtml: string, appName = 'GwehAI'): string {
   const logoUrl = getLogoUrl();
   const logoBlock = logoUrl

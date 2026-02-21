@@ -1,4 +1,4 @@
-import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, HttpException, HttpStatus, Inject, forwardRef } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { ChatService } from '../chat/chat.service';
 import { getAgentLabel } from '../chat/agent-names';
@@ -21,11 +21,13 @@ export class GwehAIService {
   /** Worker slots are in PlanUsageService (shared with pentest-jobs so limits cannot be bypassed). */
 
   constructor(
+    @Inject(forwardRef(() => ChatService))
     private readonly chatService: ChatService,
     private readonly planResolution: PlanResolutionService,
     private readonly planUsage: PlanUsageService,
     private readonly policyOverrides: PolicyOverridesService,
     private readonly jobsEvents: JobsEventsService,
+    @Inject(forwardRef(() => PentestJobsService))
     private readonly pentestJobs: PentestJobsService,
   ) {}
 

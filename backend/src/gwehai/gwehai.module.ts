@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { GwehAIController } from './gwehai.controller';
@@ -21,9 +21,9 @@ import { PentestJobsModule } from '../pentest-jobs/pentest-jobs.module';
       inject: [ConfigService],
     }),
     AuthModule,
-    ChatModule,
+    forwardRef(() => ChatModule),
     PlansModule,
-    PentestJobsModule,
+    forwardRef(() => PentestJobsModule),
   ],
   controllers: [GwehAIController],
   providers: [GwehAIService, GwehAISSEGuard, JobsEventsService, JobsGateway],
