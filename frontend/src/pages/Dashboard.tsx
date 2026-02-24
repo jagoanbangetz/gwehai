@@ -312,7 +312,7 @@ const Dashboard = () => {
   const [hacktivityTotal, setHacktivityTotal] = useState(0)
   const [isLoadingHacktivity, setIsLoadingHacktivity] = useState(false)
   const [hacktivityLoadError, setHacktivityLoadError] = useState<string | null>(null)
-  const [selectedHacktivityId, setSelectedHacktivityId] = useState<string | null>(null)
+  const [_selectedHacktivityId, setSelectedHacktivityId] = useState<string | null>(null)
   const [selectedHacktivity, setSelectedHacktivity] = useState<HacktivityRow | null>(null)
   const [showPlanModal, setShowPlanModal] = useState(false)
   const [showCurrentPentestModal, setShowCurrentPentestModal] = useState(false)
@@ -353,11 +353,11 @@ const Dashboard = () => {
   const [selectedFinding, setSelectedFinding] = useState<FindingRow | null>(null)
   const [currentPlan, setCurrentPlan] = useState<CurrentPlan | null>(null)
   const [myPlan, setMyPlan] = useState<MyPlanResponse | null>(null)
-  const [pointsBalance, setPointsBalance] = useState<number | null>(null)
+  const [_pointsBalance, setPointsBalance] = useState<number | null>(null)
   const [isLoadingPlan, setIsLoadingPlan] = useState(false)
   const [currentJobId, setCurrentJobId] = useState<string | null>(null)
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
-  const [conversationRunStatus, setConversationRunStatus] = useState<Record<string, 'running' | 'finished' | 'error' | 'stopped'>>({})
+  const [_conversationRunStatus, setConversationRunStatus] = useState<Record<string, 'running' | 'finished' | 'error' | 'stopped'>>({})
   const [tools, setTools] = useState<Record<string, Tool>>({}) // toolId -> Tool
   const [messageTools, setMessageTools] = useState<Record<string, string[]>>({}) // messageId -> toolIds[]
   const [messageToolState, setMessageToolState] = useState<Record<string, ToolState>>({})
@@ -414,7 +414,7 @@ const Dashboard = () => {
         pentestJobId?: string | null
       }>>('/chat/conversations')
       const list = Array.isArray(res.data) ? res.data : (res as any).data?.conversations || []
-      const history = list.map((c) => conversationToChatHistory(c))
+      const history = list.map((c: unknown) => conversationToChatHistory(c as Parameters<typeof conversationToChatHistory>[0]))
       setChatHistory(history)
     } catch (e) {
       console.warn('Refetch chat history:', e)
@@ -530,10 +530,10 @@ const Dashboard = () => {
         if (hacktivityListEqual(prev, items)) return prev
         if (isBackgroundPoll && page === 1 && prev.length > 0) {
           const prevIds = new Set(prev.map((p) => p.id))
-          const newRows = items.filter((i) => !prevIds.has(i.id))
+          const newRows = items.filter((i: HacktivityRow) => !prevIds.has(i.id))
           if (newRows.length === 0) return items
-          const apiOrder = items.map((i) => i.id)
-          const merged = apiOrder.map((id) => items.find((i) => i.id === id) ?? prev.find((p) => p.id === id)).filter(Boolean) as HacktivityRow[]
+          const apiOrder = items.map((i: HacktivityRow) => i.id)
+          const merged = apiOrder.map((id: string) => items.find((i: HacktivityRow) => i.id === id) ?? prev.find((p: HacktivityRow) => p.id === id)).filter(Boolean) as HacktivityRow[]
           return merged
         }
         return items
@@ -725,6 +725,12 @@ const Dashboard = () => {
     }
   }, [showPlanModal])
 
+  // Keep sidebar/footer plan label in sync with server, not stale local values.
+  useEffect(() => {
+    if (!isAuthenticated) return
+    loadPlan().catch(() => {})
+  }, [isAuthenticated])
+
   /** Enrich raw job list with phase_display, checklist, last_action_summary from pentest-jobs by-conversation. */
   const enrichJobsWithPhase = useCallback(async (
     list: Array<{ job_id: string; status: string; user_message?: string; conversation_id?: string; createdAt?: number }>,
@@ -876,9 +882,12 @@ const Dashboard = () => {
         try {
           const parsed = JSON.parse(stored)
           const updated = {
-            ...parsed,
+            id: parsed.id,
+            email: parsed.email,
+            name: parsed.name,
+            token: parsed.token || parsed.access_token,
+            access_token: parsed.token || parsed.access_token,
             googleId: profile.googleId ?? parsed.googleId,
-            role: profile.role ?? parsed.role,
             avatarUrl: profile.avatarUrl ?? parsed.avatarUrl,
           }
           localStorage.setItem('scout_user', JSON.stringify(updated))
@@ -969,7 +978,7 @@ const Dashboard = () => {
           pentestJobId?: string | null
         }>>('/chat/conversations')
         const list = Array.isArray(res.data) ? res.data : (res as any).data?.conversations || []
-        const history = list.map((c) => conversationToChatHistory(c))
+        const history = list.map((c: unknown) => conversationToChatHistory(c as Parameters<typeof conversationToChatHistory>[0]))
         setChatHistory(history)
 
         // URL ?session_id= or ?conversation_id= or ?conversationId= or ?jobs_id= → open that chat and continue (must be UUID)
@@ -1157,9 +1166,10 @@ const Dashboard = () => {
                 if (data.kind === 'state') fetchPentestChecklistProgress(jobId)
               }
               if (eventType === 'job_finished' && data.status) {
+                const status = data.status as 'running' | 'finished' | 'error' | 'stopped'
                 setConversationRunStatus((prev) => ({
                   ...prev,
-                  ...(currentChatId ? { [currentChatId]: String(data.status) } : {}),
+                  ...(currentChatId ? { [currentChatId]: status } : {}),
                 }))
               }
             } catch {
@@ -2381,8 +2391,15 @@ const Dashboard = () => {
   if (!isAuthenticated) {
     return null
   }
-
-  const planLabel = myPlan?.plan?.marketing_title || currentPlan?.plan?.name || currentPlan?.plan?.code || 'Free'
+  const planIdFromProfile = (user as any)?.planId as string | undefined
+  const effectivePlanId = (planIdFromProfile || myPlan?.planId || 'FREE') as keyof typeof PLAN_TIERS[number]['id'] | string
+  const planFromTiers = PLAN_TIERS.find((t) => t.id === effectivePlanId)
+  const planLabel =
+    (planFromTiers && planFromTiers.name) ||
+    myPlan?.plan?.marketing_title ||
+    currentPlan?.plan?.name ||
+    currentPlan?.plan?.code ||
+    'Free'
 
   /** True when user has reached daily scan limit (e.g. FREE 5/day). Send is disabled and banner shown. */
   const atScanLimit =

@@ -1,6 +1,43 @@
 version: '3.8'
 
 services:
+  frontend-app:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: gwehai-frontend
+    container_name: gwehai-frontend
+    ports:
+      - "4173:4173"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4173/"]
+      interval: 5s
+      timeout: 5s
+      start_period: 30s
+      retries: 10
+    networks:
+      - gwehai-network
+
+  # Run only when needed: docker-compose run --rm playwright
+  playwright:
+    profiles:
+      - e2e
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.playwright
+    image: gwehai-playwright
+    container_name: gwehai-playwright
+    environment:
+      BASE_URL: http://frontend-app:4173
+      CI: "1"
+    depends_on:
+      frontend-app:
+        condition: service_healthy
+    ipc: host
+    networks:
+      - gwehai-network
+    command: ["npx", "playwright", "test", "--project=chromium"]
+
   pentest-tools:
     build:
       context: ./backend/skills
@@ -18,6 +55,7 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: gwehai-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: gwehai
       POSTGRES_PASSWORD: gwehai_dev_password
@@ -31,6 +69,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 15s
     networks:
       - gwehai-network
 

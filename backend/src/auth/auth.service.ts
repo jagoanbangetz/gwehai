@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, MoreThan } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { User } from '../entities/user.entity';
 import { PointsService } from '../points/points.service';
@@ -16,6 +16,35 @@ const SIGNUP_BONUS_POINTS = 10;
 
 /** OTP validity in minutes. */
 const OTP_EXPIRY_MINUTES = 5;
+
+/** Max signups from same IP in the window (env: SIGNUP_MAX_PER_IP_24H). */
+const SIGNUP_MAX_PER_IP = Math.max(1, parseInt(process.env.SIGNUP_MAX_PER_IP_24H || '3', 10));
+
+/** Window in hours for signup-per-IP limit (env: SIGNUP_WINDOW_HOURS). */
+const SIGNUP_WINDOW_HOURS = Math.max(1, parseInt(process.env.SIGNUP_WINDOW_HOURS || '24', 10));
+
+/** Known disposable/temporary email domains (lowercase). Env DISPOSABLE_EMAIL_DOMAINS can add more (comma-separated). */
+const DISPOSABLE_EMAIL_DOMAINS = new Set<string>([
+  'tempmail.com',
+  'guerrillamail.com',
+  'guerrillamail.info',
+  '10minutemail.com',
+  'mailinator.com',
+  'throwaway.email',
+  'temp-mail.org',
+  'fakeinbox.com',
+  'trashmail.com',
+  'yopmail.com',
+  ...(process.env.DISPOSABLE_EMAIL_DOMAINS || '')
+    .split(',')
+    .map((d) => d.trim().toLowerCase())
+    .filter(Boolean),
+]);
+
+function isDisposableEmail(email: string): boolean {
+  const domain = email.trim().toLowerCase().split('@')[1];
+  return !!domain && DISPOSABLE_EMAIL_DOMAINS.has(domain);
+}
 
 /** Password reset token validity in minutes. */
 const RESET_TOKEN_EXPIRY_MINUTES = 60;
@@ -49,6 +78,22 @@ export class AuthService {
 
   getClientIp(req: Parameters<typeof getClientIp>[0]): string | null {
     return getClientIp(req);
+  }
+
+  /**
+   * Throws if too many signups from this IP in the configured window (abuse prevention).
+   */
+  async checkSignupAbuse(ip: string | null): Promise<void> {
+    if (!ip?.trim()) return;
+    const cutoff = new Date(Date.now() - SIGNUP_WINDOW_HOURS * 60 * 60 * 1000);
+    const count = await this.userRepo.count({
+      where: { signupIp: ip.trim(), signupAt: MoreThan(cutoff) },
+    });
+    if (count >= SIGNUP_MAX_PER_IP) {
+      throw new BadRequestException(
+        `Too many accounts created from your network. Please try again later or contact support.`,
+      );
+    }
   }
 
   async validateGoogleUser(profile: any): Promise<User> {
@@ -122,6 +167,7 @@ export class AuthService {
         name: user.name,
         avatarUrl: user.avatarUrl,
         role: user.role,
+        planId: user.planId,
       },
     };
   }
@@ -223,13 +269,24 @@ export class AuthService {
 
   /**
    * Start signup: create pending signup, send OTP, return requiresOtp.
+   * @param clientIp - Optional IP for abuse check (max signups per IP).
    */
-  async signupWithOtp(email: string, name: string, password: string): Promise<{ requiresOtp: true; message: string }> {
+  async signupWithOtp(
+    email: string,
+    name: string,
+    password: string,
+    clientIp?: string | null,
+  ): Promise<{ requiresOtp: true; message: string }> {
     if (!email?.includes('@')) throw new BadRequestException('Invalid email format');
     const normalizedEmail = email.trim().toLowerCase();
+    if (isDisposableEmail(normalizedEmail)) {
+      throw new BadRequestException('Please use a permanent email address. Temporary or disposable email addresses are not allowed.');
+    }
     const existing = await this.userRepo.findOne({ where: { email: normalizedEmail } });
     if (existing) throw new BadRequestException('Email already exists. Please use a different email or sign in.');
     if (!password || password.length < 8) throw new BadRequestException('Password must be at least 8 characters');
+
+    await this.checkSignupAbuse(clientIp ?? null);
 
     const otp = generateOtp();
     const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
@@ -243,6 +300,7 @@ export class AuthService {
         password_hash,
         otp_code: otp,
         expires_at: expiresAt,
+        signup_ip: clientIp?.trim() || null,
       }),
     );
 
@@ -285,6 +343,8 @@ export class AuthService {
       name: pending.name,
       password_hash: pending.password_hash,
       defaultLanguage: 'en',
+      signupIp: pending.signup_ip ?? null,
+      signupAt: new Date(),
     });
     await this.userRepo.save(user);
     await this.verificationRepo.delete({ id: code.id });
@@ -307,8 +367,13 @@ export class AuthService {
 
   /**
    * Verify signup OTP and create user, then return JWT.
+   * @param clientIp - Optional IP for abuse check and to store on user.
    */
-  async verifySignupOtp(email: string, otp: string): Promise<{ access_token: string; user: object }> {
+  async verifySignupOtp(
+    email: string,
+    otp: string,
+    clientIp?: string | null,
+  ): Promise<{ access_token: string; user: object }> {
     const normalizedEmail = email.trim().toLowerCase();
     const pending = await this.pendingSignupRepo.findOne({ where: { email: normalizedEmail } });
     if (!pending) throw new BadRequestException('No pending signup or OTP expired');
@@ -318,11 +383,15 @@ export class AuthService {
       throw new BadRequestException('OTP expired. Please sign up again.');
     }
 
+    await this.checkSignupAbuse(clientIp ?? null);
+
     const user = this.userRepo.create({
       email: normalizedEmail,
       name: pending.name,
       password_hash: pending.password_hash,
       defaultLanguage: 'en',
+      signupIp: (clientIp?.trim() || pending.signup_ip) ?? null,
+      signupAt: new Date(),
     });
     await this.userRepo.save(user);
     await this.pendingSignupRepo.delete({ email: normalizedEmail });
@@ -343,12 +412,22 @@ export class AuthService {
   }
 
   /** Legacy: create user directly (no OTP). Kept for backward compatibility when SMTP not configured. */
-  async createUser(email: string, name: string, password: string): Promise<User> {
+  async createUser(
+    email: string,
+    name: string,
+    password: string,
+    clientIp?: string | null,
+  ): Promise<User> {
     if (!email?.includes('@')) throw new BadRequestException('Invalid email format');
     const normalizedEmail = email.toLowerCase().trim();
+    if (isDisposableEmail(normalizedEmail)) {
+      throw new BadRequestException('Please use a permanent email address. Temporary or disposable email addresses are not allowed.');
+    }
     const existing = await this.userRepo.findOne({ where: { email: normalizedEmail } });
     if (existing) throw new BadRequestException('Email already exists. Please use a different email or sign in.');
     if (!password || password.length < 8) throw new BadRequestException('Password must be at least 8 characters');
+
+    await this.checkSignupAbuse(clientIp ?? null);
 
     const password_hash = await bcrypt.hash(password, 10);
     const user = this.userRepo.create({
@@ -356,6 +435,8 @@ export class AuthService {
       name: name.trim(),
       password_hash,
       defaultLanguage: 'en',
+      signupIp: clientIp?.trim() || null,
+      signupAt: new Date(),
     });
     await this.userRepo.save(user);
     try {

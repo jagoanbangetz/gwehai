@@ -171,6 +171,98 @@ export class PointsService {
   }
 
   /**
+   * Reserve credits (deduct estimated amount). Use refTable='usage_reserve', refId=messageId for later settle.
+   * When POINTS_ENABLED=false, no-op and returns null.
+   */
+  async reserveCredits(
+    userId: string,
+    amount: number,
+    refId: string,
+    metadata?: Record<string, any>,
+  ): Promise<PointLedger | null> {
+    return this.spendPoints(
+      userId,
+      amount,
+      PointLedgerReason.CHAT_USAGE,
+      'usage_reserve',
+      refId,
+      { ...metadata, reserved: true },
+    );
+  }
+
+  /**
+   * Settle after actual usage: refund if actual < reserved, charge extra if actual > reserved.
+   * Idempotent: if a ledger entry already exists with refTable='usage_settlement', refId=refId, no-op.
+   */
+  async settleCredits(
+    userId: string,
+    refId: string,
+    reservedAmount: number,
+    actualCredits: number,
+  ): Promise<void> {
+    if (!POINTS_ENABLED) return;
+    const diff = actualCredits - reservedAmount;
+    if (diff === 0) return;
+
+    const existing = await this.ledgerRepo.findOne({
+      where: { userId, refTable: 'usage_settlement', refId },
+    });
+    if (existing) return;
+
+    if (diff < 0) {
+      await this.refundPoints(userId, -diff, 'usage_settlement', refId);
+    } else {
+      await this.spendPoints(userId, diff, PointLedgerReason.CHAT_USAGE, 'usage_settlement', refId);
+    }
+  }
+
+  /**
+   * Refund points (ACID-safe). Uses PointLedgerType.REFUND.
+   */
+  async refundPoints(
+    userId: string,
+    amount: number,
+    refTable?: string,
+    refId?: string,
+    metadata?: Record<string, any>,
+  ): Promise<PointLedger | null> {
+    if (!POINTS_ENABLED) return Promise.resolve(null);
+    const normalizedAmount = this.normalizePoints(amount);
+    if (normalizedAmount <= 0) {
+      throw new BadRequestException('Refund amount must be positive');
+    }
+
+    return await this.dataSource.transaction(async (manager) => {
+      const ledgerEntry = manager.create(PointLedger, {
+        userId,
+        deltaPoints: normalizedAmount,
+        type: PointLedgerType.REFUND,
+        reason: PointLedgerReason.REFUND,
+        refTable,
+        refId,
+        metadata,
+      });
+      await manager.save(ledgerEntry);
+
+      const balance = await manager.findOne(UserPointBalance, {
+        where: { userId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (balance) {
+        balance.balance = this.normalizePoints(Number(balance.balance || 0) + normalizedAmount);
+        await manager.save(balance);
+      } else {
+        const newBalance = manager.create(UserPointBalance, {
+          userId,
+          balance: normalizedAmount,
+        });
+        await manager.save(newBalance);
+      }
+      return ledgerEntry;
+    });
+  }
+
+  /**
    * Get ledger history for a user
    */
   async getLedgerHistory(

@@ -162,6 +162,19 @@ export class MailService {
     return this.send({ to, subject, text, html });
   }
 
+  /** Subscription activated successfully – notify user. */
+  async sendSubscriptionSuccess(to: string, planName: string): Promise<boolean> {
+    const subject = 'Your subscription is active';
+    const bodyHtml = `
+      <h2 style="margin:0 0 16px;font-size:18px;font-weight:600;color:#fff;">Subscription successful</h2>
+      <p style="margin:0 0 24px;font-size:15px;color:#a3a3a3;">Your ${planName} subscription is now active. You can use all plan features right away.</p>
+      <p style="margin:0;font-size:13px;color:#737373;">Thank you for subscribing. If you have any questions, reach out to our support team.</p>
+    `;
+    const html = emailLayout(subject, bodyHtml, this.appName);
+    const text = `Your ${planName} subscription is now active. You can use all plan features right away.`;
+    return this.send({ to, subject, text, html });
+  }
+
   /** Reset password: link only */
   async sendPasswordResetLink(to: string, resetLink: string): Promise<boolean> {
     const subject = 'Reset your password';

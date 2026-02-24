@@ -14,9 +14,11 @@ import { PlanQuotaUsageSession } from '../entities/plan-quota-usage-session.enti
 import { UserPointBalance } from '../entities/user-point-balance.entity';
 import { AdminSetting } from '../entities/admin-setting.entity';
 import { PolicyOverridesService } from './policy-overrides.service';
+import { BillingModule } from '../billing/billing.module';
 
 @Module({
   imports: [
+    BillingModule,
     TypeOrmModule.forFeature([
       Plan,
       UserPlan,

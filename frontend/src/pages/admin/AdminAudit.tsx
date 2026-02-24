@@ -16,7 +16,7 @@ interface AuditRow {
 export default function AdminAudit() {
   const [data, setData] = useState<{ items: AuditRow[]; total: number }>({ items: [], total: 0 })
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [_error, setError] = useState<string | null>(null)
   const [page, setPage] = useState(0)
   const limit = 50
   const [exportType, setExportType] = useState('users')

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { AuthProvider } from './context/AuthContext'
+import { AuthProvider, useAuth } from './context/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import AdminRoute from './components/AdminRoute'
 import NavLoadingBar from './components/NavLoadingBar'
@@ -12,6 +12,7 @@ import VerifySignup from './pages/VerifySignup'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import Pricing from './pages/Pricing'
+import Methodology from './pages/Methodology'
 import Dashboard from './pages/Dashboard'
 import GoogleCallback from './pages/GoogleCallback'
 import Terms from './pages/Terms'
@@ -34,6 +35,11 @@ import AdminMargin from './pages/admin/AdminMargin'
 import AdminSystem from './pages/admin/AdminSystem'
 import AdminAudit from './pages/admin/AdminAudit'
 import AdminPromotion from './pages/admin/AdminPromotion'
+import AdminBilling from './pages/admin/AdminBilling'
+import AdminPaymentSubscriptions from './pages/admin/AdminPaymentSubscriptions'
+import AdminPaymentPlans from './pages/admin/AdminPaymentPlans'
+import AdminModels from './pages/admin/AdminModels'
+import Forbidden from './pages/Forbidden'
 
 function ScrollToHash() {
   const location = useLocation()
@@ -48,6 +54,12 @@ function ScrollToHash() {
     }
   }, [location.pathname, location.hash])
   return null
+}
+
+function NotFoundRedirect() {
+  const { isAuthenticated, authReady } = useAuth()
+  if (!authReady) return null
+  return <Navigate to={isAuthenticated ? '/agent' : '/'} replace />
 }
 
 function App() {
@@ -65,11 +77,13 @@ function App() {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/pricing" element={<Pricing />} />
+            <Route path="/methodology" element={<Methodology />} />
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/contact" element={<Contact />} />
             <Route path="/careers" element={<Careers />} />
             <Route path="/auth/google/callback" element={<GoogleCallback />} />
+            <Route path="/forbidden" element={<Forbidden />} />
             <Route
               path="/admin"
               element={
@@ -86,6 +100,9 @@ function App() {
               <Route path="hacktivity" element={<AdminHacktivity />} />
               <Route path="reports" element={<AdminReports />} />
               <Route path="usage" element={<AdminUsage />} />
+              <Route path="billing" element={<AdminBilling />} />
+              <Route path="payment/subscriptions" element={<AdminPaymentSubscriptions />} />
+              <Route path="payment/plans" element={<AdminPaymentPlans />} />
               <Route path="cost-center" element={<AdminCostCenter />} />
               <Route path="abuse-center" element={<AdminAbuseCenter />} />
               <Route path="ops-console" element={<AdminOpsConsole />} />
@@ -93,6 +110,7 @@ function App() {
               <Route path="margin" element={<AdminMargin />} />
               <Route path="system" element={<AdminSystem />} />
               <Route path="audit" element={<AdminAudit />} />
+              <Route path="models" element={<AdminModels />} />
               <Route path="promotion" element={<AdminPromotion />} />
             </Route>
             <Route 
@@ -111,6 +129,7 @@ function App() {
                 </ProtectedRoute>
               } 
             />
+            <Route path="*" element={<NotFoundRedirect />} />
           </Routes>
         </div>
       </Router>

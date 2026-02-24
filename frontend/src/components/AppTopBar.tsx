@@ -17,7 +17,7 @@ export interface AppTopBarProps {
 const AppTopBar: React.FC<AppTopBarProps> = ({
   onMenuClick,
   isMenuOpen = false,
-  onProfileClick,
+  onProfileClick: _onProfileClick,
   userEmail,
   mobileLayout = false,
 }) => {

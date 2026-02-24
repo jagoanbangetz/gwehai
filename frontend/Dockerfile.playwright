@@ -1,0 +1,18 @@
+# Run Playwright browser tests. Uses official image with browsers pre-installed.
+# Expects BASE_URL to point at the running frontend (e.g. http://frontend-app:4173).
+# Run via docker-compose: docker-compose run --rm playwright
+
+FROM mcr.microsoft.com/playwright:v1.49.0-noble
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+
+# Default: run Chromium-only in CI; override with e.g. playwright test
+ENV BASE_URL=http://frontend-app:4173
+ENV CI=1
+
+CMD ["npx", "playwright", "test", "--project=chromium"]

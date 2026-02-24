@@ -11,6 +11,8 @@ import {
 import { User } from './user.entity';
 
 export enum SubscriptionStatus {
+  /** Waiting for user to approve subscription on PayPal */
+  APPROVAL_PENDING = 'approval_pending',
   ACTIVE = 'active',
   CANCELLED = 'cancelled',
   PAST_DUE = 'past_due',
@@ -21,6 +23,7 @@ export enum SubscriptionPlan {
   PRO = 'pro',
   PRO_PLUS = 'pro_plus',
   PRO_MAX = 'pro_max',
+  ULTRA = 'ultra',
 }
 
 @Entity('subscriptions')
@@ -52,8 +55,12 @@ export class Subscription {
   @Column({ type: 'int', default: 0 })
   monthlyPointsGrant: number; // Points granted each month
 
+  /** Our plan ID (PRO, PRO_PLUS, ULTRA) for syncing to user.planId */
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  planId: string | null;
+
   @Column({ nullable: true })
-  providerSubscriptionId: string; // External provider subscription ID
+  providerSubscriptionId: string; // PayPal subscription ID (I-xxx)
 
   @Column({ nullable: true })
   providerCustomerId: string; // External provider customer ID

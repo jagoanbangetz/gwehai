@@ -58,6 +58,14 @@ export class User {
   @Column({ nullable: true })
   lastLoginIp: string;
 
+  /** IP at signup (for abuse prevention: limit signups per IP). */
+  @Column({ nullable: true })
+  signupIp: string | null;
+
+  /** When the user completed signup (for abuse prevention window). */
+  @Column({ type: 'timestamp', nullable: true })
+  signupAt: Date | null;
+
   /** Plan ID: FREE | PRO | PRO_PLUS | ULTRA. Resolved in one place (PlanService.getUserPlan). Default FREE if null. */
   @Column({ type: 'varchar', length: 32, nullable: true })
   planId: string | null;

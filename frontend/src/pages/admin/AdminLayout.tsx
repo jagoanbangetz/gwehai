@@ -24,6 +24,15 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    id: 'payment',
+    label: 'Payment',
+    items: [
+      { path: '/admin/billing', label: 'Billing & pricing' },
+      { path: '/admin/payment/subscriptions', label: 'Subscriptions' },
+      { path: '/admin/payment/plans', label: 'Plan actions' },
+    ],
+  },
+  {
     id: 'usage',
     label: 'Usage & optimization',
     items: [
@@ -41,6 +50,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { path: '/admin/system', label: 'System' },
       { path: '/admin/audit', label: 'Audit' },
+      { path: '/admin/models', label: 'Models' },
     ],
   },
 ]
@@ -50,6 +60,7 @@ function getGroupForPath(path: string): string {
     if (g.items.some((i) => i.path === path || (path.startsWith(i.path) && i.path !== '/admin/overview'))) return g.id
     if (path === '/admin' || path === '/admin/') return 'overview'
   }
+  if (path.startsWith('/admin/payment/')) return 'payment'
   return 'overview'
 }
 

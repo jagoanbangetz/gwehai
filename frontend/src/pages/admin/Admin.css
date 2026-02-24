@@ -444,6 +444,11 @@
   background: oklch(0.25 0 0);
 }
 
+.admin-btn-sm {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+}
+
 .admin-user-actions {
   display: flex;
   flex-wrap: wrap;
@@ -747,6 +752,322 @@
 .admin-loading {
   color: oklch(0.65 0 0);
   padding: 1rem;
+}
+
+/* Admin Billing page */
+.admin-billing-intro {
+  margin: 0 0 1.5rem 0;
+  font-size: 0.9rem;
+  color: var(--admin-muted, oklch(0.6 0 0));
+  max-width: 42rem;
+}
+
+.admin-billing-section {
+  margin-bottom: 1.5rem;
+}
+
+.admin-billing-heading {
+  margin: 0 0 1rem 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: oklch(0.92 0 0);
+}
+
+.admin-billing-subheading {
+  margin: 0.75rem 0 0.5rem 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: oklch(0.88 0 0);
+}
+
+.admin-billing-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 32rem;
+}
+
+.admin-billing-plan-id-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: 0.75rem;
+  max-width: 42rem;
+}
+
+.admin-billing-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.admin-billing-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: oklch(0.75 0 0);
+}
+
+.admin-billing-help {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.875rem;
+  color: var(--admin-muted, oklch(0.6 0 0));
+}
+
+.admin-billing-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.admin-billing-plan-ids {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--admin-border, oklch(0.35 0 0));
+}
+
+.admin-billing-create-plans-btn {
+  margin-top: 0.5rem;
+}
+
+.admin-billing-plans-table {
+  max-width: 42rem;
+}
+
+.admin-billing-plans-table th.admin-billing-th-price {
+  width: 10rem;
+}
+
+.admin-billing-table-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.875rem;
+  box-sizing: border-box;
+}
+
+.admin-billing-plans-table td {
+  vertical-align: middle;
+}
+
+.admin-billing-create-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem 1rem;
+  margin-top: 1rem;
+}
+
+.admin-billing-create-row .admin-billing-hint {
+  margin-top: 0;
+  flex: 1;
+  min-width: 12rem;
+}
+
+.admin-billing-hint {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--admin-muted, oklch(0.55 0 0));
+}
+
+.admin-billing-price-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
+  gap: 0.75rem;
+  max-width: 24rem;
+}
+
+.admin-billing-price-grid .admin-billing-field {
+  max-width: 8rem;
+}
+
+.admin-billing-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.admin-billing-message {
+  margin: 0;
+  color: var(--admin-success, oklch(0.7 0.15 145));
+  font-size: 0.9rem;
+}
+
+.admin-billing-actions-section {
+  margin-top: 0.5rem;
+}
+
+.admin-billing-actions-toggle {
+  background: none;
+  border: none;
+  color: var(--admin-muted, oklch(0.65 0 0));
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 0.5rem 0;
+  text-align: left;
+  width: 100%;
+}
+
+.admin-billing-actions-toggle:hover {
+  color: oklch(0.9 0 0);
+}
+
+.admin-billing-actions-grid {
+  display: grid;
+  gap: 1.5rem;
+  margin-top: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.admin-billing-action-block {
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--admin-border, oklch(0.35 0 0));
+}
+
+.admin-billing-action-block .admin-billing-subheading {
+  margin-top: 0;
+}
+
+.admin-billing-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.admin-billing-tx-result {
+  margin: 0.75rem 0 0;
+  padding: 0.75rem;
+  background: oklch(0.18 0 0);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  overflow: auto;
+  max-height: 12rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Payment Subscriptions: form grid and transaction table */
+.admin-payment-form-grid {
+  display: grid;
+  gap: 0.75rem 1.25rem;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  margin-bottom: 0.75rem;
+}
+
+.admin-payment-form-grid-wide {
+  max-width: 36rem;
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+@media (max-width: 640px) {
+  .admin-payment-form-grid-wide {
+    grid-template-columns: 1fr;
+  }
+}
+
+.admin-payment-tx-result {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--admin-border, oklch(0.25 0 0));
+}
+
+.admin-payment-tx-result .admin-billing-subheading {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: oklch(0.88 0 0);
+}
+
+.admin-payment-tx-table {
+  font-size: 0.875rem;
+}
+
+.admin-payment-tx-table th.admin-payment-tx-id,
+.admin-payment-tx-table td.admin-payment-tx-id {
+  max-width: 12rem;
+  word-break: break-all;
+  font-size: 0.8rem;
+}
+
+.admin-payment-tx-code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.78rem;
+  color: oklch(0.75 0 0);
+  background: oklch(0.15 0 0 / 0.5);
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+}
+
+.admin-payment-status {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-transform: capitalize;
+  background: oklch(0.2 0.02 260 / 0.5);
+  color: oklch(0.9 0 0);
+}
+
+.admin-payment-plan {
+  text-transform: capitalize;
+  font-weight: 500;
+  color: oklch(0.88 0 0);
+}
+
+.admin-payment-subs-table .admin-user-actions {
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+/* Payment history: filters row with calendar date inputs */
+.admin-payment-history-section .admin-billing-help {
+  margin-bottom: 1rem;
+}
+
+.admin-payment-history-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 1.25rem;
+  align-items: flex-end;
+}
+
+.admin-payment-history-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.admin-payment-history-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: oklch(0.65 0 0);
+}
+
+.admin-payment-history-input {
+  min-width: 160px;
+  width: 100%;
+  max-width: 220px;
+}
+
+.admin-payment-history-date {
+  min-width: 160px;
+  max-width: 180px;
+  cursor: pointer;
+}
+
+.admin-payment-history-actions {
+  align-self: flex-end;
+}
+
+.admin-payment-history-actions .admin-btn {
+  min-height: 2.25rem;
+}
+
+.admin-muted {
+  color: var(--admin-muted, oklch(0.55 0 0));
 }
 
 /* Success / failure notifications */

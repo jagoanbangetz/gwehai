@@ -17,6 +17,10 @@ export class PendingSignup {
   @Column({ type: 'timestamp' })
   expires_at: Date;
 
+  /** IP that started signup (for abuse limit and to set User.signupIp on verify). */
+  @Column({ nullable: true })
+  signup_ip: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

@@ -30,7 +30,7 @@ const Footer = () => {
             <Link to={{ pathname: '/', hash: 'features' }} className="footer-link">Pentesting</Link>
             <Link to={{ pathname: '/', hash: 'chat' }} className="footer-link">AI Chat</Link>
             <Link to="/" className="footer-link">API</Link>
-            <Link to={{ pathname: '/', hash: 'reports' }} className="footer-link">Reports</Link>
+            <Link to="/methodology" className="footer-link">Methodology</Link>
           </div>
           <div className="footer-column">
             <h4 className="footer-column-title">Legal</h4>

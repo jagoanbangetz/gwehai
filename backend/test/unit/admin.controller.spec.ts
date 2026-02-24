@@ -184,23 +184,37 @@ describe('AdminController', () => {
   });
 
   it('returns usage summary', async () => {
-    const qbUser = {
+    const chain = () => ({
+      innerJoin: jest.fn().mockReturnThis(),
+      leftJoin: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
       addSelect: jest.fn().mockReturnThis(),
       groupBy: jest.fn().mockReturnThis(),
+      addGroupBy: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
       limit: jest.fn().mockReturnThis(),
-      getRawMany: jest.fn().mockResolvedValue([{ userId: 'u1', inputTokens: '100', outputTokens: '50', calls: '2' }]),
-    };
-    const qbTotal = {
-      select: jest.fn().mockReturnThis(),
-      addSelect: jest.fn().mockReturnThis(),
-      getRawOne: jest.fn().mockResolvedValue({ inputTokens: '500', outputTokens: '200', calls: '10' }),
-    };
-    usageRepo.createQueryBuilder.mockReturnValueOnce(qbUser).mockReturnValueOnce(qbTotal);
+      where: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn(),
+      getRawOne: jest.fn(),
+    });
+    const qbUser = chain();
+    (qbUser.getRawMany as jest.Mock).mockResolvedValue([
+      { userId: 'u1', userEmail: 'u@e.com', planId: 'FREE', inputTokens: '100', outputTokens: '50', costPoints: '0', calls: '2' },
+    ]);
+    const qbTotal = chain();
+    (qbTotal.getRawOne as jest.Mock).mockResolvedValue({ inputTokens: '500', outputTokens: '200', costPoints: '0', calls: '10' });
+    const qbByModel = chain();
+    (qbByModel.getRawMany as jest.Mock).mockResolvedValue([]);
+    const qbToday = chain();
+    (qbToday.getRawMany as jest.Mock).mockResolvedValue([]);
+    usageRepo.createQueryBuilder
+      .mockReturnValueOnce(qbUser)
+      .mockReturnValueOnce(qbTotal)
+      .mockReturnValueOnce(qbByModel)
+      .mockReturnValueOnce(qbToday);
 
     const result = await controller.getUsageSummary();
     expect(result.byUser).toHaveLength(1);
-    expect(result.total).toEqual({ inputTokens: '500', outputTokens: '200', calls: '10' });
+    expect(result.total).toMatchObject({ inputTokens: '500', outputTokens: '200', calls: '10' });
   });
 });

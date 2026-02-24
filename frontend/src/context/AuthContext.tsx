@@ -6,8 +6,10 @@ interface User {
   id: string
   name: string
   email: string
-  role?: string
   googleId?: string
+  avatarUrl?: string
+  role?: string
+  planId?: string
 }
 
 export type LoginResult = { success: true } | { success: false; requiresOtp?: true; message?: string }
@@ -40,6 +42,29 @@ interface AuthProviderProps {
   children: ReactNode
 }
 
+type StoredSession = User & {
+  token: string
+  access_token?: string
+}
+
+function toStoredSession(payload: any): StoredSession | null {
+  const token = String(payload?.token || payload?.access_token || '').trim()
+  const id = String(payload?.id || '').trim()
+  const email = String(payload?.email || '').trim()
+  if (!token || !id || !email) return null
+  return {
+    id,
+    email,
+    name: String(payload?.name || '').trim(),
+    googleId: payload?.googleId ? String(payload.googleId) : undefined,
+    avatarUrl: payload?.avatarUrl ? String(payload.avatarUrl) : undefined,
+    role: payload?.role ? String(payload.role) : undefined,
+    planId: payload?.planId ? String(payload.planId) : undefined,
+    token,
+    access_token: token,
+  }
+}
+
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null)
   const [authReady, setAuthReady] = useState(false)
@@ -48,7 +73,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const storedUser = localStorage.getItem('scout_user')
     if (storedUser) {
       try {
-        const userData = JSON.parse(storedUser)
+        const userData = toStoredSession(JSON.parse(storedUser))
+        if (!userData) {
+          localStorage.removeItem('scout_user')
+          setUser(null)
+          return
+        }
         setUser(userData)
       } catch (e) {
         console.error('Error parsing user data:', e)
@@ -65,12 +95,20 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const storedUser = localStorage.getItem('scout_user')
       if (storedUser) {
         try {
-          const userData = JSON.parse(storedUser)
-          setUser(userData)
+          const userData = toStoredSession(JSON.parse(storedUser))
+          if (!userData) {
+            localStorage.removeItem('scout_user')
+            setUser(null)
+          } else {
+            setUser(userData)
+          }
         } catch (e) {
           console.error('Error parsing user data:', e)
           localStorage.removeItem('scout_user')
+          setUser(null)
         }
+      } else {
+        setUser(null)
       }
       setAuthReady(true)
     }
@@ -93,7 +131,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       if (data.requiresOtp === true) {
         return { success: false, requiresOtp: true, message: data.message || 'OTP sent to your email.' }
       }
-      const userData = { ...data.user, token: data.access_token }
+      const userData = toStoredSession({ ...data.user, token: data.access_token })
+      if (!userData) return { success: false, message: 'Invalid server response' }
       setUser(userData)
       localStorage.setItem('scout_user', JSON.stringify(userData))
       return { success: true }
@@ -112,7 +151,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       })
       const data = await response.json()
       if (!response.ok) return false
-      const userData = { ...data.user, token: data.access_token }
+      const userData = toStoredSession({ ...data.user, token: data.access_token })
+      if (!userData) return false
       setUser(userData)
       localStorage.setItem('scout_user', JSON.stringify(userData))
       return true
@@ -136,7 +176,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       if (data.requiresOtp === true) {
         return { success: false, requiresOtp: true, message: data.message || 'Verification email sent.' }
       }
-      const userData = { ...data.user, token: data.access_token }
+      const userData = toStoredSession({ ...data.user, token: data.access_token })
+      if (!userData) return { success: false, message: 'Invalid server response' }
       setUser(userData)
       localStorage.setItem('scout_user', JSON.stringify(userData))
       return { success: true }
@@ -155,7 +196,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       })
       const data = await response.json()
       if (!response.ok) return false
-      const userData = { ...data.user, token: data.access_token }
+      const userData = toStoredSession({ ...data.user, token: data.access_token })
+      if (!userData) return false
       setUser(userData)
       localStorage.setItem('scout_user', JSON.stringify(userData))
       return true
@@ -170,7 +212,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const response = await fetch(`${API_BASE}/auth/verify-signup?token=${encodeURIComponent(token)}`)
       const data = await response.json()
       if (!response.ok) return false
-      const userData = { ...data.user, token: data.access_token }
+      const userData = toStoredSession({ ...data.user, token: data.access_token })
+      if (!userData) return false
       setUser(userData)
       localStorage.setItem('scout_user', JSON.stringify(userData))
       return true

@@ -37,20 +37,28 @@ export class AuthController {
   }
 
   @Post('signup')
-  async signup(@Body() body: { email: string; name: string; password: string }) {
+  async signup(
+    @Body() body: { email: string; name: string; password: string },
+    @Req() req: Request,
+  ) {
     if (!body.email || !body.name || !body.password) {
       throw new BadRequestException('Email, name and password are required');
     }
+    const ip = this.authService.getClientIp(req);
     if (this.mailService.isConfigured()) {
-      return await this.authService.signupWithOtp(body.email, body.name, body.password);
+      return await this.authService.signupWithOtp(body.email, body.name, body.password, ip);
     }
-    const user = await this.authService.createUser(body.email, body.name, body.password);
+    const user = await this.authService.createUser(body.email, body.name, body.password, ip);
     return await this.authService.login(user);
   }
 
   @Post('verify-signup-otp')
-  async verifySignupOtp(@Body() body: { email: string; otp: string }) {
-    return await this.authService.verifySignupOtp(body.email, body.otp);
+  async verifySignupOtp(
+    @Body() body: { email: string; otp: string },
+    @Req() req: Request,
+  ) {
+    const ip = this.authService.getClientIp(req);
+    return await this.authService.verifySignupOtp(body.email, body.otp, ip);
   }
 
   @Get('verify-signup')

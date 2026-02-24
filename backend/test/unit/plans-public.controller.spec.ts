@@ -1,14 +1,20 @@
 import { PlansPublicController } from '../../src/plans/plans-public.controller';
+import { BillingSettingsService } from '../../src/billing/billing-settings.service';
+import { getPlanTiers } from '../../src/config/plans.config';
 
 describe('PlansPublicController', () => {
   let controller: PlansPublicController;
+  let billingSettings: BillingSettingsService;
 
   beforeEach(() => {
-    controller = new PlansPublicController();
+    billingSettings = {
+      getPlanTiersWithPrices: jest.fn().mockResolvedValue(getPlanTiers()),
+    } as unknown as BillingSettingsService;
+    controller = new PlansPublicController(billingSettings);
   });
 
-  it('returns tiers with workers/scans/steps/sub_agents for each plan', () => {
-    const tiers = controller.getTiers();
+  it('returns tiers with workers/scans/steps/sub_agents for each plan', async () => {
+    const tiers = await controller.getTiers();
     expect(tiers).toHaveLength(4);
     expect(tiers.map((t) => t.id)).toEqual(['FREE', 'PRO', 'PRO_PLUS', 'ULTRA']);
     for (const tier of tiers) {

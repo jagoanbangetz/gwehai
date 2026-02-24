@@ -32,21 +32,24 @@ export default function AdminUsage() {
   const [summary, setSummary] = useState<UsageSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  const load = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const res = await apiClient.get('/admin/usage-summary')
+      setSummary(res.data)
+    } catch (e: any) {
+      setError(e?.response?.data?.message || e?.message || 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true)
-        const res = await apiClient.get('/admin/usage-summary')
-        setSummary(res.data)
-      } catch (e: any) {
-        setError(e?.response?.data?.message || e?.message || 'Failed to load')
-      } finally {
-        setLoading(false)
-      }
-    }
     load()
-  }, [])
+  }, [refreshKey])
 
   if (loading) return <div className="admin-loading">Loading usage…</div>
   if (error) return <div className="admin-error">{error}</div>
@@ -56,9 +59,24 @@ export default function AdminUsage() {
   const byUser = summary.byUser || []
   const byModel = summary.byModel || []
 
+  const handleRefresh = () => {
+    setRefreshKey((k) => k + 1)
+  }
+
   return (
     <>
-      <h2 className="admin-page-title">Usage & plans</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+        <h2 className="admin-page-title" style={{ margin: 0 }}>Usage & plans</h2>
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={loading}
+          className="admin-btn admin-btn-secondary"
+          style={{ fontSize: '0.875rem' }}
+        >
+          {loading ? 'Loading…' : 'Refresh'}
+        </button>
+      </div>
       <p style={{ margin: '0 0 1rem 0', fontSize: '0.88rem', color: 'oklch(0.65 0 0)' }}>
         Every chat and pentest job is counted: input tokens, output tokens, and cost. Data updates as users use the AI.
       </p>
@@ -141,7 +159,7 @@ export default function AdminUsage() {
                   <td colSpan={7} style={{ color: 'oklch(0.6 0 0)', padding: '1rem' }}>No usage recorded yet.</td>
                 </tr>
               ) : (
-                byUser.slice(0, 50).map((u) => (
+                byUser.map((u) => (
                   <tr key={u.userId}>
                     <td>{u.userEmail || <code style={{ fontSize: '0.8rem' }}>{u.userId?.slice(0, 8)}…</code>}</td>
                     <td>{u.planId ?? '—'}</td>

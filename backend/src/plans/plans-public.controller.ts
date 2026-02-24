@@ -1,5 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
-import { getPlanTiers } from '../config/plans.config';
+import { BillingSettingsService } from '../billing/billing-settings.service';
 
 /**
  * Public plan endpoints (no auth). Used by Pricing page and upgrade modals
@@ -7,12 +7,13 @@ import { getPlanTiers } from '../config/plans.config';
  */
 @Controller('plans')
 export class PlansPublicController {
+  constructor(private readonly billingSettings: BillingSettingsService) {}
+
   /**
-   * Returns config-based tiers (workers, scans, steps) for display.
-   * Adjust limits in plans.config.ts; validation uses the same config.
+   * Returns tiers with admin-overridable prices (workers, scans, steps from config).
    */
   @Get('tiers')
-  getTiers() {
-    return getPlanTiers();
+  async getTiers() {
+    return this.billingSettings.getPlanTiersWithPrices();
   }
 }

@@ -1,24 +1,96 @@
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
 import AnimatedBackground from '../components/AnimatedBackground'
-import { PLAN_TIERS, PLAN_FOOTNOTE, formatWorkersLabel } from '../config/plans'
+import { PLAN_TIERS, PLAN_FOOTNOTE, formatWorkersLabel, type PlanId } from '../config/plans'
+import apiClient from '../utils/api'
 import './Pricing.css'
 
 const Pricing = () => {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { isAuthenticated } = useAuth()
+  const [paypalEnabled, setPaypalEnabled] = useState<boolean>(false)
+  const [loadingPlanId, setLoadingPlanId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [subscriptionSuccess, setSubscriptionSuccess] = useState<boolean>(false)
+  const success = searchParams.get('success') === '1'
+  const cancelled = searchParams.get('cancel') === '1'
+  const subscriptionIdFromUrl = searchParams.get('subscription_id') || searchParams.get('token') || ''
 
-  const handleSelectPlan = (_planId: string, priceMonthly: number) => {
+  // When user returns from PayPal approval: complete subscription (upgrade plan) then clear URL params and show success
+  useEffect(() => {
+    if (!success || !subscriptionIdFromUrl || !isAuthenticated) return
+    apiClient
+      .post('/subscriptions/complete', {
+        subscription_id: subscriptionIdFromUrl,
+        token: subscriptionIdFromUrl,
+      })
+      .then(() => {
+        setSubscriptionSuccess(true)
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev)
+          next.delete('success')
+          next.delete('subscription_id')
+          next.delete('token')
+          return next
+        })
+      })
+      .catch(() => {})
+  }, [success, subscriptionIdFromUrl, isAuthenticated])
+
+  // Clear cancel param when user cancelled on PayPal
+  useEffect(() => {
+    if (cancelled) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('cancel')
+        return next
+      })
+    }
+  }, [cancelled])
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+    apiClient.get('/subscriptions/me').then((res) => {
+      setPaypalEnabled(!!res.data?.paypalEnabled)
+    }).catch(() => {})
+  }, [isAuthenticated])
+
+  const handleSelectPlan = async (planId: string, priceMonthly: number) => {
     if (!isAuthenticated) {
       navigate('/signup')
-    } else {
-      if (priceMonthly === 0) {
-        return // already on Free
-      }
-      // In real app: redirect to checkout or subscription page
+      return
+    }
+    if (priceMonthly === 0) {
+      return
+    }
+    if (!paypalEnabled) {
       navigate('/dashboard')
+      return
+    }
+    setError(null)
+    setLoadingPlanId(planId)
+    try {
+      const base = window.location.origin
+      const returnUrl = `${base}/pricing?success=1`
+      const cancelUrl = `${base}/pricing?cancel=1`
+      const { data } = await apiClient.post<{ ok: boolean; approvalUrl?: string; message?: string }>('/subscriptions/create', {
+        planId: planId as PlanId,
+        returnUrl,
+        cancelUrl,
+      })
+      if (data.ok && data.approvalUrl) {
+        window.location.href = data.approvalUrl
+        return
+      }
+      setError(data.message || 'Could not start subscription')
+    } catch (e: any) {
+      setError(e?.response?.data?.message || e?.message || 'Something went wrong')
+    } finally {
+      setLoadingPlanId(null)
     }
   }
 
@@ -38,6 +110,21 @@ const Pricing = () => {
               Choose a plan that fits your security testing and analysis needs
             </p>
             <p className="pricing-footnote">{PLAN_FOOTNOTE}</p>
+            {(success || subscriptionSuccess) && (
+              <div className="pricing-message success" role="alert">
+                Subscription successful. Your plan has been upgraded. You can use all features now—check your email for confirmation.
+              </div>
+            )}
+            {cancelled && (
+              <div className="pricing-message cancelled" role="alert">
+                Subscription was cancelled. You can try again anytime.
+              </div>
+            )}
+            {error && (
+              <div className="pricing-message error" role="alert">
+                {error}
+              </div>
+            )}
           </div>
 
           <div className="credit-packs-grid plan-tiers-grid">
@@ -93,8 +180,15 @@ const Pricing = () => {
                 <button
                   className={`pack-purchase-button ${tier.priceMonthly === 0 ? 'free-button' : ''}`}
                   onClick={() => handleSelectPlan(tier.id, tier.priceMonthly)}
+                  disabled={tier.priceMonthly > 0 && loadingPlanId === tier.id}
                 >
-                  {tier.priceMonthly === 0 ? 'Current Plan' : 'Get ' + tier.name}
+                  {tier.priceMonthly === 0
+                    ? 'Current Plan'
+                    : loadingPlanId === tier.id
+                      ? 'Redirecting…'
+                      : paypalEnabled
+                        ? 'Subscribe with PayPal'
+                        : 'Get ' + tier.name}
                 </button>
               </div>
             ))}

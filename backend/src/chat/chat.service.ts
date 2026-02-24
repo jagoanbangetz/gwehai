@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Inject, forwardRef, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository, IsNull, EntityManager } from 'typeorm';
 import { Conversation } from '../entities/conversation.entity';
@@ -26,6 +26,9 @@ import { PlanUsageService } from '../plans/plan-usage.service';
 import { validateStep } from '../plans/plan-limits.validation';
 import { getPlanPayload } from '../config/plans.config';
 import { PentestJobsService } from '../pentest-jobs/pentest-jobs.service';
+import { BillingConfigService } from '../billing/billing-config.service';
+import { CostCalculatorService } from '../billing/cost-calculator.service';
+import { POINTS_ENABLED } from '../config/plan-billing.config';
 
 /** Small delay so SSE client receives events over time and frontend typing effect can run */
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -184,6 +187,8 @@ export class ChatService {
     private providerRouter: ProviderRouterService,
     private costManager: CostManagerService,
     private dataSource: DataSource,
+    @Optional() private billingConfig?: BillingConfigService,
+    @Optional() private costCalculator?: CostCalculatorService,
   ) {}
 
   /** Tracks main-agent done + pending sub-agents per parent conversation so we only set "finished" and push "done" when all work is complete. */
@@ -354,7 +359,8 @@ export class ChatService {
   }
 
   /**
-   * Process message with points deduction (ACID-safe)
+   * Process message with points deduction (ACID-safe).
+   * When POINTS_ENABLED and dynamic billing config is available, uses reserve → settle and CostCalculator.
    */
   async processMessage(
     userId: string,
@@ -362,15 +368,147 @@ export class ChatService {
     conversationId?: string,
     modelId?: string,
   ): Promise<{ response: string; conversationId: string; messageId: string }> {
-    return await this.dataSource.transaction(async (manager) => {
-      // Get or create conversation
-      const conversation = await this.getOrCreateConversation(
-        userId,
-        conversationId,
-        modelId,
-      );
+    const useDynamicBilling =
+      POINTS_ENABLED &&
+      this.billingConfig &&
+      this.costCalculator &&
+      (await this.tryGetBillingSnapshot());
 
-      // Get model
+    if (useDynamicBilling && this.billingConfig && this.costCalculator) {
+      return this.processMessageWithDynamicBilling(userId, message, conversationId, modelId);
+    }
+    return this.processMessageLegacy(userId, message, conversationId, modelId);
+  }
+
+  private async tryGetBillingSnapshot() {
+    try {
+      await this.billingConfig!.getSnapshot();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async processMessageWithDynamicBilling(
+    userId: string,
+    message: string,
+    conversationId?: string,
+    modelId?: string,
+  ): Promise<{ response: string; conversationId: string; messageId: string }> {
+    const snapshot = await this.billingConfig!.getSnapshot();
+    const planId = await this.planResolution.getUserPlan(userId);
+    const modelKey = await this.billingConfig!.resolveModelForPlan(planId, null);
+    const estimatedOutput = this.costCalculator!.estimateOutputTokensForReserve(undefined);
+    const inputTokensEst = Math.ceil(message.length / 4);
+    const reserveResult = this.costCalculator!.computeCredits(snapshot, {
+      planId,
+      opType: 'chat_turn',
+      modelKey,
+      inputTokens: inputTokensEst,
+      outputTokens: estimatedOutput,
+    });
+    const reservedCredits = reserveResult.credits;
+
+    const { conversation, model, assistantMessage } = await this.dataSource.transaction(async (manager) => {
+      const conversation = await this.getOrCreateConversation(userId, conversationId, modelId);
+      const model = await manager.findOne(Model, {
+        where: { id: conversation.modelId || modelId },
+      });
+      if (!model || !model.isActive) {
+        throw new NotFoundException(
+          'Model not found or inactive. Use Auto (DeepSeek) in the model picker and ensure DEEPSEEK_API_KEY is set.',
+        );
+      }
+      const userMessage = manager.create(Message, {
+        conversationId: conversation.id,
+        role: MessageRole.USER,
+        content: message,
+      });
+      await manager.save(userMessage);
+      const userMessagePart = manager.create(MessagePart, {
+        messageId: userMessage.id,
+        type: 'text' as any,
+        content: message,
+        order: 0,
+      });
+      await manager.save(userMessagePart);
+      const assistantMessage = manager.create(Message, {
+        conversationId: conversation.id,
+        role: MessageRole.ASSISTANT,
+        content: '',
+      });
+      await manager.save(assistantMessage);
+      const assistantMessagePart = manager.create(MessagePart, {
+        messageId: assistantMessage.id,
+        type: 'text' as any,
+        content: '',
+        order: 0,
+      });
+      await manager.save(assistantMessagePart);
+      return { conversation, model, assistantMessage };
+    });
+
+    await this.pointsService.reserveCredits(userId, reservedCredits, assistantMessage.id);
+
+    const aiResult = await this.generateResponse(message, model);
+    const response = aiResult.content;
+    const responseOutputTokens = aiResult.usage?.outputTokens ?? Math.ceil(response.length / 4);
+    const responseInputTokens = aiResult.usage?.inputTokens ?? inputTokensEst;
+
+    const actualResult = this.costCalculator!.computeCredits(snapshot, {
+      planId,
+      opType: 'chat_turn',
+      modelKey,
+      inputTokens: responseInputTokens,
+      outputTokens: responseOutputTokens,
+    });
+    const actualCredits = actualResult.credits;
+
+    await this.pointsService.settleCredits(userId, assistantMessage.id, reservedCredits, actualCredits);
+
+    await this.dataSource.transaction(async (manager) => {
+      const assistantMsg = await manager.findOne(Message, { where: { id: assistantMessage.id } });
+      if (assistantMsg) {
+        assistantMsg.content = response;
+        await manager.save(assistantMsg);
+      }
+      const part = await manager.findOne(MessagePart, {
+        where: { messageId: assistantMessage.id },
+      });
+      if (part) {
+        part.content = response;
+        await manager.save(part);
+      }
+      const usageEvent = manager.create(UsageEvent, {
+        userId,
+        modelId: model.id,
+        messageId: assistantMessage.id,
+        inputTokens: responseInputTokens,
+        outputTokens: responseOutputTokens,
+        costPoints: actualCredits,
+      });
+      await manager.save(usageEvent);
+      if (!conversation.title || conversation.title === 'New Conversation') {
+        conversation.title = message.substring(0, 50);
+        await manager.save(conversation);
+      }
+    });
+
+    return {
+      response,
+      conversationId: conversation.id,
+      messageId: assistantMessage.id,
+    };
+  }
+
+  private async processMessageLegacy(
+    userId: string,
+    message: string,
+    conversationId?: string,
+    modelId?: string,
+  ): Promise<{ response: string; conversationId: string; messageId: string }> {
+    return await this.dataSource.transaction(async (manager) => {
+      const conversation = await this.getOrCreateConversation(userId, conversationId, modelId);
       const model = await manager.findOne(Model, {
         where: { id: conversation.modelId || modelId },
       });
@@ -381,9 +519,8 @@ export class ChatService {
         );
       }
 
-      // Calculate cost (fixed per call or token-based)
-      const inputTokens = Math.ceil(message.length / 4); // Rough estimate
-      const outputTokens = 500; // Estimated response tokens
+      const inputTokens = Math.ceil(message.length / 4);
+      const outputTokens = 500;
       const fixedCostPoints = this.getFixedCostPoints(model);
       const costPoints =
         fixedCostPoints !== null
@@ -396,17 +533,15 @@ export class ChatService {
           ? this.normalizePoints(costPoints)
           : Math.max(1, Math.ceil(costPoints));
 
-      // Check and deduct points (ACID-safe)
       await this.pointsService.spendPoints(
         userId,
         finalCostPoints,
         PointLedgerReason.CHAT_USAGE,
         'usage_events',
-        null, // Will be set after creating usage event
+        null,
         { modelId: model.id, conversationId: conversation.id },
       );
 
-      // Save user message
       const userMessage = manager.create(Message, {
         conversationId: conversation.id,
         role: MessageRole.USER,
@@ -414,7 +549,6 @@ export class ChatService {
       });
       await manager.save(userMessage);
 
-      // Create message part
       const userMessagePart = manager.create(MessagePart, {
         messageId: userMessage.id,
         type: 'text' as any,
@@ -430,7 +564,6 @@ export class ChatService {
       const responseInputTokens =
         aiResult.usage?.inputTokens ?? inputTokens;
 
-      // Save assistant message
       const assistantMessage = manager.create(Message, {
         conversationId: conversation.id,
         role: MessageRole.ASSISTANT,
@@ -438,7 +571,6 @@ export class ChatService {
       });
       await manager.save(assistantMessage);
 
-      // Create message part for response
       const assistantMessagePart = manager.create(MessagePart, {
         messageId: assistantMessage.id,
         type: 'text' as any,
@@ -447,7 +579,6 @@ export class ChatService {
       });
       await manager.save(assistantMessagePart);
 
-      // Create usage event
       const usageEvent = manager.create(UsageEvent, {
         userId,
         modelId: model.id,
@@ -458,7 +589,6 @@ export class ChatService {
       });
       await manager.save(usageEvent);
 
-      // Update conversation title if first message
       if (!conversation.title || conversation.title === 'New Conversation') {
         conversation.title = message.substring(0, 50);
         await manager.save(conversation);

@@ -97,14 +97,13 @@ describe('AuthController', () => {
     (authService as any).createUser.mockResolvedValue({ id: 'u1' });
     (authService as any).login.mockResolvedValue({ access_token: 'token', user: {} });
 
-    const result = await controller.signup({
-      email: 'a@b.com',
-      name: 'A',
-      password: 'secret123',
-    });
+    const result = await controller.signup(
+      { email: 'a@b.com', name: 'A', password: 'secret123' },
+      { headers: {}, socket: {} } as any,
+    );
 
     expect('access_token' in result && result.access_token).toBe('token');
-    expect(authService.createUser).toHaveBeenCalledWith('a@b.com', 'A', 'secret123');
+    expect(authService.createUser).toHaveBeenCalledWith('a@b.com', 'A', 'secret123', '127.0.0.1');
   });
 
   it('signup with SMTP returns requiresOtp', async () => {
@@ -114,14 +113,13 @@ describe('AuthController', () => {
       message: 'OTP sent to your email.',
     });
 
-    const result = await controller.signup({
-      email: 'a@b.com',
-      name: 'A',
-      password: 'secret123',
-    });
+    const result = await controller.signup(
+      { email: 'a@b.com', name: 'A', password: 'secret123' },
+      { headers: {}, socket: {} } as any,
+    );
 
     expect('requiresOtp' in result && result.requiresOtp).toBe(true);
-    expect(authService.signupWithOtp).toHaveBeenCalledWith('a@b.com', 'A', 'secret123');
+    expect(authService.signupWithOtp).toHaveBeenCalledWith('a@b.com', 'A', 'secret123', '127.0.0.1');
   });
 
   it('verify-signup-otp returns token', async () => {
@@ -130,9 +128,13 @@ describe('AuthController', () => {
       user: { id: 'u1' },
     });
 
-    const result = await controller.verifySignupOtp({ email: 'a@b.com', otp: '123456' });
+    const result = await controller.verifySignupOtp(
+      { email: 'a@b.com', otp: '123456' },
+      { headers: {}, socket: {} } as any,
+    );
 
     expect('access_token' in result && result.access_token).toBe('token');
+    expect(authService.verifySignupOtp).toHaveBeenCalledWith('a@b.com', '123456', '127.0.0.1');
   });
 
   it('forgot-password returns message', async () => {

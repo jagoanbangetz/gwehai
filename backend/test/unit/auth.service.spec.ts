@@ -13,6 +13,7 @@ describe('AuthService', () => {
     save: jest.fn(),
     create: jest.fn(),
     delete: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
   };
   const verificationRepo = {
     findOne: jest.fn(),
@@ -181,6 +182,29 @@ describe('AuthService', () => {
       await expect(service.signupWithOtp('a@b.com', 'A', 'password123')).rejects.toThrow(
         BadRequestException,
       );
+    });
+
+    it('throws when email is disposable/temporary', async () => {
+      userRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.signupWithOtp('user@tempmail.com', 'A', 'password123'),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.signupWithOtp('user@tempmail.com', 'A', 'password123'),
+      ).rejects.toThrow(/permanent email|disposable|not allowed/i);
+    });
+
+    it('throws when too many signups from same IP', async () => {
+      userRepo.findOne.mockResolvedValue(null);
+      userRepo.count.mockResolvedValue(5); // already at or over limit
+
+      await expect(
+        service.signupWithOtp('new@b.com', 'A', 'password123', '10.0.0.1'),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.signupWithOtp('new@b.com', 'A', 'password123', '10.0.0.1'),
+      ).rejects.toThrow(/Too many accounts|try again later/i);
     });
   });
 

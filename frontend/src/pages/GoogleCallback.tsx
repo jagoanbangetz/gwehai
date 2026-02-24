@@ -64,7 +64,6 @@ const GoogleCallback = () => {
             token,
             access_token: token,
             googleId: data.googleId ?? null,
-            role: data.role,
             avatarUrl: data.avatarUrl,
           }
           localStorage.setItem('scout_user', JSON.stringify(userData))

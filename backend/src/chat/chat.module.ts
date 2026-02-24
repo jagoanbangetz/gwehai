@@ -15,11 +15,13 @@ import { ReportsModule } from '../reports/reports.module';
 import { HacktivityModule } from '../hacktivity/hacktivity.module';
 import { PlansModule } from '../plans/plans.module';
 import { PentestJobsModule } from '../pentest-jobs/pentest-jobs.module';
+import { BillingModule } from '../billing/billing.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Conversation, ConversationMemory, Message, MessagePart, Model, UsageEvent]),
     PointsModule,
+    BillingModule,
     LlmModule,
     ToolsModule,
     ReportsModule,
