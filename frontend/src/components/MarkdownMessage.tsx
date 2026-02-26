@@ -8,6 +8,8 @@ import './MarkdownMessage.css'
 interface MarkdownMessageProps {
   content: string
   isStreaming?: boolean
+  /** When true, use softer typography (less document-like) for a natural chat feel */
+  conversational?: boolean
 }
 
 function getCodeText(children: React.ReactNode): string {
@@ -20,9 +22,9 @@ function getCodeText(children: React.ReactNode): string {
   return String(children ?? '').replace(/\n$/, '')
 }
 
-const MarkdownMessage: React.FC<MarkdownMessageProps> = ({ content, isStreaming }) => {
+const MarkdownMessage: React.FC<MarkdownMessageProps> = ({ content, isStreaming, conversational }) => {
   return (
-    <div className="markdown-content-wrapper">
+    <div className={`markdown-content-wrapper ${conversational ? 'markdown-content--conversational' : ''}`}>
       <div className="markdown-content">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}

@@ -9,6 +9,7 @@ import { ToastContainer, Toast } from '../components/Toast'
 import { getModelIcon, isProModel } from '../utils/modelIcons'
 import { gwehaiClient, GwehAIEvent } from '../utils/gwehaiApi'
 import MarkdownMessage from '../components/MarkdownMessage'
+import FollowUpChips from '../components/FollowUpChips'
 import DashboardLayout from '../components/DashboardLayout'
 import ProfileFooter from '../components/ProfileFooter'
 import SettingsModal from '../components/SettingsModal'
@@ -52,6 +53,10 @@ interface Message {
   thinkingDisplay?: string
   /** Animated substring of content for typing effect on final reply */
   contentDisplay?: string
+  /** Optional longer markdown for "More details" (simple conversation JSON contract) */
+  details?: string
+  /** Optional follow-up suggestion chips (simple conversation JSON contract) */
+  followUps?: string[]
 }
 
 interface ToolState {
@@ -287,6 +292,14 @@ const Dashboard = () => {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [selectedModelKey, setSelectedModelKey] = useState<ModelKey>(() => getStoredModelKey())
+  /** 'agent' = full pentest/tools; 'ask' = simple Q&A only (no terminal, short replies). */
+  const [chatMode, setChatMode] = useState<'agent' | 'ask'>(() => {
+    try {
+      const raw = localStorage.getItem('gwehai_chat_mode')
+      if (raw === 'agent' || raw === 'ask') return raw
+    } catch (_) {}
+    return 'ask'
+  })
   const [isLoading, setIsLoading] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -400,6 +413,8 @@ const Dashboard = () => {
   const intentionalCloseRef = useRef(false)
   const jobsWsRef = useRef<WebSocket | null>(null)
   const hacktivityPollRef = useRef({ page: 1, conversationId: null as string | null })
+
+  const ACTIVE_JOB_STORAGE_KEY = 'gwehai_current_pentest_job_id'
 
   /** Refetch chat list from DB (e.g. after sending a message so sidebar shows the conversation). */
   const refetchChatHistory = async () => {
@@ -1200,6 +1215,7 @@ const Dashboard = () => {
     setCurrentChatId(null)
     setCurrentConversationId(null)
     setCurrentJobId(null)
+    try { localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY) } catch (_) {}
     setPentestChecklistProgress(null)
     setTools({})
     setMessageTools({})
@@ -1223,6 +1239,7 @@ const Dashboard = () => {
     setCurrentChatId(chatId)
     setCurrentConversationId(chatId)
     setCurrentJobId(null)
+    try { localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY) } catch (_) {}
     setMessageTools({})
     setMessageToolState({})
     setCurrentAssistantMessageId(null)
@@ -1442,7 +1459,137 @@ const Dashboard = () => {
     }
   }, [])
 
-  // Auto-scroll to bottom when new message and user is near bottom (ChatGPT-style)
+  // Resume streaming for an in-progress job when user returns to the page.
+  useEffect(() => {
+    const resumeJobIfNeeded = async () => {
+      if (currentJobId) return
+      let storedJobId: string | null = null
+      try {
+        storedJobId = localStorage.getItem(ACTIVE_JOB_STORAGE_KEY)
+      } catch {
+        storedJobId = null
+      }
+      if (!storedJobId) return
+
+      try {
+        const status = await gwehaiClient.getJobStatus(storedJobId)
+        const rawStatus = (status && (status.status || status.state)) || ''
+        const normalized = String(rawStatus).toLowerCase()
+        const isTerminal =
+          normalized === 'done' ||
+          normalized === 'failed' ||
+          normalized === 'stopped' ||
+          normalized === 'error'
+
+        if (isTerminal) {
+          try { localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY) } catch (_) {}
+          return
+        }
+
+        // Job is still running — restore ids and reattach to stream.
+        setCurrentJobId(storedJobId)
+        const convId = status?.conversation_id ?? status?.conversationId
+        if (typeof convId === 'string') {
+          setCurrentConversationId(convId)
+          setConversationRunStatus(prev => ({ ...prev, [convId]: 'running' }))
+        }
+
+        // Reset transient UI state; history messages will be loaded separately.
+        setIsLoading(true)
+        setCurrentStep(null)
+        setActivityLog([])
+        setLogEvents([])
+        stopRequestedRef.current = false
+
+        const es = gwehaiClient.connectToEvents(
+          storedJobId,
+          (event: GwehAIEvent) => {
+            handleStreamEvent(event, -1)
+          },
+          (_error) => {
+            if (intentionalCloseRef.current) return
+            console.warn('Stream connection failed while resuming job:', storedJobId)
+            sendInProgressRef.current = false
+            setIsLoading(false)
+            setCurrentStep(null)
+            setActivityLog(prev => [...prev.slice(-49), 'Text: Connection lost'])
+            streamingMessageRef.current = null
+            eventSourceRef.current = null
+          },
+          () => {
+            // Successfully reattached
+          }
+        )
+
+        eventSourceRef.current = es
+        intentionalCloseRef.current = false
+      } catch {
+        try { localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY) } catch (_) {}
+      }
+    }
+
+    resumeJobIfNeeded()
+  }, [currentJobId])
+
+  // When opening a chat by session_id/conversation_id URL, auto-reconnect to SSE if that conversation has an active job (so user sees latest process).
+  useEffect(() => {
+    if (!currentChatId || currentJobId || eventSourceRef.current) return
+
+    let cancelled = false
+    const reconnectStreamForConversation = async () => {
+      try {
+        const jobs = await gwehaiClient.getJobs()
+        if (cancelled) return
+        const terminal = ['done', 'failed', 'stopped', 'error', 'completed']
+        const active = jobs.find(
+          (j: { conversation_id?: string; status?: string }) =>
+            (j.conversation_id === currentChatId || j.conversation_id === currentConversationId) &&
+            j.status &&
+            !terminal.includes(String(j.status).toLowerCase())
+        )
+        if (!active?.job_id) return
+
+        const jobId = active.job_id
+        setCurrentJobId(jobId)
+        setCurrentConversationId(currentChatId)
+        setConversationRunStatus(prev => ({ ...prev, [currentChatId]: 'running' }))
+        try {
+          localStorage.setItem(ACTIVE_JOB_STORAGE_KEY, jobId)
+        } catch (_) {}
+        setIsLoading(true)
+        setCurrentStep(null)
+        setActivityLog([])
+        setLogEvents([])
+        stopRequestedRef.current = false
+
+        const es = gwehaiClient.connectToEvents(
+          jobId,
+          (event: GwehAIEvent) => handleStreamEvent(event, -1),
+          (err) => {
+            if (intentionalCloseRef.current) return
+            console.warn('Stream connection lost for conversation job:', jobId, err)
+            sendInProgressRef.current = false
+            setIsLoading(false)
+            setCurrentStep(null)
+            setActivityLog(prev => [...prev.slice(-49), 'Text: Connection lost'])
+            streamingMessageRef.current = null
+            eventSourceRef.current = null
+          },
+          () => {}
+        )
+        eventSourceRef.current = es
+        intentionalCloseRef.current = false
+      } catch (e) {
+        if (!cancelled) console.warn('Could not reconnect stream for conversation:', currentChatId, e)
+      }
+    }
+
+    reconnectStreamForConversation()
+    return () => {
+      cancelled = true
+    }
+  }, [currentChatId, currentJobId])
+
   useEffect(() => {
     if (userNearBottomRef.current) {
       messagesAreaRef.current?.scrollToBottom('smooth')
@@ -1671,6 +1818,7 @@ const Dashboard = () => {
     }
     // 4) Clear all running state so UI shows stopped
     setCurrentJobId(null)
+    try { localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY) } catch (_) {}
     setIsLoading(false)
     sendInProgressRef.current = false
     setCurrentStep(null)
@@ -1721,8 +1869,14 @@ const Dashboard = () => {
     }
 
     const messageToSend = userInput
+
+    // Ask = simple Q&A only. Agent = full pentest only.
+    const isSimple = chatMode === 'ask'
+    const effectiveMode: 'agent' | 'ask' = chatMode
+    setIsSimpleConversation(isSimple)
     addUserMessage(messageToSend)
-    addAssistantMessage('thinking', selectedModelKey)
+    // Simple chat: one assistant bubble that shows "Replying..." then the reply. Pentest: show "Thinking..." then tools/content.
+    addAssistantMessage(isSimple ? 'content' : 'thinking', selectedModelKey)
     if (!messageOverride) setInput('')
     inputRef.current?.focus()
 
@@ -1733,7 +1887,7 @@ const Dashboard = () => {
     setCurrentStep(null)
     setActivityLog([])
     setLogEvents([])
-    setIsSimpleConversation(false)
+    if (!isSimple) setIsSimpleConversation(false)
     if (currentConversationId) {
       setConversationRunStatus(prev => ({ ...prev, [currentConversationId]: 'running' }))
     }
@@ -1749,12 +1903,13 @@ const Dashboard = () => {
         messageToSend,
         false,
         currentConversationId || undefined,
-        selectedModelKey
+        selectedModelKey,
+        effectiveMode
       )
       loadPlan().catch(() => {}) // refresh scan_limit (sessions_started_today) so banner appears when at limit
       const jobId = jobResponse.job_id
       setCurrentJobId(jobId)
-      try { localStorage.setItem('gwehai_current_pentest_job_id', jobId) } catch (_) {}
+      try { localStorage.setItem(ACTIVE_JOB_STORAGE_KEY, jobId) } catch (_) {}
       const convId = jobResponse.conversation_id ?? undefined
       if (convId) {
         setCurrentConversationId(convId)
@@ -2179,6 +2334,30 @@ const Dashboard = () => {
         return
       }
 
+      case 'simple_response': {
+        const incomingStreamMessageId = event.data.message_id
+        const messageId = incomingStreamMessageId
+          ? streamMessageMapRef.current[incomingStreamMessageId]
+          : lastCompletedAssistantMessageIdRef.current
+        if (!messageId) return
+        const details = event.data.details
+        const followUps = Array.isArray(event.data.followUps) ? event.data.followUps.filter((s: unknown) => typeof s === 'string') : undefined
+        setMessages(prev => {
+          const updated = prev.map(msg =>
+            msg.id === messageId
+              ? {
+                  ...msg,
+                  ...(details != null && details !== '' && { details: String(details) }),
+                  ...(followUps != null && followUps.length > 0 && { followUps }),
+                }
+              : msg
+          )
+          messagesRef.current = updated
+          return updated
+        })
+        return
+      }
+
       case 'status': {
         // Simple mode: no target host, just Q&A — show only a simple "Replying..." indicator (no ThinkingBar / GwehLog).
         if (event.data.simple_mode === true) {
@@ -2200,7 +2379,8 @@ const Dashboard = () => {
 
         if (inSimpleMode) {
           eventType = 'content'
-          messageId = lastCompletedAssistantMessageIdRef.current || addAssistantMessage('content')
+          // Reuse the assistant bubble we already created on send (one bubble: "Replying..." then reply). Do not add a second bubble.
+          messageId = currentAssistantMessageIdRef.current || lastCompletedAssistantMessageIdRef.current || addAssistantMessage('content')
           pendingAssistantMessageIdRef.current = messageId
           setCurrentStep(null)
           // Don't appendActivityStep so no EXECUTION/REASONING log blocks
@@ -2319,6 +2499,7 @@ const Dashboard = () => {
           eventSourceRef.current.close()
           eventSourceRef.current = null
         }
+        try { localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY) } catch (_) {}
         return
       }
 
@@ -2327,14 +2508,18 @@ const Dashboard = () => {
         const isMainAgentDone = !hasAgentIndex || Number(event.data.agent_index) === 1
         if (!isMainAgentDone) {
           const subAgentLabel = (event.data.agent_label as string | undefined) || `Agent ${String(event.data.agent_index)}`
-          appendActivityStep('Done', subAgentLabel)
+      if (!isSimpleConversation) {
+        appendActivityStep('Done', subAgentLabel)
+      }
           return
         }
 
         sendInProgressRef.current = false
         setIsLoading(false)
         setCurrentStep(null)
-        appendActivityStep('Done')
+    if (!isSimpleConversation) {
+      appendActivityStep('Done')
+    }
         streamingMessageRef.current = null
         setIsSimpleConversation(false)
         if (event.data.conversation_id) {
@@ -2359,6 +2544,7 @@ const Dashboard = () => {
           eventSourceRef.current.close()
           eventSourceRef.current = null
         }
+        try { localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY) } catch (_) {}
         return
       }
 
@@ -2406,6 +2592,14 @@ const Dashboard = () => {
     myPlan?.scan_limit != null &&
     myPlan.scan_limit.sessions_per_day != null &&
     myPlan.scan_limit.sessions_started_today >= myPlan.scan_limit.sessions_per_day
+
+  // For FREE plan, force Auto model so premium models cannot be used even if previously stored.
+  useEffect(() => {
+    if (String(effectivePlanId).toUpperCase() === 'FREE' && selectedModelKey !== 'auto') {
+      setSelectedModelKey('auto')
+      setStoredModelKey('auto')
+    }
+  }, [effectivePlanId, selectedModelKey])
 
   const sidebarHeaderContent = (
     <>
@@ -2700,15 +2894,44 @@ const Dashboard = () => {
                         </div>
                       )}
                       <div className="chat-input-row">
-                        <ModelPicker
-                          value={selectedModelKey}
-                          onChange={(key) => {
-                            setSelectedModelKey(key)
-                            setStoredModelKey(key)
-                          }}
-                          disabled={isLoading}
-                          className="chat-model-picker"
-                        />
+                        <div className="chat-mode-selector" role="group" aria-label="Chat mode">
+                          <button
+                            type="button"
+                            className={`chat-mode-btn ${chatMode === 'agent' ? 'active' : ''}`}
+                            onClick={() => {
+                              setChatMode('agent')
+                              try { localStorage.setItem('gwehai_chat_mode', 'agent') } catch (_) {}
+                            }}
+                            title="Full agent: pentest, tools, step-by-step"
+                          >
+                            <span className="chat-mode-icon" aria-hidden><i className="fa-solid fa-infinity" /></span>
+                            <span>Agent</span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`chat-mode-btn ${chatMode === 'ask' ? 'active' : ''}`}
+                            onClick={() => {
+                              setChatMode('ask')
+                              try { localStorage.setItem('gwehai_chat_mode', 'ask') } catch (_) {}
+                            }}
+                            title="Ask only: short answers, no terminal"
+                          >
+                            <span className="chat-mode-icon chat-mode-icon-ask" aria-hidden><i className="fa-solid fa-comment" /></span>
+                            <span>Ask</span>
+                          </button>
+                        </div>
+                        {chatMode === 'agent' && (
+                          <ModelPicker
+                            value={selectedModelKey}
+                            onChange={(key) => {
+                              setSelectedModelKey(key)
+                              setStoredModelKey(key)
+                            }}
+                            disabled={isLoading}
+                            className="chat-model-picker"
+                            planId={typeof effectivePlanId === 'string' ? effectivePlanId : String(effectivePlanId)}
+                          />
+                        )}
                       </div>
                       <div className="chat-input-area">
                         {isVoiceRecording ? (
@@ -2795,8 +3018,8 @@ const Dashboard = () => {
                     // Always show user messages
                     if (message.role === 'user') return true
                     
-                    // Show assistant placeholder states (Thinking..., Planning..., Executing...) so effect is visible
-                    if (message.role === 'assistant' && (message.eventType === 'planning' || message.eventType === 'thinking' || message.eventType === 'executing' || message.eventType === 'planning-next')) {
+                    // Show assistant placeholder states (Thinking..., Planning..., Replying..., Executing...) so effect is visible
+                    if (message.role === 'assistant' && (message.eventType === 'planning' || message.eventType === 'thinking' || message.eventType === 'content' || message.eventType === 'executing' || message.eventType === 'planning-next')) {
                       return true
                     }
                     
@@ -2828,7 +3051,8 @@ const Dashboard = () => {
                   <div key={message.id} className={`chat-message ${message.role} ${message.eventType ? `event-${message.eventType}` : ''}`}>
                     <div className="message-content">
                       <div className="message-bubble">
-                        {message.role === 'assistant' && message.modelKey && (
+                        {/* Hide model badge in simple conversation so it stays like a normal chat. */}
+                        {message.role === 'assistant' && message.modelKey && !isSimpleConversation && (
                           <span className="model-badge" title={`Model: ${getModelLabel(message.modelKey)}`}>
                             {getModelLabel(message.modelKey)}
                           </span>
@@ -2886,6 +3110,7 @@ const Dashboard = () => {
                                             : ''
                                     }
                                     isStreaming={message.isStreaming && !!message.content}
+                                    conversational={isSimpleConversation}
                                   />
                                 ) : (
                                   <span className="message-content-text">
@@ -2895,6 +3120,21 @@ const Dashboard = () => {
                                         ? String(message.content) 
                                         : ''}
                                   </span>
+                                )}
+                                {message.role === 'assistant' && message.details && (
+                                  <details className="message-details-collapsible">
+                                    <summary>More details</summary>
+                                    <div className="message-details-content">
+                                      <MarkdownMessage content={message.details} conversational />
+                                    </div>
+                                  </details>
+                                )}
+                                {message.role === 'assistant' && message.followUps && message.followUps.length > 0 && (
+                                  <FollowUpChips
+                                    items={message.followUps}
+                                    onSelect={handleSendWithText}
+                                    disabled={isLoading}
+                                  />
                                 )}
                                 {message.role === 'assistant' && (() => {
                                   if (toolState?.toolsComplete && toolState.hasTools) {
@@ -2936,8 +3176,23 @@ const Dashboard = () => {
                         </div>
                       </div>
                       {!message.isStreaming && (
-                        <div className="message-time">
-                          {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        <div className="message-footer">
+                          <div className="message-time">
+                            {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                          {message.role === 'assistant' && (message.content || message.details) && (
+                            <button
+                              type="button"
+                              className="message-copy-btn"
+                              onClick={() => {
+                                const text = [message.content, message.details].filter(Boolean).join('\n\n---\n\n')
+                                navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard', 'success')).catch(() => {})
+                              }}
+                              title="Copy"
+                            >
+                              Copy
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -3484,14 +3739,14 @@ const Dashboard = () => {
                         {isLoadingHacktivity ? (
                           <tr>
                             <td colSpan={5} className="report-loading-cell hacktivity-empty-cell">
-                              <span className="hacktivity-empty-icon">⋯</span>
+                              <span className="hacktivity-empty-icon"><i className="fa-solid fa-spinner fa-spin" aria-hidden /></span>
                               Loading activity…
                             </td>
                           </tr>
                         ) : hacktivityList.length === 0 ? (
                           <tr>
                             <td colSpan={5} className="report-empty-cell hacktivity-empty-cell">
-                              <span className="hacktivity-empty-icon">⚡</span>
+                              <span className="hacktivity-empty-icon"><i className="fa-solid fa-bolt" aria-hidden /></span>
                               <strong>No actions yet</strong>
                               <span className="hacktivity-empty-hint">Run a pentest or chat with a target URL to see AI tools and commands here.</span>
                             </td>

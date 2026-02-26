@@ -12,6 +12,7 @@ interface ChatRequest {
   message: string;
   conversationId?: string;
   modelId?: string;
+  model_key?: string;
 }
 
 @Controller('chat')
@@ -29,6 +30,22 @@ export class ChatController {
       body.modelId,
     );
     return result;
+  }
+
+  /**
+   * Simple conversation: returns { reply, details?, followUps? } for ChatGPT-style UI.
+   * Uses GwehAI identity prompt; model returns JSON with reply (required), optional details (markdown), optional followUps (string[]).
+   */
+  @Post('conversation')
+  async conversation(@Req() req: Request, @Body() body: { message: string; conversationId?: string; model_key?: string }) {
+    const user = req.user as any;
+    if (!body?.message || typeof body.message !== 'string' || !body.message.trim()) {
+      throw new BadRequestException('message is required');
+    }
+    return this.chatService.getSimpleConversationResponse(user.id, body.message.trim(), {
+      conversationId: body.conversationId,
+      model_key: body.model_key as any,
+    });
   }
 
   @Get('conversations')

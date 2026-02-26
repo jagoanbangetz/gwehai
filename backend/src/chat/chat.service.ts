@@ -15,6 +15,7 @@ import { ProviderRouterService, normalizeLlmErrorMessage } from '../llm/provider
 import { CostManagerService } from '../llm/cost-manager.service';
 import type { ModelOptionKey } from '../config/model-options.config';
 import { PENTEST_SYSTEM_PROMPT, SIMPLE_SECURITY_SYSTEM_PROMPT } from '../prompt/pentest.system-prompt';
+import { GWEHAI_CONVERSATION_SYSTEM_PROMPT } from '../prompt/gwehai-identity';
 import { PENTEST_TOOL_DEFS } from '../prompt/pentest-tools.def';
 import { LlmMessage, LlmToolCall } from '../llm/llm.types';
 import { ToolsService } from '../tools/tools.service';
@@ -724,7 +725,7 @@ export class ChatService {
     }
 
     const messages: LlmMessage[] = [
-      { role: 'system', content: SIMPLE_SECURITY_SYSTEM_PROMPT },
+      { role: 'system', content: GWEHAI_CONVERSATION_SYSTEM_PROMPT },
       { role: 'user', content: message },
     ];
     let content: string;
@@ -752,22 +753,151 @@ export class ChatService {
       throw new Error('Request was cancelled');
     }
 
-    const CHUNK_SIZE = 80;
-    for (let i = 0; i < content.length; i += CHUNK_SIZE) {
-      const delta = content.slice(i, i + CHUNK_SIZE);
-      push({ type: 'message_delta', data: { message_id: mid, delta } });
-    }
-    push({ type: 'message_done', data: { message_id: mid, content } });
+    const { reply, details, followUps } = this.parseConversationJson(content);
 
-    await this.messageRepo.update(mid, { content });
-    await this.messagePartRepo.update({ messageId: mid }, { content });
+    // Stream reply in chunks with a short delay so the frontend shows a typing effect
+    const CHUNK_SIZE = 60;
+    const TYPING_DELAY_MS = 18;
+    for (let i = 0; i < reply.length; i += CHUNK_SIZE) {
+      const delta = reply.slice(i, i + CHUNK_SIZE);
+      push({ type: 'message_delta', data: { message_id: mid, delta } });
+      if (TYPING_DELAY_MS > 0 && i + CHUNK_SIZE < reply.length) {
+        await new Promise((r) => setTimeout(r, TYPING_DELAY_MS));
+      }
+    }
+    push({ type: 'message_done', data: { message_id: mid, content: reply } });
+    if (details !== undefined || (followUps !== undefined && followUps.length > 0)) {
+      push({
+        type: 'simple_response',
+        data: { message_id: mid, reply, details, followUps: followUps ?? [] },
+      });
+    }
+
+    await this.messageRepo.update(mid, { content: reply });
+    await this.messagePartRepo.update({ messageId: mid }, { content: reply });
 
     await this.setConversationRunStatus(cid, 'finished');
     if (emitDoneEvent) {
       push({ type: 'done', data: { job_id: jobId, conversation_id: cid } });
     }
 
-    return { conversationId: cid, messageId: mid, response: content };
+    return { conversationId: cid, messageId: mid, response: reply };
+  }
+
+  /**
+   * Non-streaming simple conversation: returns { reply, details?, followUps? } for POST /chat/conversation.
+   * Uses the same GwehAI identity prompt and JSON contract; persists the conversation and messages.
+   */
+  async getSimpleConversationResponse(
+    userId: string,
+    message: string,
+    options?: { conversationId?: string; model_key?: ModelOptionKey },
+  ): Promise<{ reply: string; details?: string; followUps?: string[]; conversationId: string; messageId: string }> {
+    const useModelPicker = !!options?.model_key;
+    const result = await this.dataSource.transaction(async (manager) => {
+      const conversation = await this.getOrCreateConversation(userId, options?.conversationId, undefined, useModelPicker);
+      let model = conversation.modelId
+        ? await manager.findOne(Model, { where: { id: conversation.modelId } })
+        : null;
+      if (!model || !model.isActive) {
+        if (useModelPicker) {
+          model = (await this.getDefaultModelForUsage(manager)) as any;
+        } else {
+          throw new NotFoundException(
+            'Model not found or inactive. Use Auto (DeepSeek) in the model picker and ensure DEEPSEEK_API_KEY is set.',
+          );
+        }
+      }
+
+      if (model && model.isActive) {
+        const inputTokens = Math.ceil(message.length / 4);
+        const outputTokens = 500;
+        const fixedCostPoints = this.getFixedCostPoints(model);
+        const costPoints =
+          fixedCostPoints !== null
+            ? fixedCostPoints
+            : (Number(model.pointsPer1kInputTokens) * inputTokens) / 1000 +
+              (Number(model.pointsPer1kOutputTokens) * outputTokens) / 1000;
+        const finalCostPoints =
+          fixedCostPoints !== null ? this.normalizePoints(costPoints) : Math.max(1, Math.ceil(costPoints));
+        await this.pointsService.spendPoints(
+          userId,
+          finalCostPoints,
+          PointLedgerReason.CHAT_USAGE,
+          'usage_events',
+          null,
+          { modelId: model.id, conversationId: conversation.id },
+        );
+      }
+
+      const userMessage = manager.create(Message, {
+        conversationId: conversation.id,
+        role: MessageRole.USER,
+        content: message,
+      });
+      await manager.save(userMessage);
+
+      const userMessagePart = manager.create(MessagePart, {
+        messageId: userMessage.id,
+        type: 'text' as any,
+        content: message,
+        order: 0,
+      });
+      await manager.save(userMessagePart);
+
+      const assistantMessage = manager.create(Message, {
+        conversationId: conversation.id,
+        role: MessageRole.ASSISTANT,
+        content: '',
+      });
+      await manager.save(assistantMessage);
+
+      const assistantMessagePart = manager.create(MessagePart, {
+        messageId: assistantMessage.id,
+        type: 'text' as any,
+        content: '',
+        order: 0,
+      });
+      await manager.save(assistantMessagePart);
+
+      if (!conversation.title || conversation.title === 'New Conversation') {
+        conversation.title = message.substring(0, 50);
+        await manager.save(conversation);
+      }
+
+      return { conversationId: conversation.id, messageId: assistantMessage.id, model };
+    });
+
+    const messages: LlmMessage[] = [
+      { role: 'system', content: GWEHAI_CONVERSATION_SYSTEM_PROMPT },
+      { role: 'user', content: message },
+    ];
+    const modelKey = options?.model_key || (!result.model ? 'auto' : undefined);
+    let content: string;
+    if (modelKey) {
+      const llmResult = await this.providerRouter.runChatCompletion({
+        selectedModelKey: modelKey,
+        messages,
+        mode: 'decision',
+      });
+      content = llmResult.text?.trim() ? llmResult.text.trim() : this.generateLocalResponse(message);
+    } else {
+      const response = await this.llmService.generate(result.model, messages);
+      content = response?.content?.trim() ? response.content.trim() : this.generateLocalResponse(message);
+    }
+
+    const { reply, details, followUps } = this.parseConversationJson(content);
+    await this.messageRepo.update(result.messageId, { content: reply });
+    await this.messagePartRepo.update({ messageId: result.messageId }, { content: reply });
+
+    const out: { reply: string; details?: string; followUps?: string[]; conversationId: string; messageId: string } = {
+      reply,
+      conversationId: result.conversationId,
+      messageId: result.messageId,
+    };
+    if (details !== undefined) out.details = details;
+    if (followUps !== undefined && followUps.length > 0) out.followUps = followUps;
+    return out;
   }
 
   /**
@@ -1565,8 +1695,41 @@ export class ChatService {
       return `I can help you recognize exploits by analyzing:\n\n**Code Patterns**\n� Unsanitized user input\n� Insecure API endpoints\n� Weak authentication mechanisms\n� Insecure direct object references\n\n**Network Indicators**\n� Unusual traffic patterns\n� Suspicious payloads\n� Port scanning activities\n� Protocol anomalies\n\n**System Behavior**\n� Unexpected file access\n� Privilege escalation attempts\n� Unauthorized data access\n� Configuration changes\n\nShare code snippets, network logs, or system configurations, and I'll help identify potential security issues.`;
     }
 
-    // General security assistant response
-    return `I'm here to help with cybersecurity and penetration testing. I can assist with:\n\n� **Exploit Recognition** - Identify and classify security vulnerabilities\n� **Vulnerability Analysis** - Analyze code, configurations, and systems\n� **Report Generation** - Create professional pentest reports\n� **Security Guidance** - Provide best practices and remediation advice\n� **Compliance** - Map findings to OWASP, CWE, NIST, and other frameworks\n\nWhat would you like to know more about? You can ask about specific vulnerabilities, request a security assessment, or get help with exploit analysis.`;
+    // General security assistant response — keep it short and conversational
+    return `Hi! I'm here to help with security — things like finding vulnerabilities, explaining attacks (SQL injection, XSS, etc.), and how to fix them. You can ask me anything: run a pentest on a URL, get step-by-step testing tips, or just chat about security. What's on your mind?`;
+  }
+
+  /**
+   * Parse LLM content that may be JSON { reply, details?, followUps? }. Returns reply (or full content) and optional details/followUps.
+   */
+  private parseConversationJson(content: string): { reply: string; details?: string; followUps?: string[] } {
+    let reply = content;
+    let details: string | undefined;
+    let followUps: string[] | undefined;
+    try {
+      const raw = content.trim();
+      const jsonStart = raw.indexOf('{');
+      const jsonEnd = raw.lastIndexOf('}') + 1;
+      if (jsonStart !== -1 && jsonEnd > jsonStart) {
+        const parsed = JSON.parse(raw.slice(jsonStart, jsonEnd)) as {
+          reply?: string;
+          details?: string;
+          followUps?: string[];
+        };
+        if (parsed && typeof parsed.reply === 'string' && parsed.reply.length > 0) {
+          reply = parsed.reply.trim();
+          if (parsed.details != null && String(parsed.details).trim()) {
+            details = String(parsed.details).trim();
+          }
+          if (Array.isArray(parsed.followUps) && parsed.followUps.length > 0) {
+            followUps = parsed.followUps.filter((s): s is string => typeof s === 'string');
+          }
+        }
+      }
+    } catch {
+      // keep reply = content
+    }
+    return { reply, details, followUps };
   }
 
   private getFixedCostPoints(model: Model): number | null {

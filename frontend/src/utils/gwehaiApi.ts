@@ -76,6 +76,37 @@ export class GwehAIClient {
   }
 
   /**
+   * List available model options for the Model Provider selector.
+   * GET /api/gwehai/models → { options: [{ key, label, provider, defaultModel, apiKeyEnv }] }
+   */
+  async getModels(): Promise<
+    Array<{ key: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude'; label: string; provider: string }>
+  > {
+    const user = localStorage.getItem('scout_user');
+    const token = user ? JSON.parse(user).token : null;
+
+    const response = await fetch(`${this.baseUrl}/models`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+
+    if (!response.ok) {
+      // Do not throw here; let caller fall back to built-in options
+      throw new Error('Failed to load model options');
+    }
+
+    const data = await response.json();
+    const options = Array.isArray(data?.options) ? data.options : [];
+    return options.map((opt: any) => ({
+      key: opt.key as 'auto' | 'deepseek' | 'openai_gpt5' | 'claude',
+      label: typeof opt.label === 'string' ? opt.label : String(opt.key ?? ''),
+      provider: typeof opt.provider === 'string' ? opt.provider : '',
+    }));
+  }
+
+  /**
    * Start a scan - SIMPLIFIED: Only message and stream required!
    * All other parameters (target_url, instruction, etc.) are auto-extracted.
    * 
@@ -92,7 +123,8 @@ export class GwehAIClient {
     message: string,
     stream: boolean = true,
     jobId?: string,
-    modelKey?: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude'
+    modelKey?: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude',
+    mode?: 'agent' | 'ask'
   ): Promise<GwehAIJobResponse> {
     const user = localStorage.getItem('scout_user');
     const token = user ? JSON.parse(user).token : null;
@@ -108,6 +140,7 @@ export class GwehAIClient {
         stream: stream,
         ...(jobId && { conversation_id: jobId }), // Use conversation_id for continuation
         model_key: modelKey ?? 'auto', // Auto = DeepSeek; always send so backend never returns "Model not found"
+        ...(mode && { mode }), // 'ask' = force simple Q&A only; 'agent' = use heuristic
       }),
     });
 
@@ -451,6 +484,7 @@ export class GwehAIClient {
       'connected',        // Stream connection established
       'message_delta',    // Assistant text streaming (one chunk at a time)
       'message_done',     // Assistant message finished
+      'simple_response', // Structured reply/details/followUps for simple conversation
       'reasoning',        // What the agent is about to do (e.g. "Running: memory_search", "Running: curl ...")
       'reasoning_block',  // Full thinking (<think> block) — shown in UI above final reply
       'tool_start',       // Tool run started

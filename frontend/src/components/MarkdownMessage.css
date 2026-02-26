@@ -186,3 +186,44 @@
   text-decoration: line-through;
   color: rgba(255, 255, 255, 0.6);
 }
+
+/* Conversational mode: softer, chat-like typography (simple Q&A) */
+.markdown-content--conversational .markdown-content .markdown-paragraph {
+  margin: 0.4em 0;
+}
+.markdown-content--conversational .markdown-content .markdown-heading,
+.markdown-content--conversational .markdown-content .markdown-h1,
+.markdown-content--conversational .markdown-content .markdown-h2,
+.markdown-content--conversational .markdown-content .markdown-h3,
+.markdown-content--conversational .markdown-content .markdown-h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0.5em 0 0.25em 0;
+}
+.markdown-content--conversational .markdown-content .markdown-list {
+  margin: 0.35em 0;
+  padding-left: 1em;
+}
+.markdown-content--conversational .markdown-content .markdown-list-item {
+  margin: 0.15em 0;
+}
+.markdown-content--conversational .markdown-content .markdown-ul {
+  list-style-type: none;
+  padding-left: 0;
+}
+.markdown-content--conversational .markdown-content .markdown-ul .markdown-list-item::before {
+  content: '· ';
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: bold;
+  margin-right: 0.35em;
+}
+.markdown-content--conversational .markdown-content .markdown-ol {
+  padding-left: 1.1em;
+}
+.markdown-content--conversational .markdown-content .markdown-blockquote {
+  margin: 0.4em 0;
+  padding: 0.4rem 0.6rem;
+}
+.markdown-content--conversational .markdown-content .markdown-strong {
+  font-weight: 600;
+}

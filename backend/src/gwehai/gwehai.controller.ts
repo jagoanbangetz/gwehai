@@ -12,11 +12,14 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { GwehAIService } from './gwehai.service';
 import { normalizeLlmErrorMessage } from '../llm/provider-router.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GwehAISSEGuard } from './gwehai-sse.guard';
 import { getModelOptions } from '../config/model-options.config';
+import { Model } from '../entities/model.entity';
 
 interface ChatCompletionRequest {
   messages: Array<{ role: string; content: string }>;
@@ -28,7 +31,11 @@ interface ChatCompletionRequest {
 
 @Controller('gwehai')
 export class GwehAIController {
-  constructor(private readonly gwehaiService: GwehAIService) {}
+  constructor(
+    private readonly gwehaiService: GwehAIService,
+    @InjectRepository(Model)
+    private readonly modelRepo: Repository<Model>,
+  ) {}
 
   /**
    * Chat endpoint: creates a job and returns job_id. Client uses that job_id to stream.
@@ -163,12 +170,45 @@ export class GwehAIController {
 
   /**
    * List model options for the Model Provider Selector (Auto, OpenAI GPT5, Claude).
-   * Auto uses DeepSeek; DeepSeek is not exposed as a separate option.
+   * Auto uses DeepSeek. Options are sourced from DB "models" (if present) so
+   * admin changes to display name / active flag are reflected in the UI.
+   * Falls back to static config when DB has no matching models.
    * GET /api/gwehai/models
    */
   @Get('models')
   async listModels() {
-    const options = getModelOptions().filter((o) => o.key !== 'deepseek');
+    // Prefer DB-backed models so admin can control which provider options are active.
+    const rows = await this.modelRepo.find({
+      where: { isActive: true },
+      order: { isDefault: 'DESC', displayName: 'ASC' },
+    });
+
+    // Map DB models that were seeded from model-options (metadata.key).
+    const fromDb = rows
+      .map((m) => {
+        const meta = (m.metadata || {}) as Record<string, any>;
+        const key = (meta.key as string) || '';
+        if (!['auto', 'deepseek', 'openai_gpt5', 'claude'].includes(key)) return null;
+        return {
+          key,
+          label: m.displayName || m.name || key,
+          provider: (meta.provider as string) || m.provider || 'custom',
+        };
+      })
+      .filter((v): v is { key: string; label: string; provider: string } => !!v);
+
+    if (fromDb.length > 0) {
+      // Keep DeepSeek as internal-only; expose Auto, OpenAI GPT5, Claude.
+      const filtered = fromDb.filter((o) => o.key !== 'deepseek');
+      if (filtered.length > 0) {
+        return { options: filtered };
+      }
+    }
+
+    // Fallback: static config (no DB rows yet).
+    const options = getModelOptions()
+      .filter((o) => o.key !== 'deepseek')
+      .map((o) => ({ key: o.key, label: o.label, provider: o.provider }));
     return { options };
   }
 

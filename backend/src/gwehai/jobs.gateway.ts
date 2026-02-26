@@ -7,19 +7,17 @@ import {
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Server } from 'ws';
+import { Server, WebSocket } from 'ws';
 import { JobsEventsService } from './jobs-events.service';
+import { ChatEventsService } from './chat-events.service';
 import { GwehAIService } from './gwehai.service';
 
-/** Map userId -> Set of WebSocket clients subscribed to job list updates. */
-const userSockets = new Map<string, Set<WebSocket>>();
-
-function getTokenFromUrl(url: string): string | null {
+function getQueryParam(url: string, key: string): string | null {
   try {
     const idx = url.indexOf('?');
     if (idx === -1) return null;
     const params = new URLSearchParams(url.slice(idx));
-    return params.get('token');
+    return params.get(key);
   } catch {
     return null;
   }
@@ -31,10 +29,13 @@ export class JobsGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   server: Server;
 
   private readonly logger = new Logger(JobsGateway.name);
+  /** Map userId -> Set of WebSocket clients subscribed to job list + stream events. */
+  private readonly userSockets = new Map<string, Set<WebSocket>>();
 
   constructor(
     private readonly jwtService: JwtService,
     private readonly jobsEvents: JobsEventsService,
+    private readonly chatEvents: ChatEventsService,
     private readonly gwehaiService: GwehAIService,
   ) {}
 
@@ -42,11 +43,22 @@ export class JobsGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     this.jobsEvents.onJobListUpdate().subscribe((userId) => {
       this.broadcastJobListToUser(userId);
     });
+
+    this.chatEvents.onEvents().subscribe(({ userId, jobId, event }) => {
+      const set = this.userSockets.get(userId);
+      if (!set || set.size === 0) return;
+      const payload = JSON.stringify({ type: 'event', job_id: jobId, event });
+      for (const ws of set) {
+        if (ws.readyState === 1) {
+          ws.send(payload);
+        }
+      }
+    });
   }
 
   handleConnection(client: WebSocket & { url?: string }) {
     const url = (client as any).url ?? '';
-    const token = getTokenFromUrl(url);
+    const token = getQueryParam(url, 'token');
     if (!token) {
       this.logger.warn('Jobs WS: no token in query');
       client.close(4001, 'Unauthorized');
@@ -65,10 +77,10 @@ export class JobsGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       client.close(4001, 'Unauthorized');
       return;
     }
-    let set = userSockets.get(userId);
+    let set = this.userSockets.get(userId);
     if (!set) {
       set = new Set();
-      userSockets.set(userId, set);
+      this.userSockets.set(userId, set);
     }
     set.add(client);
     this.logger.log(`Jobs WS: user ${userId} connected (${set.size} clients)`);
@@ -76,17 +88,17 @@ export class JobsGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   }
 
   handleDisconnect(client: WebSocket) {
-    for (const [userId, set] of userSockets.entries()) {
+    for (const [userId, set] of this.userSockets.entries()) {
       if (set.has(client)) {
         set.delete(client);
-        if (set.size === 0) userSockets.delete(userId);
+        if (set.size === 0) this.userSockets.delete(userId);
         break;
       }
     }
   }
 
   private broadcastJobListToUser(userId: string) {
-    const set = userSockets.get(userId);
+    const set = this.userSockets.get(userId);
     if (!set || set.size === 0) return;
     let list: any[];
     try {

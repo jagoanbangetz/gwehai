@@ -1,12 +1,92 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { gwehaiClient, GwehAIEvent, GwehAIJobResponse } from '../utils/gwehaiApi';
 
+const API_BASE = import.meta.env.VITE_API_URL ?? '/api';
+
+function getWsHost() {
+  if (API_BASE.startsWith('http')) {
+    const u = new URL(API_BASE);
+    return `${u.protocol === 'https:' ? 'wss:' : 'ws:'}//${u.host}`;
+  }
+  return `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
+}
+
 export function useGwehai() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('idle');
   const [events, setEvents] = useState<GwehAIEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+
+  const connectToJobStream = useCallback(
+    (streamJobId: string, onDone?: () => void) => {
+      const wsHost = getWsHost();
+      const token = (() => {
+        try {
+          const user = localStorage.getItem('scout_user');
+          return user ? JSON.parse(user).token : null;
+        } catch {
+          return null;
+        }
+      })();
+      if (!token) {
+        setError('Not authenticated. Please login again.');
+        setStatus('failed');
+        return;
+      }
+      const wsUrl = `${wsHost}/gwehai-jobs?token=${encodeURIComponent(token)}`;
+      const ws = new WebSocket(wsUrl);
+      socketRef.current = ws;
+
+      ws.onopen = () => {
+        setStatus('running');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data as string);
+          if (data?.type === 'event' && data.job_id === streamJobId && data.event) {
+            const ev: GwehAIEvent = {
+              type: data.event.type,
+              data: data.event.data || {},
+              timestamp: new Date().toISOString(),
+            };
+            setEvents((prev) => [...prev, ev]);
+
+            if (ev.type === 'status') {
+              setStatus(ev.data.message || ev.data.status || 'running');
+            } else if (ev.type === 'reasoning') {
+              setStatus(ev.data?.message || 'Reasoning...');
+            } else if (ev.type === 'done') {
+              setStatus('completed');
+              if (socketRef.current) {
+                socketRef.current.close();
+                socketRef.current = null;
+              }
+              if (onDone) onDone();
+            } else if (ev.type === 'error') {
+              setError(ev.data.error || ev.data.message || 'An error occurred');
+              setStatus('failed');
+              if (socketRef.current) {
+                socketRef.current.close();
+                socketRef.current = null;
+              }
+            }
+          }
+        } catch {
+          // Ignore malformed messages
+        }
+      };
+
+      ws.onerror = () => {
+        setError('Connection lost. Please try again.');
+        setStatus('failed');
+        if (onDone) onDone();
+        socketRef.current = null;
+      };
+    },
+    [],
+  );
 
   /**
    * Start a chat/pentest
@@ -28,41 +108,7 @@ export function useGwehai() {
       setJobId(newJobId);
       setStatus('running');
 
-      // Connect to events
-      const es = gwehaiClient.connectToEvents(
-        newJobId,
-        (event: GwehAIEvent) => {
-          setEvents((prev) => [...prev, event]);
-          
-          // Update status based on event
-          if (event.type === 'status') {
-            setStatus(event.data.message || event.data.status || 'running');
-          } else if (event.type === 'reasoning') {
-            setStatus(event.data?.message || 'Reasoning...');
-          } else if (event.type === 'done') {
-            setStatus('completed');
-            if (eventSourceRef.current) {
-              eventSourceRef.current.close();
-            }
-          } else if (event.type === 'error') {
-            setError(event.data.error || event.data.message || 'An error occurred');
-            setStatus('failed');
-            if (eventSourceRef.current) {
-              eventSourceRef.current.close();
-            }
-          }
-        },
-        (error) => {
-          console.error('SSE connection error:', error);
-          setError('Connection lost. Please try again.');
-          setStatus('failed');
-        },
-        () => {
-          console.log('SSE connection opened');
-        }
-      );
-
-      eventSourceRef.current = es;
+      connectToJobStream(newJobId);
 
       return newJobId;
     } catch (err: any) {
@@ -90,9 +136,9 @@ export function useGwehai() {
     try {
       await gwehaiClient.stopJob(jobId);
       setStatus('stopped');
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
+      if (socketRef.current) {
+        socketRef.current.close();
+        socketRef.current = null;
       }
     } catch (err: any) {
       setError(err.message || 'Failed to stop job');
@@ -109,37 +155,11 @@ export function useGwehai() {
       await gwehaiClient.continueJob(jobId);
       setStatus('running');
       
-      // Reconnect to events
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
+      // Reconnect to events over WebSocket
+      if (socketRef.current) {
+        socketRef.current.close();
       }
-
-      const es = gwehaiClient.connectToEvents(
-        jobId,
-        (event: GwehAIEvent) => {
-          setEvents((prev) => [...prev, event]);
-          
-          if (event.type === 'status') {
-            setStatus(event.data.message || event.data.status || 'running');
-          } else if (event.type === 'reasoning') {
-            setStatus(event.data?.message || 'Reasoning...');
-          } else if (event.type === 'done') {
-            setStatus('completed');
-            if (eventSourceRef.current) {
-              eventSourceRef.current.close();
-            }
-          }
-        },
-        (error) => {
-          console.error('SSE connection error:', error);
-          setError('Connection lost. Please try again.');
-        },
-        () => {
-          console.log('SSE connection reopened');
-        }
-      );
-
-      eventSourceRef.current = es;
+      connectToJobStream(jobId);
     } catch (err: any) {
       setError(err.message || 'Failed to continue job');
     }
@@ -165,9 +185,9 @@ export function useGwehai() {
    * Reset state
    */
   const reset = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
+    if (socketRef.current) {
+      socketRef.current.close();
+      socketRef.current = null;
     }
     setJobId(null);
     setStatus('idle');
@@ -180,8 +200,8 @@ export function useGwehai() {
    */
   useEffect(() => {
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
+      if (socketRef.current) {
+        socketRef.current.close();
       }
     };
   }, []);

@@ -10,6 +10,7 @@ import { validateScanStart } from '../plans/plan-limits.validation';
 import { getPlanPayload } from '../config/plans.config';
 import type { PlanId } from '../config/plans.config';
 import { JobsEventsService } from './jobs-events.service';
+import { ChatEventsService } from './chat-events.service';
 import { PentestJobsService } from '../pentest-jobs/pentest-jobs.service';
 import { normalizeLlmErrorMessage } from '../llm/provider-router.service';
 
@@ -29,6 +30,7 @@ export class GwehAIService {
     private readonly jobsEvents: JobsEventsService,
     @Inject(forwardRef(() => PentestJobsService))
     private readonly pentestJobs: PentestJobsService,
+    private readonly chatEvents: ChatEventsService,
   ) {}
 
   /**
@@ -62,6 +64,18 @@ export class GwehAIService {
     const planId: PlanId = await this.planResolution.getUserPlan(userId);
     const def = this.planResolution.getPlanDefinition(planId);
     const limits = def.limits;
+    // Normalize requested model key and enforce plan-based access (FREE → Auto only).
+    const requestedKey = payload.model_key;
+    const normalizedKey: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' =
+      requestedKey && ['auto', 'deepseek', 'openai_gpt5', 'claude'].includes(requestedKey)
+        ? requestedKey
+        : 'auto';
+    if (planId === 'FREE' && normalizedKey !== 'auto' && normalizedKey !== 'deepseek') {
+      throw new HttpException(
+        'Your plan only allows Auto (DeepSeek). Upgrade to use OpenAI GPT5 or Claude.',
+        HttpStatus.FORBIDDEN,
+      );
+    }
     const overrides = await this.policyOverrides.getOverrides();
     const effectiveWorkers = Math.min(limits.workers, overrides.maxParallelJobsPerPlan);
 
@@ -95,15 +109,12 @@ export class GwehAIService {
     this.jobs.set(jobId, job);
 
     // Auto = DeepSeek. Always use a model key (default 'auto') so we never hit "Model not found".
-    const modelKey: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' =
-      payload.model_key && ['auto', 'deepseek', 'openai_gpt5', 'claude'].includes(payload.model_key)
-        ? payload.model_key
-        : 'auto';
+    const modelKey: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' = normalizedKey;
     if (modelKey) {
       console.log('[gwehai] using model picker:', modelKey, modelKey === 'auto' ? '(DeepSeek)' : '');
     }
     // Run agent in background: LLM → append events to job.events; stream endpoint polls and yields SSE.
-    this.runAgentInBackground(jobId, userId, message, conversationId, modelKey)
+    this.runAgentInBackground(jobId, userId, message, conversationId, modelKey, payload.mode === 'ask')
       .catch((err) => {
         const job = this.jobs.get(jobId);
         if (job) {
@@ -137,11 +148,18 @@ export class GwehAIService {
 
   /**
    * True if the user message indicates a target host (URL or "pentest <host>"). Otherwise we use simple security Q&A.
+   * Questions like "what is pentest?" or "pentest yang bagus" (no URL/host) return false so we don't run full agent.
    */
   private looksLikeTargetRequest(message: string): boolean {
     const trimmed = message.trim();
     if (/https?:\/\//i.test(trimmed)) return true;
-    if (/pentest\s+\S+/i.test(trimmed)) return true;
+    // "pentest" only counts as target when followed by a URL or hostname (e.g. example.com), not plain words
+    const pentestMatch = trimmed.match(/pentest\s+(\S+)/i);
+    if (pentestMatch) {
+      const after = pentestMatch[1];
+      if (/^https?:\/\//i.test(after)) return true;
+      if (/^[a-z0-9][-a-z0-9.]*\.[a-z]{2,}/i.test(after)) return true; // hostname with dot
+    }
     return false;
   }
 
@@ -160,6 +178,7 @@ export class GwehAIService {
 
   /**
    * Agent loop (background): if no target host, use processMessageSimple (direct security Q&A); otherwise processMessageWithTools.
+   * When forceSimple is true (frontend "Ask" mode), always use simple Q&A. Otherwise use looksLikeTargetRequest heuristic.
    * Events (status, message_delta, message_done, done) or full tool events are pushed to job.events;
    * stream endpoint polls and yields SSE so the user sees what the agent is doing step by step.
    */
@@ -169,6 +188,7 @@ export class GwehAIService {
     message: string,
     conversationId?: string,
     modelKey?: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude',
+    forceSimple?: boolean,
   ): Promise<void> {
     const job = this.jobs.get(jobId);
     if (!job || job.status === 'stopped') return;
@@ -178,13 +198,17 @@ export class GwehAIService {
 
     const pushEvent = (ev: JobStreamEvent) => {
       const j = this.jobs.get(jobId);
-      if (j) j.events.push(ev);
+      if (j) {
+        j.events.push(ev);
+        this.chatEvents.emit(userId, jobId, ev);
+      }
     };
 
     const abortSignal = job.abortController?.signal;
 
     try {
-      const useSimple = !this.looksLikeTargetRequest(message);
+      // Ask = simple Q&A only. Agent = full pentest only (no content heuristic).
+      const useSimple = forceSimple === true;
       const chatOptions = { emitDoneEvent: true, abortSignal, ...(modelKey && { model_key: modelKey }) };
       const result = useSimple
         ? await this.chatService.processMessageSimple(
