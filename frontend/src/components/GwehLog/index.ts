@@ -1,5 +1,4 @@
 export { GwehLogRenderer, type GwehLogRendererProps, type GwehLogSize } from './GwehLogRenderer'
-export { GwehLogDemo } from './demo'
 export {
   groupEventsByPhase,
   emitTarget,

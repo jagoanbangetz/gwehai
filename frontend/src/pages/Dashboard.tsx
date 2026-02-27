@@ -1486,9 +1486,14 @@ const Dashboard = () => {
           return
         }
 
+        // If user opened a specific conversation via URL (session_id etc.), only restore if the stored job belongs to that conversation.
+        const convId = status?.conversation_id ?? status?.conversationId
+        if (currentChatId && typeof convId === 'string' && convId !== currentChatId) {
+          return
+        }
+
         // Job is still running — restore ids and reattach to stream.
         setCurrentJobId(storedJobId)
-        const convId = status?.conversation_id ?? status?.conversationId
         if (typeof convId === 'string') {
           setCurrentConversationId(convId)
           setConversationRunStatus(prev => ({ ...prev, [convId]: 'running' }))
@@ -1529,11 +1534,20 @@ const Dashboard = () => {
     }
 
     resumeJobIfNeeded()
-  }, [currentJobId])
+  }, [currentJobId, currentChatId])
 
   // When opening a chat by session_id/conversation_id URL, auto-reconnect to SSE if that conversation has an active job (so user sees latest process).
+  // Run when URL has session_id (etc.) so we reconnect even before loadConversations has set currentChatId.
   useEffect(() => {
-    if (!currentChatId || currentJobId || eventSourceRef.current) return
+    const rawId =
+      searchParams.get('session_id') ||
+      searchParams.get('conversation_id') ||
+      searchParams.get('conversationId') ||
+      searchParams.get('jobs_id')
+    const uuidLike = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const targetConversationId = rawId && uuidLike.test(rawId) ? rawId : null
+    const conversationIdToUse = currentChatId || targetConversationId
+    if (!conversationIdToUse || !isAuthenticated) return
 
     let cancelled = false
     const reconnectStreamForConversation = async () => {
@@ -1543,16 +1557,27 @@ const Dashboard = () => {
         const terminal = ['done', 'failed', 'stopped', 'error', 'completed']
         const active = jobs.find(
           (j: { conversation_id?: string; status?: string }) =>
-            (j.conversation_id === currentChatId || j.conversation_id === currentConversationId) &&
+            j.conversation_id === conversationIdToUse &&
             j.status &&
             !terminal.includes(String(j.status).toLowerCase())
         )
         if (!active?.job_id) return
 
         const jobId = active.job_id
+        // Already connected to this job — nothing to do
+        if (eventSourceRef.current && currentJobId === jobId) return
+
+        if (eventSourceRef.current) {
+          eventSourceRef.current.close()
+          eventSourceRef.current = null
+        }
+
         setCurrentJobId(jobId)
-        setCurrentConversationId(currentChatId)
-        setConversationRunStatus(prev => ({ ...prev, [currentChatId]: 'running' }))
+        setCurrentConversationId(conversationIdToUse)
+        if (targetConversationId && !currentChatId) {
+          setCurrentChatId(conversationIdToUse)
+        }
+        setConversationRunStatus(prev => ({ ...prev, [conversationIdToUse]: 'running' }))
         try {
           localStorage.setItem(ACTIVE_JOB_STORAGE_KEY, jobId)
         } catch (_) {}
@@ -1580,7 +1605,7 @@ const Dashboard = () => {
         eventSourceRef.current = es
         intentionalCloseRef.current = false
       } catch (e) {
-        if (!cancelled) console.warn('Could not reconnect stream for conversation:', currentChatId, e)
+        if (!cancelled) console.warn('Could not reconnect stream for conversation:', conversationIdToUse, e)
       }
     }
 
@@ -1588,7 +1613,7 @@ const Dashboard = () => {
     return () => {
       cancelled = true
     }
-  }, [currentChatId, currentJobId])
+  }, [isAuthenticated, searchParams, currentChatId, currentConversationId, currentJobId])
 
   useEffect(() => {
     if (userNearBottomRef.current) {

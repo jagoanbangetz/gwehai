@@ -102,27 +102,6 @@ export default function AdminPaymentSubscriptions() {
     loadSubscriptions()
   }, [])
 
-  const runAction = async (
-    key: string,
-    fn: () => Promise<unknown>,
-    successMsg: string,
-  ) => {
-    try {
-      setActionLoading(key)
-      setError(null)
-      setMessage(null)
-      setTxResult(null)
-      await fn()
-      setMessage(successMsg)
-      await loadSubscriptions()
-    } catch (e: unknown) {
-      const err = e as { response?: { data?: { message?: string } }; message?: string }
-      setError(err?.response?.data?.message || err?.message || 'Action failed')
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
   const openConfirmModal = (action: 'suspend' | 'cancel', paypalId: string | null) => {
     setConfirmModal({ action, paypalId })
   }
