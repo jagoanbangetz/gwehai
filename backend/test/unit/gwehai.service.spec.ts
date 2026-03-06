@@ -47,6 +47,11 @@ function createMocks() {
     updateJobStatusByConversationId: jest.fn().mockResolvedValue(null),
   };
 
+  const chatEvents = {
+    emit: jest.fn(),
+    onEvents: jest.fn().mockReturnValue({ subscribe: jest.fn().mockReturnValue({ unsubscribe: jest.fn() }) }),
+  };
+
   const makeService = () =>
     new GwehAIService(
       chatService as any,
@@ -55,9 +60,10 @@ function createMocks() {
       policyOverrides as any,
       jobsEvents as any,
       pentestJobs as any,
+      chatEvents as any,
     );
 
-  return { chatService, planResolution, planUsage, policyOverrides, jobsEvents, pentestJobs, makeService };
+  return { chatService, planResolution, planUsage, policyOverrides, jobsEvents, pentestJobs, chatEvents, makeService };
 }
 
 describe('GwehAIService plan validation', () => {
@@ -89,6 +95,7 @@ describe('GwehAIService plan validation', () => {
 
   it('throws when FREE user has already started 3 sessions today', async () => {
     mocks.planUsage.getSessionsStartedToday.mockResolvedValue(3);
+    mocks.planUsage.getActiveWorkerCount.mockReturnValue(0);
     const payload = { messages: [{ role: 'user', content: 'https://example.com' }] };
     await expect(service.startChat(userId, payload)).rejects.toThrow(HttpException);
     await expect(service.startChat(userId, payload)).rejects.toThrow(/maximum 3 sessions per day/);

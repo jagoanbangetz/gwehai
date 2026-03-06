@@ -1352,6 +1352,10 @@ export class ChatService {
         return pathVal ? `Reading ${pathVal}` : 'Reading file...';
       case 'write_file':
         return pathVal ? `Writing to ${pathVal}` : 'Writing...';
+      case 'write_script':
+        return (safeArgs.filename as string)?.trim()
+          ? `Writing script: ${String(safeArgs.filename).slice(0, maxLen)}`
+          : 'Writing script...';
       case 'exec':
         return cmd ? `Running: ${cmd.slice(0, maxLen)}${cmd.length > maxLen ? '...' : ''}` : 'Running command...';
       case 'craft_payload':
@@ -1450,6 +1454,13 @@ export class ChatService {
           String(safeArgs.content || ''),
           Boolean(safeArgs.append),
           scopeId,
+        );
+        return JSON.stringify(out);
+      }
+      case 'write_script': {
+        const out = await this.toolsService.writeScript(
+          String(safeArgs.filename || '').trim(),
+          String(safeArgs.content || ''),
         );
         return JSON.stringify(out);
       }

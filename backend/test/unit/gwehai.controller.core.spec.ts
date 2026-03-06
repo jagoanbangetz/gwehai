@@ -13,11 +13,18 @@ describe('GwehAIController core endpoints', () => {
     decrementStreamConnections: jest.fn().mockResolvedValue(undefined),
   };
 
+  const modelRepo = {
+    find: jest.fn(),
+    findOne: jest.fn(),
+    save: jest.fn(),
+    create: jest.fn(),
+  } as any;
+
   let controller: GwehAIController;
 
   beforeEach(() => {
     jest.resetAllMocks();
-    controller = new GwehAIController(gwehaiService as any);
+    controller = new GwehAIController(gwehaiService as any, modelRepo);
   });
 
   it('starts a chat', async () => {

@@ -46,6 +46,9 @@ services:
     container_name: gwehai-pentest-tools
     # Keep running so backend can: docker exec gwehai-pentest-tools <cmd>
     command: ["sleep", "infinity"]
+    volumes:
+      # AI-written JS scripts (write_script tool); backend writes here, container runs node /opt/browser/scripts/<name>.js
+      - ./backend/skills/browser/scripts:/opt/browser/scripts
     # Optional: mount workspace for saving outputs (e.g. reports) into host
     # volumes:
     #   - ./backend/workspace:/workspace

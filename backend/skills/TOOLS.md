@@ -161,6 +161,9 @@ When the backend runs **exec** inside the **gwehai-pentest-tools** container, th
 | **SQLi** | sqlmap | verify_sqli (e.g. sqlmap -u "URL" --level=1 --risk=1 --batch) |
 | **SSL/TLS** | sslyze | SSL/TLS analysis |
 | **Other** | git-dumper, rg (ripgrep) | Git dump; grep (rg). John (JOHN=/opt/john/run) for hashes. theHarvester pip package is present but may not expose a CLI in this image. |
+| **Browser** | **node /opt/browser/capture-requests.js &lt;url&gt;** | Intercept **everything**: all requests, all **forms** (action, method, inputs), all **links**, cookies. One JSON output so the AI can decide next step (login script, curl, ffuf, etc.). |
+| | **node /opt/browser/login-and-capture.js &lt;login_url&gt; &lt;username&gt; &lt;password&gt;** | Submit login form; returns cookies and requests. Use when user provides credentials. |
+| | **write_script + node /opt/browser/scripts/&lt;name&gt;.js** | When built-in scripts are not enough, the AI can **write_script(filename, content)** to create a custom JS file (e.g. Puppeteer) under `/opt/browser/scripts/`, then run it with **exec**: `node /opt/browser/scripts/&lt;name&gt;.js [args]`. Use for multi-step flows, custom automation, or site-specific logic. |
 
 \* Optional (installed from apt if available). **wfuzz** and **dirsearch** are **not** in the Docker image — use **ffuf** for fuzzing and path discovery.
 

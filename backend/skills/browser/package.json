@@ -1,0 +1,9 @@
+{
+  "name": "gwehai-browser",
+  "version": "1.0.0",
+  "description": "Puppeteer browser scripts for pentest tools container",
+  "private": true,
+  "dependencies": {
+    "puppeteer": "^24.0.0"
+  }
+}

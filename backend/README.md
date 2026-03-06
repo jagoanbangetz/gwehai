@@ -70,27 +70,26 @@ ANTHROPIC_API_KEY=    # for "Claude"
 # Or raise the default for all requests: MAX_OUTPUT_TOKENS_DEFAULT=15000
 ```
 
-### Skills loading (local first, then CDN)
+### Skills loading (directory only, no URL)
 
-The pentest agent loads skills with **the same path structure everywhere** (e.g. `skills/AGENTS.md`, `skills/recon/SKILL.md`).
+The pentest agent loads skills **only from the local filesystem** (no CDN).
 
-1. **Check local directory first:** `/opt/skills` (or `PENTEST_SKILLS_LOCAL_DIR`). If the file exists there, it is read from disk.
-2. **If not found locally:** the backend **downloads** the skill from the CDN (default **https://skills.gweh.sh**) and **caches it to the local directory** for the next load. Same path: `skills/AGENTS.md` → URL `https://skills.gweh.sh/skills/AGENTS.md` → cached to `/opt/skills/AGENTS.md`.
-3. **Fallback:** if no CDN is used and the file is not in `/opt/skills`, skills are read from the workspace `skills/` folder (e.g. `backend/skills/` when running from backend).
+1. **Primary:** workspace `skills/` directory (e.g. `backend/skills/` when running from backend). Default `PENTEST_SKILLS_LOCAL_DIR` is workspace/skills.
+2. **Override:** set `PENTEST_SKILLS_LOCAL_DIR` to a custom path (e.g. `/opt/skills` in Docker). Skills are read from that directory.
 
-Optional env (defaults in parentheses):
+Optional env:
 
 ```bash
-# Local skills directory — check here first; missing skills are cached here after CDN fetch (default: /opt/skills)
-PENTEST_SKILLS_LOCAL_DIR=/opt/skills
+# Skills directory — default is workspace/skills (e.g. backend/skills). In Docker, the image copies skills to /app/skills (see Dockerfile).
+PENTEST_SKILLS_LOCAL_DIR=/opt/skills   # optional override
 
-# CDN base URL for skills — same path structure: skills/AGENTS.md → {base}/skills/AGENTS.md (default: https://skills.gweh.sh)
-PENTEST_SKILLS_CDN_URL=https://skills.gweh.sh
+# Workspace root (directory that contains skills/). Backend Dockerfile sets PENTEST_WORKSPACE=/app.
+PENTEST_WORKSPACE=/app
 ```
 
-- **Docker/container:** Mount or create `/opt/skills` (or set `PENTEST_SKILLS_LOCAL_DIR`) so the backend can cache CDN skills. You can also set `PENTEST_WORKSPACE` to the directory that contains `skills/` for add_skill and workspace-based fallback.
+- **Docker:** The backend Dockerfile **copies** `skills/` into the image at `/app/skills` and sets `PENTEST_WORKSPACE=/app`, so skills load from the image with no URL or extra volume. To use a mounted dir instead, set `PENTEST_SKILLS_LOCAL_DIR` and mount it.
 
-Custom skills added via `add_skill` are still written to the workspace `skills/custom/` folder.
+Custom skills added via `add_skill` are written to the workspace `skills/custom/` folder.
 
 ## Installation
 

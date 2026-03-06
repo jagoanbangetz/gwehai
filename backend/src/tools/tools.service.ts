@@ -161,7 +161,50 @@ export class ToolsService {
     return { ok: true, path: key };
   }
 
-  /** Shell metacharacters that require running via a shell (e.g. so pipes work). */
+  /**
+   * Directory on the host that is mounted as /opt/browser/scripts in the pentest-tools container.
+   * Used by write_script so the AI can create custom JS (e.g. Puppeteer) and run them with exec.
+   */
+  private getScriptsDir(): string {
+    const configured = this.configService.get<string>('PENTEST_SCRIPTS_DIR');
+    if (configured?.trim()) {
+      return path.resolve(configured.trim());
+    }
+    return path.resolve(path.join(__dirname, '..', 'skills', 'browser', 'scripts'));
+  }
+
+  /**
+   * Write a JS file into the pentest scripts directory (host path mounted as /opt/browser/scripts in container).
+   * Filename must be safe (alphanumeric, underscore, hyphen, dot, end with .js). No path traversal.
+   * After writing, the AI can run it with exec: node /opt/browser/scripts/<filename> [args...]
+   */
+  async writeScript(filename: string, content: string): Promise<{ ok: true; path: string }> {
+    if (!filename || !filename.trim()) {
+      throw new BadRequestException('filename is required');
+    }
+    const name = filename.trim();
+    if (!/^[a-zA-Z0-9_.-]+\.js$/.test(name)) {
+      throw new BadRequestException(
+        'filename must contain only letters, numbers, underscore, hyphen, or dot and must end with .js (e.g. custom-capture.js)',
+      );
+    }
+    if (name === '..' || name.includes('..')) {
+      throw new BadRequestException('filename must not contain path traversal');
+    }
+    const dir = this.getScriptsDir();
+    const fullPath = path.join(dir, name);
+    if (!fullPath.startsWith(path.resolve(dir))) {
+      throw new BadRequestException('Invalid script path');
+    }
+    try {
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(fullPath, content, 'utf8');
+    } catch (e) {
+      throw new BadRequestException(`Failed to write script: ${(e as Error).message}`);
+    }
+    const containerPath = `/opt/browser/scripts/${name}`;
+    return { ok: true, path: containerPath };
+  }
   private static readonly SHELL_META = /[|;&<>()$`\\\n]/;
 
   /** When true, exec runs commands inside the pentest-tools Docker container via docker exec. Default true so tools run in container; set PENTEST_RUN_IN_CONTAINER=false to run on host. */
@@ -320,6 +363,7 @@ export class ToolsService {
       ['base64', { requiresTarget: false }],
       ['xxd', { requiresTarget: false }],
       ['python3', { requiresTarget: false }],
+      ['node', { requiresTarget: false }],
       ['bash', { requiresTarget: false }],
       ['echo', { requiresTarget: false }],
       ['tr', { requiresTarget: false }],
@@ -371,42 +415,18 @@ export class ToolsService {
   }
 
   /**
-   * Local directory for skills (e.g. /opt/skills). Check here first before CDN.
-   * Set PENTEST_SKILLS_LOCAL_DIR to override; default /opt/skills.
+   * Local directory for skills. All skills are loaded from the filesystem only (no CDN).
+   * Default: workspace/skills (e.g. backend/skills or /app/skills in Docker). Set PENTEST_SKILLS_LOCAL_DIR to override (e.g. /opt/skills).
    */
   private getSkillsLocalDir(): string {
     const dir = this.configService.get<string>('PENTEST_SKILLS_LOCAL_DIR');
     if (dir && dir.trim()) return path.resolve(dir.trim());
-    return '/opt/skills';
+    return path.join(this.getWorkspaceRoot(), 'skills');
   }
 
   /**
-   * Base URL for skills on CDN (e.g. https://skills.gweh.sh). No trailing slash.
-   * Same directory structure: path skills/AGENTS.md → URL {cdnBase}/skills/AGENTS.md.
-   * Default https://skills.gweh.sh when not set.
-   */
-  private getSkillsCdnBase(): string | null {
-    const base =
-      this.configService.get<string>('PENTEST_SKILLS_CDN_URL')?.trim() || 'https://skills.gweh.sh';
-    const trimmed = base.replace(/\/+$/, '');
-    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return null;
-    return trimmed;
-  }
-
-  /**
-   * Whether to prefer refreshing skills from CDN instead of using local cache.
-   * Controlled by PENTEST_SKILLS_ALWAYS_REFRESH (\"true\"/\"1\"/\"yes\").
-   */
-  private shouldRefreshSkillsFromCdn(): boolean {
-    const v = this.configService.get<string>('PENTEST_SKILLS_ALWAYS_REFRESH');
-    if (!v) return false;
-    const t = v.trim().toLowerCase();
-    return t === '1' || t === 'true' || t === 'yes';
-  }
-
-  /**
-   * Read skill content: check local dir (/opt/skills) first; if not found, fetch from CDN
-   * (https://skills.gweh.sh) and cache to local. Same path structure everywhere (skills/AGENTS.md, etc.).
+   * Read skill content from the local skills directory only (no URL fetch).
+   * Tries: (1) PENTEST_SKILLS_LOCAL_DIR or workspace/skills, (2) workspace/skills as fallback.
    */
   private async readSkillContent(filePath: string, allowMissing: boolean): Promise<string> {
     if (!filePath.startsWith('skills/')) {
@@ -415,50 +435,21 @@ export class ToolsService {
     const suffix = filePath.replace(/^skills\/?/, '');
     const localDir = this.getSkillsLocalDir();
     const localPath = path.join(localDir, suffix);
-    const forceCdn = this.shouldRefreshSkillsFromCdn();
 
-    // 1) Check local /opt/skills (or PENTEST_SKILLS_LOCAL_DIR) first (unless forced to refresh from CDN)
-    if (!forceCdn && existsSync(localPath) && statSync(localPath).isFile()) {
+    if (existsSync(localPath) && statSync(localPath).isFile()) {
       return this.readExistingFile(localPath, allowMissing);
     }
 
-    // 2) Not found locally: fetch from CDN (same path: cdnBase/skills/AGENTS.md)
-    const cdnBase = this.getSkillsCdnBase();
-    if (cdnBase) {
-      const url = `${cdnBase}/${filePath}`;
-      try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
-        if (!res.ok) {
-          if (res.status === 404 && allowMissing) return '';
-          throw new NotFoundException(`Skill not found: ${filePath} (${res.status})`);
-        }
-        const content = await res.text();
-        // Cache to local so next load is from disk
-        try {
-          await fs.mkdir(path.dirname(localPath), { recursive: true });
-          await fs.writeFile(localPath, content, 'utf8');
-        } catch {
-          // ignore cache write errors (e.g. read-only fs)
-        }
-        return content;
-      } catch (err: any) {
-        // If we're forcing CDN refresh but it failed and a local cached copy exists, fall back to local.
-        if (forceCdn && existsSync(localPath) && statSync(localPath).isFile()) {
-          return this.readExistingFile(localPath, allowMissing);
-        }
-        if (allowMissing && (err?.name === 'NotFoundError' || err?.message?.includes('404'))) {
-          return '';
-        }
-        throw err;
-      }
+    const workspacePath = this.resolveSkillsPath(filePath);
+    if (existsSync(workspacePath) && statSync(workspacePath).isFile()) {
+      return this.readExistingFile(workspacePath, allowMissing);
     }
 
-    // 3) No CDN: fallback to workspace/skills/
-    const resolved = this.resolveSkillsPath(filePath);
-    return this.readExistingFile(resolved, allowMissing);
+    if (allowMissing) return '';
+    throw new NotFoundException(`Skill not found: ${filePath}`);
   }
 
-  /** Resolve path under workspace/skills/ (e.g. skills/recon/SKILL.md). Read-only. Used when CDN is not set or for add_skill (writes locally). */
+  /** Resolve path under workspace/skills/ (e.g. skills/recon/SKILL.md). Read-only. Used for add_skill (writes locally) and fallback for readSkillContent. */
   private resolveSkillsPath(filePath: string): string {
     if (!filePath.startsWith('skills/')) {
       throw new BadRequestException('path must start with skills/ (e.g. skills/recon/SKILL.md)');
@@ -533,8 +524,7 @@ export class ToolsService {
   }
 
   /**
-   * List available skill paths. Prefer local dir (/opt/skills or PENTEST_SKILLS_LOCAL_DIR);
-   * if empty or missing, hint to use memory_get(skills/SKILLS_INDEX.md) or load by path (fetched from CDN on first use).
+   * List available skill paths from the local skills directory (workspace/skills or PENTEST_SKILLS_LOCAL_DIR). No CDN.
    */
   async listSkills(): Promise<{ paths: string[]; hint?: string }> {
     const localDir = this.getSkillsLocalDir();
@@ -553,7 +543,7 @@ export class ToolsService {
       };
       await walk(localDir, '');
       paths.sort();
-      return paths.length ? { paths } : { paths: [], hint: 'Local skills dir empty. Use memory_get(path: "skills/SKILLS_INDEX.md") or load by path; missing skills are downloaded from CDN (https://skills.gweh.sh) and cached to /opt/skills.' };
+      return paths.length ? { paths } : { paths: [], hint: 'Skills dir empty. Add .md/.txt files under workspace/skills/ or set PENTEST_SKILLS_LOCAL_DIR.' };
     }
     const workspace = this.getWorkspaceRoot();
     const skillsRoot = path.resolve(workspace, 'skills');
@@ -576,7 +566,7 @@ export class ToolsService {
     }
     return {
       paths: [],
-      hint: 'Skills: check /opt/skills first; if missing, memory_get(path: "skills/...") downloads from CDN (https://skills.gweh.sh) and caches to /opt/skills. Use memory_get(path: "skills/SKILLS_INDEX.md") or skills/AGENTS.md for index.',
+      hint: 'Skills are loaded from the local directory only (workspace/skills or PENTEST_SKILLS_LOCAL_DIR). Ensure skills/ exists and contains .md/.txt files.',
     };
   }
 
