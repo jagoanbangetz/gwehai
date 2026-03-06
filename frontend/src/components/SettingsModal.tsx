@@ -1,12 +1,9 @@
-import React, { useEffect } from 'react'
-import CustomSelect from './CustomSelect'
+import React, { useEffect, useState } from 'react'
 import './SettingsModal.css'
 
 export interface SettingsData {
   email: string
   password: string
-  defaultLanguage: string
-  defaultModelId: string
 }
 
 export interface SettingsModalProps {
@@ -17,10 +14,14 @@ export interface SettingsModalProps {
   onSave: () => void
   isSaving: boolean
   user?: { email?: string; googleId?: string } | null
-  languageOptions: { value: string; label: string }[]
-  modelOptions: { value: string; label: string; icon?: React.ReactNode; tag?: string }[]
   /** If true, email field is read-only (e.g. when managed by Google). */
   emailReadOnly?: boolean
+  /** Current plan (e.g. FREE, PRO). Shown in Subscription section. */
+  planId?: string
+  /** PayPal subscription ID if user has an active paid subscription; enables Cancel subscription. */
+  providerSubscriptionId?: string | null
+  /** Called when user cancels subscription; caller should refetch /subscriptions/me. */
+  onCancelSubscription?: () => Promise<void>
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -31,10 +32,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   onSave,
   isSaving,
   user,
-  languageOptions,
-  modelOptions,
   emailReadOnly = false,
+  planId,
+  providerSubscriptionId,
+  onCancelSubscription,
 }) => {
+  const [cancellingSubscription, setCancellingSubscription] = useState(false)
   useEffect(() => {
     if (!isOpen) return
     const handleEscape = (e: KeyboardEvent) => {
@@ -140,38 +143,46 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </section>
 
-          {/* Preferences */}
-          <section className="settings-modal__section" aria-labelledby="settings-prefs-heading">
-            <h3 id="settings-prefs-heading" className="settings-modal__section-title">
-              Preferences
-            </h3>
-            <div className="settings-modal__fields">
-              <div className="settings-modal__field">
-                <label htmlFor="settings-language" className="settings-modal__label">
-                  Default Language
-                </label>
-                <CustomSelect
-                  value={settingsData.defaultLanguage}
-                  onChange={(value) => onSettingsDataChange({ defaultLanguage: value })}
-                  options={languageOptions}
-                  placeholder="Select a language"
-                  className="settings-modal__select"
-                />
+          {/* Subscription */}
+          {(planId || providerSubscriptionId) && (
+            <section className="settings-modal__section" aria-labelledby="settings-sub-heading">
+              <h3 id="settings-sub-heading" className="settings-modal__section-title">
+                Subscription
+              </h3>
+              <div className="settings-modal__fields">
+                {planId && (
+                  <div className="settings-modal__field">
+                    <span className="settings-modal__label">Current plan</span>
+                    <span className="settings-modal__plan">{planId}</span>
+                  </div>
+                )}
+                {providerSubscriptionId && onCancelSubscription && (
+                  <div className="settings-modal__field">
+                    <button
+                      type="button"
+                      className="settings-modal__btn-danger"
+                      disabled={cancellingSubscription}
+                      onClick={async () => {
+                        if (!window.confirm('Cancel your subscription? You will be moved to the Free plan. This cannot be undone.')) return
+                        setCancellingSubscription(true)
+                        try {
+                          await onCancelSubscription()
+                          onClose()
+                        } finally {
+                          setCancellingSubscription(false)
+                        }
+                      }}
+                    >
+                      {cancellingSubscription ? 'Cancelling…' : 'Cancel subscription'}
+                    </button>
+                    <span className="settings-modal__help">
+                      Your plan will change to Free at the end of the current billing period (or immediately). You can subscribe again anytime from Pricing.
+                    </span>
+                  </div>
+                )}
               </div>
-              <div className="settings-modal__field">
-                <label htmlFor="settings-model" className="settings-modal__label">
-                  Default AI Agent
-                </label>
-                <CustomSelect
-                  value={settingsData.defaultModelId}
-                  onChange={(value) => onSettingsDataChange({ defaultModelId: value })}
-                  options={modelOptions}
-                  placeholder="Select a model"
-                  className="settings-modal__select"
-                />
-              </div>
-            </div>
-          </section>
+            </section>
+          )}
         </div>
 
         <footer className="settings-modal__footer">

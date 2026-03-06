@@ -212,4 +212,35 @@ export class SubscriptionsService {
     const fromBilling = await this.billingSettings.isPaypalConfigured();
     return fromBilling || this.paypalService.isConfigured();
   }
+
+  /**
+   * Cancel the current user's subscription (PayPal + local). User must own an active subscription with a provider ID.
+   */
+  async cancelMySubscription(userId: string): Promise<{ ok: boolean; message?: string }> {
+    const sub = await this.subscriptionRepo.findOne({
+      where: { userId, status: SubscriptionStatus.ACTIVE },
+    });
+    if (!sub || !sub.providerSubscriptionId) {
+      return { ok: false, message: 'No active subscription to cancel' };
+    }
+    const config = await this.billingSettings.getPaypalConfig();
+    let ok: boolean;
+    if (config) {
+      ok = await this.paypalService.cancelSubscriptionWithConfig(
+        config,
+        sub.providerSubscriptionId,
+        'User requested cancellation',
+      );
+    } else {
+      ok = await this.paypalService.cancelSubscription(
+        sub.providerSubscriptionId,
+        'User requested cancellation',
+      );
+    }
+    if (!ok) {
+      return { ok: false, message: 'Failed to cancel subscription in PayPal' };
+    }
+    await this.cancelFromPayPal(sub.providerSubscriptionId);
+    return { ok: true };
+  }
 }

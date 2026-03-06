@@ -349,8 +349,6 @@ const Dashboard = () => {
   const [settingsData, setSettingsData] = useState({
     email: '',
     password: '',
-    defaultLanguage: 'en',
-    defaultModelId: '',
   })
   const [availableModels, setAvailableModels] = useState<any[]>([])
   const [isSavingSettings, setIsSavingSettings] = useState(false)
@@ -366,6 +364,10 @@ const Dashboard = () => {
   const [selectedFinding, setSelectedFinding] = useState<FindingRow | null>(null)
   const [currentPlan, setCurrentPlan] = useState<CurrentPlan | null>(null)
   const [myPlan, setMyPlan] = useState<MyPlanResponse | null>(null)
+  const [subscriptionForSettings, setSubscriptionForSettings] = useState<{
+    planId: string
+    providerSubscriptionId: string | null
+  } | null>(null)
   const [_pointsBalance, setPointsBalance] = useState<number | null>(null)
   const [isLoadingPlan, setIsLoadingPlan] = useState(false)
   const [currentJobId, setCurrentJobId] = useState<string | null>(null)
@@ -888,8 +890,6 @@ const Dashboard = () => {
       setSettingsData({
         email: profile.email || '',
         password: '',
-        defaultLanguage: profile.defaultLanguage || 'en',
-        defaultModelId: profile.defaultModelId || '',
       })
       // Sync profile (e.g. googleId) into stored user so Settings shows "Google Account Connected"
       const stored = localStorage.getItem('scout_user')
@@ -940,12 +940,6 @@ const Dashboard = () => {
       if (settingsData.password) {
         updateData.password = settingsData.password
       }
-      if (settingsData.defaultLanguage) {
-        updateData.defaultLanguage = settingsData.defaultLanguage
-      }
-      if (settingsData.defaultModelId) {
-        updateData.defaultModelId = settingsData.defaultModelId
-      }
 
       await apiClient.post('/auth/settings', updateData)
       
@@ -961,6 +955,20 @@ const Dashboard = () => {
       setIsSavingSettings(false)
     }
   }
+
+  useEffect(() => {
+    if (!showSettingsModal || !isAuthenticated) return
+    apiClient.get('/subscriptions/me').then((res) => {
+      const sub = res.data?.subscription
+      const planId = res.data?.planId ?? 'FREE'
+      setSubscriptionForSettings({
+        planId,
+        providerSubscriptionId: sub?.providerSubscriptionId ?? null,
+      })
+    }).catch(() => {
+      setSubscriptionForSettings({ planId: 'FREE', providerSubscriptionId: null })
+    })
+  }, [showSettingsModal, isAuthenticated])
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -3340,20 +3348,20 @@ const Dashboard = () => {
         onSave={handleSaveSettings}
         isSaving={isSavingSettings}
         user={user}
-        languageOptions={[
-          { value: 'en', label: 'English' },
-          { value: 'es', label: 'Spanish' },
-          { value: 'fr', label: 'French' },
-          { value: 'de', label: 'German' },
-          { value: 'ja', label: 'Japanese' },
-        ]}
-        modelOptions={availableModels.map((model) => ({
-          value: model.id,
-          label: model.displayName || model.name || model.id,
-          icon: getModelIcon(model.provider || '', model.name || model.displayName),
-          tag: isProModel(model.name || model.displayName) ? 'Pro' : undefined,
-        }))}
         emailReadOnly={!!user?.googleId}
+        planId={subscriptionForSettings?.planId ?? myPlan?.planId}
+        providerSubscriptionId={subscriptionForSettings?.providerSubscriptionId}
+        onCancelSubscription={async () => {
+          try {
+            await apiClient.post('/subscriptions/cancel')
+            showToast('Subscription cancelled. You are now on the Free plan.', 'success')
+            setSubscriptionForSettings((prev) => prev ? { ...prev, planId: 'FREE', providerSubscriptionId: null } : null)
+            loadPlan()
+          } catch (e: any) {
+            showToast(e.response?.data?.message || 'Failed to cancel subscription.', 'error')
+            throw e
+          }
+        }}
       />
 
       {/* Help Modal */}

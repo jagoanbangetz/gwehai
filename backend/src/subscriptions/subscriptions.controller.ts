@@ -94,4 +94,18 @@ export class SubscriptionsController {
       paypalEnabled: await this.subscriptions.isPayPalEnabled(),
     };
   }
+
+  /**
+   * Cancel the current user's subscription. Moves user to Free plan.
+   */
+  @Post('cancel')
+  @UseGuards(JwtAuthGuard)
+  async cancel(@Req() req: Request) {
+    const user = (req as any).user;
+    const result = await this.subscriptions.cancelMySubscription(user.id);
+    if (!result.ok) {
+      return { ok: false, message: result.message ?? 'Could not cancel subscription' };
+    }
+    return { ok: true };
+  }
 }
