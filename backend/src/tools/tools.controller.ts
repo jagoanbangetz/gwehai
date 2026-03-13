@@ -1,9 +1,14 @@
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { UserRole } from '../entities/user.entity';
 import { ToolsService } from './tools.service';
 
+/** Tools API is admin-only. Normal users run tools only via the chat agent (scoped to their conversation). */
 @Controller('tools')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN)
 export class ToolsController {
   constructor(private readonly toolsService: ToolsService) {}
 

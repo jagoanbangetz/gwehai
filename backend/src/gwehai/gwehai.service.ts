@@ -41,7 +41,7 @@ export class GwehAIService {
     messages: Array<{ role: string; content: string }>,
     stream: boolean = false,
     conversationId?: string,
-    modelKey?: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude',
+    modelKey?: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini',
   ): Promise<any> {
     const payload = {
       messages,
@@ -64,18 +64,12 @@ export class GwehAIService {
     const planId: PlanId = await this.planResolution.getUserPlan(userId);
     const def = this.planResolution.getPlanDefinition(planId);
     const limits = def.limits;
-    // Normalize requested model key and enforce plan-based access (FREE → Auto only).
+    // Normalize requested model key; all plans may use any model (Auto, DeepSeek, OpenAI GPT5, Claude).
     const requestedKey = payload.model_key;
-    const normalizedKey: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' =
-      requestedKey && ['auto', 'deepseek', 'openai_gpt5', 'claude'].includes(requestedKey)
+    const normalizedKey: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini' =
+      requestedKey && ['auto', 'deepseek', 'openai_gpt5', 'claude', 'gemini'].includes(requestedKey)
         ? requestedKey
         : 'auto';
-    if (planId === 'FREE' && normalizedKey !== 'auto' && normalizedKey !== 'deepseek') {
-      throw new HttpException(
-        'Your plan only allows Auto (DeepSeek). Upgrade to use OpenAI GPT5 or Claude.',
-        HttpStatus.FORBIDDEN,
-      );
-    }
     const overrides = await this.policyOverrides.getOverrides();
     const effectiveWorkers = Math.min(limits.workers, overrides.maxParallelJobsPerPlan);
 
@@ -109,7 +103,7 @@ export class GwehAIService {
     this.jobs.set(jobId, job);
 
     // Auto = DeepSeek. Always use a model key (default 'auto') so we never hit "Model not found".
-    const modelKey: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' = normalizedKey;
+    const modelKey: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini' = normalizedKey;
     if (modelKey) {
       console.log('[gwehai] using model picker:', modelKey, modelKey === 'auto' ? '(DeepSeek)' : '');
     }
@@ -187,7 +181,7 @@ export class GwehAIService {
     userId: string,
     message: string,
     conversationId?: string,
-    modelKey?: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude',
+    modelKey?: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini',
     forceSimple?: boolean,
   ): Promise<void> {
     const job = this.jobs.get(jobId);

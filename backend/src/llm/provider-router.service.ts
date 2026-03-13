@@ -138,6 +138,9 @@ export class ProviderRouterService {
       case 'anthropic':
         ({ text, provider, model, inputTokens, outputTokens } = await this.callAnthropic(option, messages, caps));
         break;
+      case 'gemini':
+        ({ text, provider, model, inputTokens, outputTokens } = await this.callGemini(option, messages, caps));
+        break;
       default:
         throw new HttpException(`Unsupported provider: ${option.provider}`, HttpStatus.BAD_REQUEST);
     }
@@ -204,6 +207,15 @@ export class ProviderRouterService {
         break;
       case 'anthropic':
         ({ content, tool_calls, provider, model, inputTokens, outputTokens } = await this.callAnthropicWithTools(
+          option,
+          messages,
+          tools,
+          caps,
+          tool_choice,
+        ));
+        break;
+      case 'gemini':
+        ({ content, tool_calls, provider, model, inputTokens, outputTokens } = await this.callGeminiWithTools(
           option,
           messages,
           tools,
@@ -560,6 +572,191 @@ export class ProviderRouterService {
       model: option.defaultModel,
       inputTokens: usage.input_tokens ?? 0,
       outputTokens: usage.output_tokens ?? 0,
+    };
+  }
+
+  // --- Gemini (Google AI Studio) ---
+  private llmMessagesToGeminiContents(messages: LlmMessage[]): Array<{ role: 'user' | 'model'; parts: any[] }> {
+    const contents: Array<{ role: 'user' | 'model'; parts: any[] }> = [];
+    let systemText = '';
+    for (const m of messages) {
+      if (m.role === 'system') {
+        systemText = (systemText ? systemText + '\n\n' : '') + (typeof m.content === 'string' ? m.content : '');
+        continue;
+      }
+      if (m.role === 'user') {
+        const text = typeof m.content === 'string' ? m.content : '';
+        const parts = systemText ? [{ text: systemText + '\n\n' + text }] : [{ text }];
+        if (systemText) systemText = '';
+        contents.push({ role: 'user', parts });
+        continue;
+      }
+      if (m.role === 'assistant') {
+        if (m.tool_calls?.length) {
+          const parts = m.tool_calls.map((tc) => ({
+            functionCall: {
+              name: tc.name,
+              args: (() => {
+                try {
+                  return typeof tc.arguments === 'string' ? JSON.parse(tc.arguments) : tc.arguments || {};
+                } catch {
+                  return {};
+                }
+              })(),
+            },
+          }));
+          contents.push({ role: 'model', parts });
+        } else {
+          const text = typeof m.content === 'string' ? m.content : '';
+          if (text || !contents.length) {
+            const parts = systemText ? [{ text: systemText + (text ? '\n\n' + text : '') }] : [{ text: text || '(no output)' }];
+            if (systemText) systemText = '';
+            contents.push({ role: 'model', parts });
+          }
+        }
+        continue;
+      }
+      if (m.role === 'tool') {
+        const toolCallId = (m.tool_call_id ?? '').trim();
+        const content = typeof m.content === 'string' ? m.content : '';
+        let name = 'tool_result';
+        for (let i = messages.indexOf(m) - 1; i >= 0; i--) {
+          const prev = messages[i];
+          if (prev.role === 'assistant' && prev.tool_calls?.length) {
+            const tc = prev.tool_calls.find((t) => (t.id ?? '') === toolCallId);
+            if (tc) name = tc.name;
+            break;
+          }
+        }
+        contents.push({
+          role: 'user',
+          parts: [{ functionResponse: { name, response: { name: 'result', content } } }],
+        });
+      }
+    }
+    if (systemText) {
+      if (contents.length && contents[contents.length - 1].role === 'user') {
+        const last = contents[contents.length - 1];
+        const part = last.parts[0];
+        if (part && 'text' in part) part.text = systemText + '\n\n' + (part.text || '');
+      } else contents.push({ role: 'user', parts: [{ text: systemText }] });
+    }
+    return contents;
+  }
+
+  private async callGemini(
+    option: { defaultModel: string; apiKeyEnv: string },
+    messages: LlmMessage[],
+    caps: { maxOutputTokens: number },
+  ): Promise<{ text: string; provider: string; model: string; inputTokens: number; outputTokens: number }> {
+    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    if (!apiKey) {
+      throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
+    }
+    const contents = this.llmMessagesToGeminiContents(messages);
+    if (!contents.length) {
+      contents.push({ role: 'user', parts: [{ text: 'Hello' }] });
+    }
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${option.defaultModel}:generateContent`;
+    const body = {
+      contents,
+      generationConfig: { maxOutputTokens: caps.maxOutputTokens },
+    };
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      const message = parseApiErrorResponse(errText, 'Gemini', errText || 'Gemini API error');
+      throw new HttpException(message, res.status);
+    }
+    const data = await res.json();
+    const parts = data?.candidates?.[0]?.content?.parts ?? [];
+    const textPart = parts.find((p: any) => p.text != null);
+    const text = textPart?.text ?? '';
+    const usage = data?.usageMetadata || {};
+    return {
+      text,
+      provider: 'gemini',
+      model: option.defaultModel,
+      inputTokens: usage.promptTokenCount ?? 0,
+      outputTokens: usage.candidatesTokenCount ?? 0,
+    };
+  }
+
+  private async callGeminiWithTools(
+    option: { defaultModel: string; apiKeyEnv: string },
+    messages: LlmMessage[],
+    tools: LlmToolDef[],
+    caps: { maxOutputTokens: number },
+    _tool_choice?: 'auto' | 'required' | 'none',
+  ): Promise<{
+    content: string;
+    tool_calls: LlmResponse['tool_calls'];
+    provider: string;
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+  }> {
+    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    if (!apiKey) {
+      throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
+    }
+    const contents = this.llmMessagesToGeminiContents(messages);
+    if (!contents.length) {
+      contents.push({ role: 'user', parts: [{ text: 'Hello' }] });
+    }
+    const functionDeclarations = tools.map((t) => ({
+      name: t.function.name,
+      description: t.function.description || '',
+      parameters: t.function.parameters || { type: 'object', properties: {} },
+    }));
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${option.defaultModel}:generateContent`;
+    const body = {
+      contents,
+      tools: [{ functionDeclarations }],
+      generationConfig: { maxOutputTokens: caps.maxOutputTokens },
+    };
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      const message = parseApiErrorResponse(errText, 'Gemini', errText || 'Gemini API error');
+      throw new HttpException(message, res.status);
+    }
+    const data = await res.json();
+    if (data?.candidates?.[0]?.finishReason === 'SAFETY') {
+      throw new HttpException('Gemini blocked the response for safety. Try another model or rephrase.', 400);
+    }
+    const parts = data?.candidates?.[0]?.content?.parts ?? [];
+    const textPart = parts.find((p: any) => p.text != null);
+    const content = textPart?.text ?? '';
+    const functionCallParts = parts.filter((p: any) => p.functionCall != null);
+    const rawToolCalls = functionCallParts.map((p: any, i: number) => ({
+      id: `gemini_${Date.now()}_${i}`,
+      name: p.functionCall?.name ?? 'unknown',
+      arguments: typeof p.functionCall?.args === 'object' ? JSON.stringify(p.functionCall.args) : (p.functionCall?.args ?? '{}'),
+    }));
+    const tool_calls = rawToolCalls.length ? rawToolCalls.filter((tc) => tc.name && tc.name !== 'unknown') : undefined;
+    const usage = data?.usageMetadata || {};
+    return {
+      content,
+      tool_calls,
+      provider: 'gemini',
+      model: option.defaultModel,
+      inputTokens: usage.promptTokenCount ?? 0,
+      outputTokens: usage.candidatesTokenCount ?? 0,
     };
   }
 

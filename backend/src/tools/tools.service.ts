@@ -83,13 +83,9 @@ export class ToolsService {
 
   async memoryGet(filePath: string, from?: number, lines?: number, jobId?: string): Promise<string> {
     if (filePath === 'SCOPE.md') {
-      const resolved = this.resolveMemoryPath(filePath, undefined);
-      const content = await this.readExistingFile(resolved, true);
-      if (!from) return content;
-      const allLines = content.split(/\r?\n/);
-      const start = Math.max(0, from - 1);
-      const end = Math.min(allLines.length, start + (lines || allLines.length));
-      return allLines.slice(start, end).join('\n');
+      throw new BadRequestException(
+        'Scope is defined by Pentest State and the conversation. Do not use SCOPE.md; use memory_search or memory_get(main/daily/...) for scope and notes.',
+      );
     }
 
     if (filePath.startsWith('skills/')) {
@@ -402,7 +398,7 @@ export class ToolsService {
 
   private resolveMemoryPath(filePath: string, jobId?: string): string {
     if (filePath === 'SCOPE.md') {
-      return this.resolveWorkspacePath('SCOPE.md', undefined);
+      throw new BadRequestException('Scope is from Pentest State; do not use SCOPE.md.');
     }
     if (filePath.startsWith('skills/')) {
       return this.resolveSkillsPath(filePath);
@@ -434,10 +430,15 @@ export class ToolsService {
     }
     const suffix = filePath.replace(/^skills\/?/, '');
     const localDir = this.getSkillsLocalDir();
-    const localPath = path.join(localDir, suffix);
+    const localPathResolved = path.resolve(localDir, suffix);
+    // Prevent path traversal: resolved path must stay inside skills directory
+    const localDirResolved = path.resolve(localDir);
+    if (!localPathResolved.startsWith(localDirResolved) || localPathResolved === localDirResolved) {
+      throw new BadRequestException('path must be inside skills/');
+    }
 
-    if (existsSync(localPath) && statSync(localPath).isFile()) {
-      return this.readExistingFile(localPath, allowMissing);
+    if (existsSync(localPathResolved) && statSync(localPathResolved).isFile()) {
+      return this.readExistingFile(localPathResolved, allowMissing);
     }
 
     const workspacePath = this.resolveSkillsPath(filePath);

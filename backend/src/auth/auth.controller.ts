@@ -118,8 +118,6 @@ export class AuthController {
       name: fullUser.name,
       avatarUrl: fullUser.avatarUrl,
       role: fullUser.role,
-      defaultLanguage: fullUser.defaultLanguage || 'en',
-      defaultModelId: fullUser.defaultModelId,
       googleId: fullUser.googleId,
     };
   }
@@ -128,7 +126,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   async updateSettings(
     @Req() req: Request,
-    @Body() body: { email?: string; password?: string; defaultLanguage?: string; defaultModelId?: string },
+    @Body() body: { email?: string; password?: string },
   ) {
     const user = req.user as any;
     return await this.authService.updateUserSettings(user.id || user.sub, body);

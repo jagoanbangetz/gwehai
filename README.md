@@ -1,99 +1,73 @@
-# GwehAI - AI Cybersecurity Pentester
+# GwehAI
 
-GwehAI is an advanced AI-powered cybersecurity automation platform specializing in penetration testing, exploit recognition, and professional security report generation.
+AI-powered web application security assistant: automated pentesting, recon, vulnerability verification, and report generation.
 
-## Features
+## What it does
 
-- **Automated Penetration Testing** - Comprehensive security assessments across multiple attack vectors
-- **Exploit Recognition** - AI-powered detection and classification of security vulnerabilities
-- **Professional Report Generation** - Detailed pentest reports with executive summaries, technical findings, and remediation recommendations
-- **Interactive AI Chat** - Chat with GwehAI to get expert security guidance, vulnerability explanations, and pentesting advice
-- **Compliance Mapping** - Automatic mapping to OWASP Top 10, CWE, NIST, PCI-DSS, and other frameworks
+- **Pentest a URL** — Full checklist: recon → input handling (SQLi, XSS, LFI, etc.) → auth → access control. Uses skills and tools (curl, ffuf, sqlmap, nuclei, browser automation).
+- **Multi-agent** — Spawn sub-agents (e.g. Gweh, Shadow, Nexus), delegate recon or verification, combine findings.
+- **Reports** — Findings saved with proof (POC); view by domain in the dashboard.
+- **Plans & billing** — Free tier + paid plans (Pro, Pro Plus, Ultra). PayPal subscriptions; users can cancel in Settings.
 
-## Project Structure
+## Quick start
 
-```
-scout-ai/
-├── frontend/     # React + Vite application
-└── backend/      # NestJS TypeScript API
-```
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js (v18 or higher)
-- npm or yarn
-
-### Backend Setup
+**Prerequisites:** Node.js 18+, npm, Docker (for Postgres).
 
 ```bash
-cd backend
-npm install
-npm run start:dev
+# 1. Database
+docker compose up -d postgres
+
+# 2. Backend + frontend (one script)
+./local.sh
 ```
 
-The backend will run on `http://localhost:3001`
-
-### Frontend Setup
+Or run manually:
 
 ```bash
-cd frontend
-npm install
-npm run dev
+# Terminal 1 – backend
+cd backend && npm install && npm run start:dev
+
+# Terminal 2 – frontend
+cd frontend && npm install && npm run dev
 ```
 
-The frontend will run on `http://localhost:3000`
+- **Backend:** http://localhost:3001  
+- **Frontend:** http://localhost:5173  
 
-## API Endpoints
+Optional: start the pentest-tools container for exec/browser scripts:
 
-- `GET /` - API welcome message
-- `GET /health` - Health check endpoint
-- `POST /chat` - Interactive AI chat endpoint
-  ```json
-  {
-    "message": "What is SQL injection?",
-    "conversation": []
-  }
-  ```
+```bash
+docker compose up -d pentest-tools
+```
 
-## Features
+Copy `backend/env.sample` to `backend/.env` and set at least: `DB_*`, `JWT_SECRET`, and one of `DEEPSEEK_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY`.
 
-- Modern React frontend with Vite
-- NestJS backend with TypeScript
-- Interactive AI chat component
-- Responsive design
-- CORS enabled for development
-- Hot module replacement for fast development
+## Project structure
 
-## Development
+```
+gwehai/
+├── frontend/          # React + Vite
+├── backend/           # NestJS API, chat, pentest jobs, subscriptions
+├── docs/              # Setup, subscriptions, features, troubleshooting
+├── local.sh           # Run backend + frontend with npm
+└── docker-compose.yml # Postgres, pentest-tools, frontend-app
+```
 
-- Backend: `npm run start:dev` (runs with watch mode)
-- Frontend: `npm run dev` (runs with hot reload)
+## Documentation
+
+| Doc | Description |
+|-----|-------------|
+| [docs/README.md](docs/README.md) | Index of all docs |
+| [docs/SETUP.md](docs/SETUP.md) | Environment, database, running the app |
+| [docs/SUBSCRIPTIONS.md](docs/SUBSCRIPTIONS.md) | Plans, PayPal, cancel subscription |
+| [docs/FEATURES.md](docs/FEATURES.md) | User vs admin features |
+| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Common issues and fixes |
 
 ## Build
 
-- Backend: `npm run build`
-- Frontend: `npm run build`
+- **Backend:** `cd backend && npm run build`
+- **Frontend:** `cd frontend && npm run build`
 
-## GwehAI Agent Features (Summary)
+## License
 
-GwehAI is a **web application security pentesting assistant**. It uses **skills** (recon, verify, WEB_CHECKLIST, DNS intel, subdomain finder, WAF bypass, Burp-style testing, image-to-text) and **tools** (memory search/get/write, exec, craft_payload, report_finding, multi-session agents) to:
-
-- **Recon** — Map sites, enumerate paths/subdomains, check headers and tech (curl, nmap, dirsearch, nikto).
-- **Verify** — Confirm vulnerabilities (e.g. sqlmap for SQLi, curl for XSS) and save findings with proof (POC).
-- **Checklist-driven pentest** — For “pentest this URL”, loads WEB_CHECKLIST.md and works through recon → input handling (SQLi, XSS) → auth → access control → other; does not stop after one finding.
-- **Multi-agent** — Spawn sub-agents (e.g. Gweh, Shadow, Nexus), delegate recon/verification, and combine findings via sessions_spawn, sessions_send, sessions_history.
-- **Scope & safety** — Only tests in-scope targets (SCOPE.md); every finding requires report_finding with concrete POC; no destructive actions.
-
-For a full feature list (skills, tools, workflow, safety), see **[AGENT_FEATURES.md](./AGENT_FEATURES.md)**.
-
-## Security Testing Capabilities
-
-GwehAI can help with:
-- SQL Injection detection and analysis
-- Cross-Site Scripting (XSS) vulnerabilities
-- OWASP Top 10 compliance
-- Exploit recognition and classification
-- Professional pentest report generation
-- Security best practices guidance
+MIT

@@ -20,10 +20,13 @@ async function bootstrap() {
 
   // Set global prefix for all routes
   app.setGlobalPrefix('api');
-  
-  // Enable CORS for React frontend
+
+  // CORS: localhost for dev; add FRONTEND_URL in production (e.g. https://app.example.com)
+  const frontendUrl = process.env.FRONTEND_URL?.trim();
+  const origins = ['http://localhost:3000', 'http://localhost:5173'];
+  if (frontendUrl && !origins.includes(frontendUrl)) origins.push(frontendUrl);
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://localhost:5173'], // Vite default port
+    origin: origins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],

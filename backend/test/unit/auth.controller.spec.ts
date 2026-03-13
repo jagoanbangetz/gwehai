@@ -177,8 +177,6 @@ describe('AuthController', () => {
       name: 'A',
       avatarUrl: null,
       role: 'user',
-      defaultLanguage: 'en',
-      defaultModelId: null,
       googleId: null,
     });
 
@@ -192,10 +190,10 @@ describe('AuthController', () => {
 
     const result = await controller.updateSettings(
       { user: { id: 'u1' } } as any,
-      { defaultLanguage: 'id' },
+      { email: 'new@b.com' },
     );
 
     expect(result.id).toBe('u1');
-    expect(authService.updateUserSettings).toHaveBeenCalledWith('u1', { defaultLanguage: 'id' });
+    expect(authService.updateUserSettings).toHaveBeenCalledWith('u1', { email: 'new@b.com' });
   });
 });

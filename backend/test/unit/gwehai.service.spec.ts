@@ -179,14 +179,20 @@ describe('GwehAIService model routing via model_key', () => {
     expect(options.model_key).toBe('auto');
   });
 
-  it('rejects non-auto model_key when plan is FREE', async () => {
+  it('accepts any model_key when plan is FREE (all models allowed)', async () => {
     mocks.planResolution.getUserPlan.mockResolvedValue('FREE' as PlanId);
     const payload = {
       messages: [{ role: 'user', content: 'pentest https://example.com' }],
       model_key: 'openai_gpt5',
     } as any;
-    await expect(service.startChat(userId, payload)).rejects.toThrow(HttpException);
-    await expect(service.startChat(userId, payload)).rejects.toThrow(/only allows Auto \(DeepSeek\)/);
-    expect(mocks.chatService.processMessageWithTools).not.toHaveBeenCalled();
+    await service.startChat(userId, payload);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mocks.chatService.processMessageWithTools).toHaveBeenCalled();
+    const call = (mocks.chatService.processMessageWithTools as jest.Mock).mock.calls[0];
+    const options = call[7];
+    expect(options).toBeDefined();
+    expect(options.model_key).toBe('openai_gpt5');
   });
 });

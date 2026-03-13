@@ -2,13 +2,14 @@ import React, { useState, useRef, useEffect } from 'react'
 import apiClient from '../utils/api'
 import './ModelPicker.css'
 
-export type ModelKey = 'auto' | 'deepseek' | 'openai_gpt5' | 'claude'
+export type ModelKey = 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini'
 
 /** Auto uses DeepSeek under the hood; DeepSeek is not shown as a separate option. */
 export const MODEL_OPTIONS: { key: ModelKey; label: string }[] = [
   { key: 'auto', label: 'Auto' },
   { key: 'openai_gpt5', label: 'OpenAI GPT5' },
   { key: 'claude', label: 'Claude' },
+  { key: 'gemini', label: 'Gemini' },
 ]
 
 const STORAGE_KEY = 'gwehai_model_key'
@@ -48,8 +49,9 @@ function getModelKeyForRow(row: BackendModelRow): ModelKey {
   if (name.includes('deepseek')) return 'auto'
   if (provider === 'anthropic') return 'claude'
   if (provider === 'openai') return 'openai_gpt5'
-  if (provider === 'google') return 'openai_gpt5'
-  if (provider === 'custom') return name.includes('grok') ? 'openai_gpt5' : 'auto'
+  if (provider === 'google') return name.includes('gemini') ? 'gemini' : 'openai_gpt5'
+  if (provider === 'gemini') return 'gemini'
+  if (provider === 'custom') return name.includes('grok') ? 'openai_gpt5' : name.includes('gemini') ? 'gemini' : 'auto'
   return 'auto'
 }
 

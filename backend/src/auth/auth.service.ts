@@ -243,7 +243,7 @@ export class AuthService {
 
   async updateUserSettings(
     userId: string,
-    settings: { email?: string; password?: string; defaultLanguage?: string; defaultModelId?: string },
+    settings: { email?: string; password?: string },
   ): Promise<User> {
     const user = await this.getUserById(userId);
     if (settings.email && settings.email !== user.email) {
@@ -255,8 +255,6 @@ export class AuthService {
       if (settings.password.length < 8) throw new BadRequestException('Password must be at least 8 characters');
       user.password_hash = await bcrypt.hash(settings.password, 10);
     }
-    if (settings.defaultLanguage) user.defaultLanguage = settings.defaultLanguage;
-    if (settings.defaultModelId) user.defaultModelId = settings.defaultModelId;
     return await this.userRepo.save(user);
   }
 

@@ -18,7 +18,6 @@ import GoogleCallback from './pages/GoogleCallback'
 import Terms from './pages/Terms'
 import Privacy from './pages/Privacy'
 import Contact from './pages/Contact'
-import Careers from './pages/Careers'
 import PentestRunner from './pages/PentestRunner'
 import AdminLayout from './pages/admin/AdminLayout'
 import AdminOverview from './pages/admin/AdminOverview'
@@ -81,7 +80,6 @@ function App() {
             <Route path="/terms" element={<Terms />} />
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/contact" element={<Contact />} />
-            <Route path="/careers" element={<Careers />} />
             <Route path="/auth/google/callback" element={<GoogleCallback />} />
             <Route path="/forbidden" element={<Forbidden />} />
             <Route

@@ -15,6 +15,7 @@ const PRICE_PER_1M: Record<string, { input: number; output: number }> = {
   deepseek: { input: 0.14, output: 0.28 },
   openai: { input: 2.5, output: 10 },
   anthropic: { input: 3, output: 15 },
+  gemini: { input: 0.10, output: 0.40 },
 };
 
 @Injectable()

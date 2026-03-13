@@ -80,7 +80,7 @@ export class GwehAIClient {
    * GET /api/gwehai/models → { options: [{ key, label, provider, defaultModel, apiKeyEnv }] }
    */
   async getModels(): Promise<
-    Array<{ key: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude'; label: string; provider: string }>
+    Array<{ key: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini'; label: string; provider: string }>
   > {
     const user = localStorage.getItem('scout_user');
     const token = user ? JSON.parse(user).token : null;
@@ -100,7 +100,7 @@ export class GwehAIClient {
     const data = await response.json();
     const options = Array.isArray(data?.options) ? data.options : [];
     return options.map((opt: any) => ({
-      key: opt.key as 'auto' | 'deepseek' | 'openai_gpt5' | 'claude',
+      key: opt.key as 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini',
       label: typeof opt.label === 'string' ? opt.label : String(opt.key ?? ''),
       provider: typeof opt.provider === 'string' ? opt.provider : '',
     }));
@@ -123,7 +123,7 @@ export class GwehAIClient {
     message: string,
     stream: boolean = true,
     jobId?: string,
-    modelKey?: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude',
+    modelKey?: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini',
     mode?: 'agent' | 'ask'
   ): Promise<GwehAIJobResponse> {
     const user = localStorage.getItem('scout_user');

@@ -24,6 +24,7 @@ import { HacktivityService } from '../hacktivity/hacktivity.service';
 import { getAgentLabel } from './agent-names';
 import { PlanResolutionService } from '../plans/plan-resolution.service';
 import { PlanUsageService } from '../plans/plan-usage.service';
+import { PolicyOverridesService } from '../plans/policy-overrides.service';
 import { validateStep } from '../plans/plan-limits.validation';
 import { getPlanPayload } from '../config/plans.config';
 import { PentestJobsService } from '../pentest-jobs/pentest-jobs.service';
@@ -183,6 +184,7 @@ export class ChatService {
     private hacktivityService: HacktivityService,
     private planResolution: PlanResolutionService,
     private planUsage: PlanUsageService,
+    private policyOverrides: PolicyOverridesService,
     @Inject(forwardRef(() => PentestJobsService))
     private pentestJobs: PentestJobsService,
     private providerRouter: ProviderRouterService,
@@ -1609,19 +1611,25 @@ export class ChatService {
         const planIdForSpawn = await this.planResolution.getUserPlan(userId);
         const defForSpawn = this.planResolution.getPlanDefinition(planIdForSpawn);
         const planMaxSubAgents = defForSpawn.limits.max_sub_agents;
+        const overrides = await this.policyOverrides.getOverrides();
+        // Cap by plan and by global policy so prompt abuse cannot exceed limits.
+        const baseLimit =
+          planMaxSubAgents === 0
+            ? 0
+            : planMaxSubAgents === -1
+              ? overrides.maxSubAgentsPerPlan
+              : Math.min(planMaxSubAgents, overrides.maxSubAgentsPerPlan);
         const effectiveMaxSubAgents =
-          maxAgentsForRun != null
-            ? planMaxSubAgents === -1
-              ? maxAgentsForRun
-              : Math.min(planMaxSubAgents, maxAgentsForRun)
-            : planMaxSubAgents;
+          maxAgentsForRun != null && maxAgentsForRun >= 0
+            ? Math.min(baseLimit, maxAgentsForRun)
+            : baseLimit;
         if (effectiveMaxSubAgents === 0) {
           return JSON.stringify({
             error: 'Your plan does not allow spawning sub-agents. Upgrade to Pro or higher to use multiple agents.',
           });
         }
         const existingSubs = await this.listSessions(userId, { parent_id: conversationId, last: 100 });
-        if (effectiveMaxSubAgents !== -1 && existingSubs.length >= effectiveMaxSubAgents) {
+        if (existingSubs.length >= effectiveMaxSubAgents) {
           return JSON.stringify({
             error: `Maximum ${effectiveMaxSubAgents} sub-agent(s) for this run${maxAgentsForRun != null ? ' (scan setting)' : ''}. You have ${existingSubs.length}.`,
           });

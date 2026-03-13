@@ -1,5 +1,5 @@
 /**
- * Seed the 4 model options for the Model Provider Selector (Auto, DeepSeek, OpenAI GPT5, Claude).
+ * Seed the 5 model options for the Model Provider Selector (Auto, DeepSeek, OpenAI GPT5, Claude, Gemini).
  * If the project has a DB, run: npx ts-node src/scripts/seed-model-options.ts
  * Options are also available via config (getModelOptions()) at startup without DB.
  */
@@ -13,7 +13,7 @@ config({ path: path.join(__dirname, '../../.env') });
 import { Model, ModelProvider } from '../entities/model.entity';
 import { getModelOptions } from '../config/model-options.config';
 
-const MODEL_OPTION_NAMES = ['model-picker/auto', 'model-picker/deepseek', 'model-picker/openai_gpt5', 'model-picker/claude'] as const;
+const MODEL_OPTION_NAMES = ['model-picker/auto', 'model-picker/deepseek', 'model-picker/openai_gpt5', 'model-picker/claude', 'model-picker/gemini'] as const;
 
 async function seedModelOptions() {
   const dataSource = new DataSource({
@@ -36,7 +36,7 @@ async function seedModelOptions() {
 
   for (let i = 0; i < options.length; i++) {
     const opt = options[i];
-    const name = MODEL_OPTION_NAMES[i];
+    const name = MODEL_OPTION_NAMES[i] ?? `model-picker/${opt.key}`;
     const existing = await modelRepo.findOne({ where: { name } });
     if (existing) {
       console.log(`  Skip (exists): ${name} - ${opt.label}`);

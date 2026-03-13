@@ -5,12 +5,12 @@
  * IMPORTANT: Auto = DeepSeek. The "Auto" option uses the DeepSeek provider and DEEPSEEK_API_KEY.
  */
 
-export type ModelOptionKey = 'auto' | 'deepseek' | 'openai_gpt5' | 'claude';
+export type ModelOptionKey = 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini';
 
 export interface ModelOption {
   key: ModelOptionKey;
   label: string;
-  provider: 'deepseek' | 'openai' | 'anthropic';
+  provider: 'deepseek' | 'openai' | 'anthropic' | 'gemini';
   defaultModel: string;
   apiKeyEnv: string;
 }
@@ -45,7 +45,7 @@ export function getModelOptions(): ModelOption[] {
       key: 'openai_gpt5',
       label: 'OpenAI GPT5',
       provider: 'openai',
-      defaultModel: getEnv('OPENAI_GPT5_MODEL_ID', 'gpt-4o'),
+      defaultModel: getEnv('OPENAI_GPT5_MODEL_ID', 'gpt-5.1'),
       apiKeyEnv: 'OPENAI_API_KEY',
     },
     {
@@ -54,6 +54,13 @@ export function getModelOptions(): ModelOption[] {
       provider: 'anthropic',
       defaultModel: getEnv('CLAUDE_MODEL_ID', 'claude-3-5-sonnet-20241022'),
       apiKeyEnv: 'ANTHROPIC_API_KEY',
+    },
+    {
+      key: 'gemini',
+      label: 'Gemini',
+      provider: 'gemini',
+      defaultModel: getEnv('GEMINI_MODEL_ID', 'gemini-2.0-flash'),
+      apiKeyEnv: 'GEMINI_API_KEY',
     },
   ];
 }

@@ -23,7 +23,6 @@ const Footer = () => {
             <Link to="/pricing" className="footer-link">Pricing</Link>
             <a href="#" className="footer-link">Documentation</a>
             <a href="#" className="footer-link">Security Blog</a>
-            <Link to="/careers" className="footer-link">Careers</Link>
           </div>
           <div className="footer-column">
             <h4 className="footer-column-title">Product</h4>
@@ -40,7 +39,7 @@ const Footer = () => {
           </div>
         </div>
         <div className="footer-bottom">
-          <p>©2025 GwehAI. 535 Mission Street, San Francisco, CA, USA</p>
+          <p>©2025 GwehAI</p>
         </div>
       </div>
     </footer>
