@@ -7,6 +7,13 @@
 
 export type ModelOptionKey = 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini';
 
+/** Keys for models that support chat/completion (not image-generation or other specialty). Used to filter model picker list. */
+export const CHAT_CAPABLE_MODEL_KEYS: ModelOptionKey[] = ['auto', 'deepseek', 'openai_gpt5', 'claude', 'gemini'];
+
+export function isChatCapableModelKey(key: unknown): key is ModelOptionKey {
+  return typeof key === 'string' && CHAT_CAPABLE_MODEL_KEYS.includes(key as ModelOptionKey);
+}
+
 export interface ModelOption {
   key: ModelOptionKey;
   label: string;
@@ -45,21 +52,21 @@ export function getModelOptions(): ModelOption[] {
       key: 'openai_gpt5',
       label: 'OpenAI GPT5',
       provider: 'openai',
-      defaultModel: getEnv('OPENAI_GPT5_MODEL_ID', 'gpt-5.1'),
+      defaultModel: getEnv('OPENAI_GPT5_MODEL_ID', 'gpt-4o'),
       apiKeyEnv: 'OPENAI_API_KEY',
     },
     {
       key: 'claude',
       label: 'Claude',
       provider: 'anthropic',
-      defaultModel: getEnv('CLAUDE_MODEL_ID', 'claude-3-5-sonnet-20241022'),
+      defaultModel: getEnv('CLAUDE_MODEL_ID', 'claude-opus-4-5-20251101'),
       apiKeyEnv: 'ANTHROPIC_API_KEY',
     },
     {
       key: 'gemini',
       label: 'Gemini',
       provider: 'gemini',
-      defaultModel: getEnv('GEMINI_MODEL_ID', 'gemini-2.0-flash'),
+      defaultModel: getEnv('GEMINI_MODEL_ID', 'gemini-2.5-flash'),
       apiKeyEnv: 'GEMINI_API_KEY',
     },
   ];

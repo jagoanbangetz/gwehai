@@ -26,8 +26,18 @@ Optional: **credit packs** (e.g. $20 → 100 points). Revenue depends on admin-d
 | DeepSeek  | $0.14   | $0.28   |
 | OpenAI    | $2.50   | $10.00  |
 | Anthropic | $3.00   | $15.00  |
+| Gemini    | $0.10   | $0.40   |
 
-Actual cost can come from DB (`Model.pointsPer1kInputTokens` / `pointsPer1kOutputTokens`) or dynamic billing (`llm_models.priceInPer1M`, `priceOutPer1M`). Admin shows cost in USD using **POINTS_TO_USD = 0.0001** (10,000 cost points = $1).
+**Point deduction (seed: 4 models only).** POINTS_TO_USD = 0.0001 (10,000 points = $1). Per-1k-token rates in DB are set with ~2x margin over API cost so usage is profitable:
+
+| Model            | Points/1k in | Points/1k out | Approx. API cost/1k (USD) | Margin   |
+|------------------|--------------|---------------|----------------------------|----------|
+| Auto (DeepSeek)  | 3            | 6             | ~0.00014 / 0.00028         | ~2x      |
+| ChatGPT 5.2      | 50           | 200           | ~0.00175 / 0.014           | ~1.5–2x  |
+| Claude Opus 4.5  | 60           | 300           | ~0.005 / 0.025             | ~1.2x    |
+| Gemini 3 Flash   | 2            | 8             | ~0.0001 / 0.0004           | ~2x      |
+
+Actual cost comes from DB (`Model.pointsPer1kInputTokens` / `pointsPer1kOutputTokens`). Admin shows cost in USD using **POINTS_TO_USD = 0.0001** (10,000 cost points = $1).
 
 ### 2.2 Other
 

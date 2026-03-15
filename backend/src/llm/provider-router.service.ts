@@ -16,6 +16,8 @@ export interface ChatCompletionMeta {
 export interface RunChatCompletionOptions {
   userId?: string;
   selectedModelKey: ModelOptionKey;
+  /** When set, use this API model id instead of the option's defaultModel. */
+  selectedModelIdOverride?: string;
   messages: LlmMessage[];
   mode: CostMode;
 }
@@ -27,6 +29,8 @@ export interface RunChatCompletionResult {
 
 export interface GenerateWithToolsOptions {
   selectedModelKey: ModelOptionKey;
+  /** When set, use this API model id (e.g. gpt-5.4, gemini-2.5-flash) instead of the option's defaultModel. */
+  selectedModelIdOverride?: string;
   messages: LlmMessage[];
   tools: LlmToolDef[];
   mode: CostMode;
@@ -114,11 +118,14 @@ export class ProviderRouterService {
    * Routes to DeepSeek (Auto), OpenAI, or Anthropic.
    */
   async runChatCompletion(opts: RunChatCompletionOptions): Promise<RunChatCompletionResult> {
-    const { selectedModelKey, messages, mode } = opts;
+    const { selectedModelKey, selectedModelIdOverride, messages, mode } = opts;
     const option = getOptionByKey(selectedModelKey);
     if (!option) {
       throw new HttpException(`Unknown model key: ${selectedModelKey}`, HttpStatus.BAD_REQUEST);
     }
+    const effectiveOption = selectedModelIdOverride
+      ? { ...option, defaultModel: selectedModelIdOverride }
+      : option;
     const caps = this.costManager.getCaps(selectedModelKey, mode);
     const start = Date.now();
 
@@ -128,18 +135,18 @@ export class ProviderRouterService {
     let inputTokens = 0;
     let outputTokens = 0;
 
-    switch (option.provider) {
+    switch (effectiveOption.provider) {
       case 'deepseek':
-        ({ text, provider, model, inputTokens, outputTokens } = await this.callDeepSeek(option, messages, caps));
+        ({ text, provider, model, inputTokens, outputTokens } = await this.callDeepSeek(effectiveOption, messages, caps));
         break;
       case 'openai':
-        ({ text, provider, model, inputTokens, outputTokens } = await this.callOpenAI(option, messages, caps));
+        ({ text, provider, model, inputTokens, outputTokens } = await this.callOpenAI(effectiveOption, messages, caps));
         break;
       case 'anthropic':
-        ({ text, provider, model, inputTokens, outputTokens } = await this.callAnthropic(option, messages, caps));
+        ({ text, provider, model, inputTokens, outputTokens } = await this.callAnthropic(effectiveOption, messages, caps));
         break;
       case 'gemini':
-        ({ text, provider, model, inputTokens, outputTokens } = await this.callGemini(option, messages, caps));
+        ({ text, provider, model, inputTokens, outputTokens } = await this.callGemini(effectiveOption, messages, caps));
         break;
       default:
         throw new HttpException(`Unsupported provider: ${option.provider}`, HttpStatus.BAD_REQUEST);
@@ -167,11 +174,14 @@ export class ProviderRouterService {
    * Generate with tool support (for pentest agent loop).
    */
   async generateWithTools(opts: GenerateWithToolsOptions): Promise<GenerateWithToolsResult> {
-    const { selectedModelKey, messages, tools, mode, tool_choice } = opts;
+    const { selectedModelKey, selectedModelIdOverride, messages, tools, mode, tool_choice } = opts;
     const option = getOptionByKey(selectedModelKey);
     if (!option) {
       throw new HttpException(`Unknown model key: ${selectedModelKey}`, HttpStatus.BAD_REQUEST);
     }
+    const effectiveOption = selectedModelIdOverride
+      ? { ...option, defaultModel: selectedModelIdOverride }
+      : option;
     let caps = this.costManager.getCaps(selectedModelKey, mode);
     const toolsCap = this.costManager.getToolsOutputCap();
     if (toolsCap != null && toolsCap > 0) {
@@ -186,10 +196,10 @@ export class ProviderRouterService {
     let inputTokens = 0;
     let outputTokens = 0;
 
-    switch (option.provider) {
+    switch (effectiveOption.provider) {
       case 'deepseek':
         ({ content, tool_calls, provider, model, inputTokens, outputTokens } = await this.callDeepSeekWithTools(
-          option,
+          effectiveOption,
           messages,
           tools,
           caps,
@@ -198,7 +208,7 @@ export class ProviderRouterService {
         break;
       case 'openai':
         ({ content, tool_calls, provider, model, inputTokens, outputTokens } = await this.callOpenAIWithTools(
-          option,
+          effectiveOption,
           messages,
           tools,
           caps,
@@ -207,7 +217,7 @@ export class ProviderRouterService {
         break;
       case 'anthropic':
         ({ content, tool_calls, provider, model, inputTokens, outputTokens } = await this.callAnthropicWithTools(
-          option,
+          effectiveOption,
           messages,
           tools,
           caps,
@@ -216,7 +226,7 @@ export class ProviderRouterService {
         break;
       case 'gemini':
         ({ content, tool_calls, provider, model, inputTokens, outputTokens } = await this.callGeminiWithTools(
-          option,
+          effectiveOption,
           messages,
           tools,
           caps,
@@ -360,6 +370,7 @@ export class ProviderRouterService {
   }
 
   // --- OpenAI ---
+  /** OpenAI: newer models require max_completion_tokens; older use max_tokens. Try both on param errors so the API response is preserved. */
   private async callOpenAI(
     option: { defaultModel: string; apiKeyEnv: string },
     messages: LlmMessage[],
@@ -371,34 +382,40 @@ export class ProviderRouterService {
     }
     const baseUrl = this.config.get<string>('OPENAI_BASE_URL') || 'https://api.openai.com/v1';
     const url = baseUrl.replace(/\/?$/, '') + '/chat/completions';
-    const body = {
-      model: option.defaultModel,
-      messages: this.llmMessagesToOpenAI(messages),
-      max_tokens: caps.maxOutputTokens,
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
     };
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      const message = parseApiErrorResponse(errText, 'OpenAI', errText || 'OpenAI API error');
-      throw new HttpException(message, res.status);
+    // Log model id so "model not exist" errors can be traced to the exact id sent (e.g. gpt-4o)
+    console.log('[ProviderRouter] OpenAI chat model:', option.defaultModel);
+    const payloads: Array<Record<string, unknown>> = [
+      { model: option.defaultModel, messages: this.llmMessagesToOpenAI(messages), max_completion_tokens: caps.maxOutputTokens },
+      { model: option.defaultModel, messages: this.llmMessagesToOpenAI(messages), max_tokens: caps.maxOutputTokens },
+    ];
+    let lastErr: string | null = null;
+    for (const body of payloads) {
+      const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+      const resText = await res.text();
+      if (res.ok) {
+        const data = JSON.parse(resText || '{}');
+        const content = data?.choices?.[0]?.message?.content ?? '';
+        const usage = data?.usage || {};
+        return {
+          text: content,
+          provider: 'openai',
+          model: option.defaultModel,
+          inputTokens: usage.prompt_tokens ?? 0,
+          outputTokens: usage.completion_tokens ?? 0,
+        };
+      }
+      lastErr = parseApiErrorResponse(resText, 'OpenAI', resText || 'OpenAI API error');
+      const useOtherParam = /max_tokens.*not supported|max_completion_tokens.*not supported|use 'max_/i.test(lastErr);
+      if (!useOtherParam) break;
     }
-    const data = await res.json();
-    const content = data?.choices?.[0]?.message?.content ?? '';
-    const usage = data?.usage || {};
-    return {
-      text: content,
-      provider: 'openai',
-      model: option.defaultModel,
-      inputTokens: usage.prompt_tokens ?? 0,
-      outputTokens: usage.completion_tokens ?? 0,
-    };
+    const hint = /does not exist|model.*not exist|invalid.*model/i.test(lastErr || '')
+      ? ' Use model id gpt-4o (set OPENAI_GPT5_MODEL_ID or pick GPT-4o in the model picker) and ensure OPENAI_API_KEY has access.'
+      : '';
+    throw new HttpException((lastErr || 'OpenAI API error') + hint, HttpStatus.BAD_REQUEST);
   }
 
   private async callOpenAIWithTools(
@@ -421,6 +438,10 @@ export class ProviderRouterService {
     }
     const baseUrl = this.config.get<string>('OPENAI_BASE_URL') || 'https://api.openai.com/v1';
     const url = baseUrl.replace(/\/?$/, '') + '/chat/completions';
+    const headers = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    };
     const apiTools = tools.map((t) => ({
       type: 'function' as const,
       function: {
@@ -429,40 +450,40 @@ export class ProviderRouterService {
         parameters: t.function.parameters,
       },
     }));
-    const body = {
-      model: option.defaultModel,
-      messages: this.llmMessagesToOpenAI(messages),
-      tools: apiTools,
-      tool_choice: tool_choice === 'required' ? 'required' : tool_choice === 'none' ? 'none' : 'auto',
-      max_tokens: caps.maxOutputTokens,
-    };
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const errText = await res.text();
-      const message = parseApiErrorResponse(errText, 'OpenAI', errText || 'OpenAI API error');
-      throw new HttpException(message, res.status);
+    const toolChoiceVal = tool_choice === 'required' ? 'required' : tool_choice === 'none' ? 'none' : 'auto';
+    console.log('[ProviderRouter] OpenAI tools model:', option.defaultModel);
+    const payloads: Array<Record<string, unknown>> = [
+      { model: option.defaultModel, messages: this.llmMessagesToOpenAI(messages), tools: apiTools, tool_choice: toolChoiceVal, max_completion_tokens: caps.maxOutputTokens },
+      { model: option.defaultModel, messages: this.llmMessagesToOpenAI(messages), tools: apiTools, tool_choice: toolChoiceVal, max_tokens: caps.maxOutputTokens },
+    ];
+    let lastErr: string | null = null;
+    for (const body of payloads) {
+      const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+      const resText = await res.text();
+      if (res.ok) {
+        const data = JSON.parse(resText || '{}');
+        const msg = data?.choices?.[0]?.message || {};
+        const content = msg.content ?? '';
+        const rawToolCalls = msg.tool_calls || [];
+        const tool_calls = sanitizeToolCalls(rawToolCalls);
+        const usage = data?.usage || {};
+        return {
+          content,
+          tool_calls,
+          provider: 'openai',
+          model: option.defaultModel,
+          inputTokens: usage.prompt_tokens ?? 0,
+          outputTokens: usage.completion_tokens ?? 0,
+        };
+      }
+      lastErr = parseApiErrorResponse(resText, 'OpenAI', resText || 'OpenAI API error');
+      const useOtherParam = /max_tokens.*not supported|max_completion_tokens.*not supported|use 'max_/i.test(lastErr);
+      if (!useOtherParam) break;
     }
-    const data = await res.json();
-    const msg = data?.choices?.[0]?.message || {};
-    const content = msg.content ?? '';
-    const rawToolCalls = msg.tool_calls || [];
-    const tool_calls = sanitizeToolCalls(rawToolCalls);
-    const usage = data?.usage || {};
-    return {
-      content,
-      tool_calls: tool_calls.length ? tool_calls : undefined,
-      provider: 'openai',
-      model: option.defaultModel,
-      inputTokens: usage.prompt_tokens ?? 0,
-      outputTokens: usage.completion_tokens ?? 0,
-    };
+    const hint = /does not exist|model.*not exist|invalid.*model/i.test(lastErr || '')
+      ? ' Use model id gpt-4o (set OPENAI_GPT5_MODEL_ID or pick GPT-4o in the model picker) and ensure OPENAI_API_KEY has access.'
+      : '';
+    throw new HttpException((lastErr || 'OpenAI API error') + hint, HttpStatus.BAD_REQUEST);
   }
 
   // --- Anthropic ---

@@ -124,7 +124,9 @@ export class GwehAIClient {
     stream: boolean = true,
     jobId?: string,
     modelKey?: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini',
-    mode?: 'agent' | 'ask'
+    mode?: 'agent' | 'ask',
+    modelId?: string,
+    maxAgents?: number
   ): Promise<GwehAIJobResponse> {
     const user = localStorage.getItem('scout_user');
     const token = user ? JSON.parse(user).token : null;
@@ -141,6 +143,8 @@ export class GwehAIClient {
         ...(jobId && { conversation_id: jobId }), // Use conversation_id for continuation
         model_key: modelKey ?? 'auto', // Auto = DeepSeek; always send so backend never returns "Model not found"
         ...(mode && { mode }), // 'ask' = force simple Q&A only; 'agent' = use heuristic
+        ...(modelId && { model_id: modelId }), // Optional: specific model from DB (e.g. GPT-5.4, Gemini 2.5 Flash)
+        ...(maxAgents != null && maxAgents >= 1 && maxAgents <= 20 && { max_agents: maxAgents }),
       }),
     });
 

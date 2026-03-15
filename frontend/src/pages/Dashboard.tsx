@@ -16,7 +16,7 @@ import SettingsModal from '../components/SettingsModal'
 import ChatLayout from '../components/ChatLayout'
 import MessagesArea, { type MessagesAreaRef } from '../components/MessagesArea'
 import Composer from '../components/Composer'
-import ModelPicker, { getStoredModelKey, setStoredModelKey, getModelLabel, type ModelKey } from '../components/ModelPicker'
+import ModelPicker, { getStoredModelKey, setStoredModelKey, getModelLabel, getStoredModelId, type ModelKey } from '../components/ModelPicker'
 import ThinkingBar from '../components/ThinkingBar'
 import { GwehLogRenderer } from '../components/GwehLog'
 import type { LogEvent, LogPhase } from '../components/GwehLog'
@@ -292,6 +292,7 @@ const Dashboard = () => {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [selectedModelKey, setSelectedModelKey] = useState<ModelKey>(() => getStoredModelKey())
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(() => getStoredModelId())
   /** 'agent' = full pentest/tools; 'ask' = simple Q&A only (no terminal, short replies). */
   const [chatMode, setChatMode] = useState<'agent' | 'ask'>(() => {
     try {
@@ -1902,6 +1903,8 @@ const Dashboard = () => {
     }
 
     const messageToSend = userInput
+    const withAgentsMatch = userInput.match(/\bwith\s+(\d+)\s+agents?\b/i)
+    const maxAgents = withAgentsMatch ? Math.min(20, Math.max(1, parseInt(withAgentsMatch[1], 10))) : undefined
 
     // Ask = simple Q&A only. Agent = full pentest only.
     const isSimple = chatMode === 'ask'
@@ -1937,7 +1940,9 @@ const Dashboard = () => {
         false,
         currentConversationId || undefined,
         selectedModelKey,
-        effectiveMode
+        effectiveMode,
+        selectedModelId ?? undefined,
+        maxAgents
       )
       loadPlan().catch(() => {}) // refresh scan_limit (sessions_started_today) so banner appears when at limit
       const jobId = jobResponse.job_id
@@ -2956,9 +2961,10 @@ const Dashboard = () => {
                         {chatMode === 'agent' && (
                           <ModelPicker
                             value={selectedModelKey}
-                            onChange={(key) => {
+                            onChange={(key, modelId) => {
                               setSelectedModelKey(key)
                               setStoredModelKey(key)
+                              setSelectedModelId(modelId ?? null)
                             }}
                             disabled={isLoading}
                             className="chat-model-picker"

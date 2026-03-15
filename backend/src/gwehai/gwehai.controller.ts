@@ -18,7 +18,7 @@ import { GwehAIService } from './gwehai.service';
 import { normalizeLlmErrorMessage } from '../llm/provider-router.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GwehAISSEGuard } from './gwehai-sse.guard';
-import { getModelOptions } from '../config/model-options.config';
+import { getModelOptions, isChatCapableModelKey } from '../config/model-options.config';
 import { Model } from '../entities/model.entity';
 
 interface ChatCompletionRequest {
@@ -40,14 +40,37 @@ export class GwehAIController {
   /**
    * Chat endpoint: creates a job and returns job_id. Client uses that job_id to stream.
    * POST /api/gwehai/chat → { job_id, conversation_id, ... }
-   * Flow: 1) POST chat → get job_id. 2) GET chat/stream?stream_id=<job_id> to stream. Each conversation has many job_ids (one per message).
+   * Body may include model_key and optionally model_id (UUID of a row in models table). When model_id is set, we resolve it to model_key + api model id and pass that to the agent.
+   * Only chat-capable models (from GET /chat/models) are accepted; image-generation and other specialty models are not.
    */
   @Post('chat')
   @UseGuards(JwtAuthGuard)
   async startChat(@Req() req: Request, @Body() body: any) {
     const user = req.user as any;
+    const payload = { ...body };
+    if (payload.model_id) {
+      const model = await this.modelRepo.findOne({ where: { id: payload.model_id } });
+      if (!model) {
+        throw new HttpException('Model not found. Please pick another model from the list.', HttpStatus.BAD_REQUEST);
+      }
+      if (!model.isActive) {
+        throw new HttpException('This model is no longer available. Please pick another model from the list.', HttpStatus.BAD_REQUEST);
+      }
+      const key = (model.metadata as Record<string, string> | null)?.key;
+      if (!key || !isChatCapableModelKey(key)) {
+        throw new HttpException('This model cannot be used for chat. Please pick another model from the list.', HttpStatus.BAD_REQUEST);
+      }
+      payload.model_key = payload.model_key || key;
+      payload.modelIdOverride = model.metadata.apiModelId ?? (model.metadata as Record<string, string>)?.defaultModel;
+    }
+    if (payload.max_agents != null) {
+      const n = Number(payload.max_agents);
+      if (Number.isInteger(n) && n >= 1 && n <= 20) {
+        payload.maxAgentsForRun = n;
+      }
+    }
     console.log(`User ${user.id} starting local AI chat`);
-    return this.gwehaiService.startChat(user.id, body);
+    return this.gwehaiService.startChat(user.id, payload);
   }
 
   /**

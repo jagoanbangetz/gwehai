@@ -107,8 +107,10 @@ export class GwehAIService {
     if (modelKey) {
       console.log('[gwehai] using model picker:', modelKey, modelKey === 'auto' ? '(DeepSeek)' : '');
     }
+    const modelIdOverride = payload.modelIdOverride as string | undefined;
+    const maxAgentsForRun = payload.maxAgentsForRun as number | undefined;
     // Run agent in background: LLM → append events to job.events; stream endpoint polls and yields SSE.
-    this.runAgentInBackground(jobId, userId, message, conversationId, modelKey, payload.mode === 'ask')
+    this.runAgentInBackground(jobId, userId, message, conversationId, modelKey, payload.mode === 'ask', modelIdOverride, maxAgentsForRun)
       .catch((err) => {
         const job = this.jobs.get(jobId);
         if (job) {
@@ -183,6 +185,8 @@ export class GwehAIService {
     conversationId?: string,
     modelKey?: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini',
     forceSimple?: boolean,
+    modelIdOverride?: string,
+    maxAgentsForRun?: number,
   ): Promise<void> {
     const job = this.jobs.get(jobId);
     if (!job || job.status === 'stopped') return;
@@ -203,7 +207,13 @@ export class GwehAIService {
     try {
       // Ask = simple Q&A only. Agent = full pentest only (no content heuristic).
       const useSimple = forceSimple === true;
-      const chatOptions = { emitDoneEvent: true, abortSignal, ...(modelKey && { model_key: modelKey }) };
+      const chatOptions = {
+        emitDoneEvent: true,
+        abortSignal,
+        ...(modelKey && { model_key: modelKey }),
+        ...(modelIdOverride && { modelIdOverride }),
+        ...(maxAgentsForRun != null && maxAgentsForRun >= 1 && { maxAgentsForRun }),
+      };
       const result = useSimple
         ? await this.chatService.processMessageSimple(
             userId,

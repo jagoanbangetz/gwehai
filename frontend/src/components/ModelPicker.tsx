@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useMemo } from 'react'
 import apiClient from '../utils/api'
 import './ModelPicker.css'
 
@@ -15,6 +15,14 @@ export const MODEL_OPTIONS: { key: ModelKey; label: string }[] = [
 const STORAGE_KEY = 'gwehai_model_key'
 const STORAGE_MODEL_ID_KEY = 'gwehai_model_id'
 
+const GROUP_ORDER: ModelKey[] = ['auto', 'openai_gpt5', 'claude', 'gemini']
+const GROUP_LABELS: Record<ModelKey, string> = {
+  auto: 'Auto',
+  openai_gpt5: 'OpenAI',
+  claude: 'Claude',
+  gemini: 'Gemini',
+}
+
 export function getStoredModelKey(): ModelKey {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -22,6 +30,13 @@ export function getStoredModelKey(): ModelKey {
     if (raw && MODEL_OPTIONS.some(o => o.key === raw)) return raw as ModelKey
   } catch (_) {}
   return 'auto'
+}
+
+export function getStoredModelId(): string | null {
+  try {
+    return localStorage.getItem(STORAGE_MODEL_ID_KEY)
+  } catch (_) {}
+  return null
 }
 
 export function setStoredModelKey(key: ModelKey): void {
@@ -55,9 +70,28 @@ function getModelKeyForRow(row: BackendModelRow): ModelKey {
   return 'auto'
 }
 
+/** Group models by provider key for Select2-style sections. */
+function groupModelsByKey(models: BackendModelRow[]): { key: ModelKey; label: string; models: BackendModelRow[] }[] {
+  const map = new Map<ModelKey, BackendModelRow[]>()
+  for (const k of GROUP_ORDER) {
+    map.set(k, [])
+  }
+  for (const m of models) {
+    const k = getModelKeyForRow(m)
+    if (!map.has(k)) map.set(k, [])
+    map.get(k)!.push(m)
+  }
+  return GROUP_ORDER.map(key => ({
+    key,
+    label: GROUP_LABELS[key],
+    models: map.get(key) || [],
+  })).filter(g => g.models.length > 0)
+}
+
 export interface ModelPickerProps {
   value: ModelKey
-  onChange: (key: ModelKey) => void
+  /** Called when user picks a model. Second arg is the DB model id (UUID) when a specific model row is selected. */
+  onChange: (key: ModelKey, modelId?: string) => void
   disabled?: boolean
   className?: string
   planId?: string | null
@@ -69,13 +103,28 @@ export interface ModelPickerProps {
  */
 const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, className, planId }) => {
   const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
   const [models, setModels] = useState<BackendModelRow[]>([])
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const currentModel = models.find(m => m.id === selectedModelId) || null
   const fallbackLabel = getModelLabel(value)
   const currentLabel = currentModel ? (currentModel.displayName || currentModel.name || fallbackLabel) : fallbackLabel
   const isFreePlan = (planId ?? '').toUpperCase() === 'FREE'
+
+  const searchLower = search.trim().toLowerCase()
+  const filteredModels = useMemo(() => {
+    if (!searchLower) return models
+    return models.filter(
+      m =>
+        (m.displayName || m.name || '').toLowerCase().includes(searchLower) ||
+        (m.name || '').toLowerCase().includes(searchLower),
+    )
+  }, [models, searchLower])
+  const grouped = useMemo(() => groupModelsByKey(filteredModels), [filteredModels])
+  const hasResults = grouped.some(g => g.models.length > 0)
 
   // Load models from backend so the picker mirrors Admin → Models.
   useEffect(() => {
@@ -87,7 +136,6 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
         const list = (Array.isArray(res.data) ? res.data : []).filter(m => m && m.isActive)
         setModels(list)
 
-        // Restore previously selected model if possible.
         let storedId: string | null = null
         try {
           storedId = localStorage.getItem(STORAGE_MODEL_ID_KEY)
@@ -112,6 +160,8 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
 
   useEffect(() => {
     if (!open) return
+    setSearch('')
+    searchInputRef.current?.focus()
     const onOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false)
@@ -121,9 +171,23 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
     return () => document.removeEventListener('mousedown', onOutside)
   }, [open])
 
+  const selectModel = (m: BackendModelRow) => {
+    const key = getModelKeyForRow(m)
+    const locked = isFreePlan && key !== 'auto'
+    if (locked || disabled) return
+    setSelectedModelId(m.id)
+    onChange(key, m.id)
+    setStoredModelKey(key)
+    try {
+      localStorage.setItem(STORAGE_MODEL_ID_KEY, m.id)
+    } catch (_) {}
+    setOpen(false)
+  }
+
   return (
     <div className={`model-picker ${className ?? ''} ${open ? 'open' : ''}`} ref={containerRef}>
       <button
+        ref={triggerRef}
         type="button"
         className="model-picker-trigger"
         onClick={() => !disabled && setOpen(prev => !prev)}
@@ -145,35 +209,63 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
         </span>
       </button>
       {open && (
-        <div className="model-picker-dropdown" role="listbox">
-          {(models.length ? models : []).map((m) => {
-            const key = getModelKeyForRow(m)
-            const locked = isFreePlan && key !== 'auto'
-            return (
-              <button
-                key={m.id}
-                type="button"
-                role="option"
-                aria-selected={selectedModelId === m.id}
-                aria-disabled={locked}
-                className={`model-picker-option ${selectedModelId === m.id ? 'selected' : ''} ${locked ? 'locked' : ''}`}
-                onClick={() => {
-                  if (locked || disabled) return
-                  const nextKey = key
-                  setSelectedModelId(m.id)
-                  onChange(nextKey)
-                  setStoredModelKey(nextKey)
-                  try {
-                    localStorage.setItem(STORAGE_MODEL_ID_KEY, m.id)
-                  } catch (_) {}
-                  setOpen(false)
-                }}
-              >
-                <span className="model-picker-option-label">{m.displayName || m.name}</span>
-                {locked && <span className="model-picker-option-tag">Pro</span>}
-              </button>
-            )
-          })}
+        <div
+          className="model-picker-dropdown"
+          role="listbox"
+          style={{ minWidth: triggerRef.current ? triggerRef.current.offsetWidth : undefined }}
+        >
+          <div className="model-picker-search-wrap">
+            <span className="model-picker-search-icon" aria-hidden>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.35-4.35" />
+              </svg>
+            </span>
+            <input
+              ref={searchInputRef}
+              type="text"
+              className="model-picker-search-input"
+              placeholder="Search models..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              onKeyDown={e => e.stopPropagation()}
+              aria-label="Filter models"
+            />
+          </div>
+          <div className="model-picker-options-wrap">
+            {!hasResults ? (
+              <div className="model-picker-empty">
+                {models.length === 0
+                  ? 'No models available'
+                  : `No models match "${search}"`}
+              </div>
+            ) : (
+              grouped.map(({ key: groupKey, label: groupLabel, models: groupModels }) => (
+                <div key={groupKey} className="model-picker-group">
+                  <div className="model-picker-group-label">{groupLabel}</div>
+                  {groupModels.map(m => {
+                    const key = getModelKeyForRow(m)
+                    const locked = isFreePlan && key !== 'auto'
+                    const selected = selectedModelId === m.id
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        aria-disabled={locked}
+                        className={`model-picker-option ${selected ? 'selected' : ''} ${locked ? 'locked' : ''}`}
+                        onClick={() => selectModel(m)}
+                      >
+                        <span className="model-picker-option-label">{m.displayName || m.name}</span>
+                        {locked && <span className="model-picker-option-tag">Pro</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              ))
+            )}
+          </div>
         </div>
       )}
     </div>

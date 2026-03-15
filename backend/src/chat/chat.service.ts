@@ -14,6 +14,7 @@ import { LlmService } from '../llm/llm.service';
 import { ProviderRouterService, normalizeLlmErrorMessage } from '../llm/provider-router.service';
 import { CostManagerService } from '../llm/cost-manager.service';
 import type { ModelOptionKey } from '../config/model-options.config';
+import { isChatCapableModelKey } from '../config/model-options.config';
 import { PENTEST_SYSTEM_PROMPT, SIMPLE_SECURITY_SYSTEM_PROMPT } from '../prompt/pentest.system-prompt';
 import { GWEHAI_CONVERSATION_SYSTEM_PROMPT } from '../prompt/gwehai-identity';
 import { PENTEST_TOOL_DEFS } from '../prompt/pentest-tools.def';
@@ -615,7 +616,7 @@ export class ChatService {
     conversationId: string | undefined,
     jobId: string,
     pushEvent: (ev: { type: string; data: Record<string, any> }) => void,
-    options?: { emitDoneEvent?: boolean; abortSignal?: AbortSignal; model_key?: ModelOptionKey },
+    options?: { emitDoneEvent?: boolean; abortSignal?: AbortSignal; model_key?: ModelOptionKey; modelIdOverride?: string },
   ): Promise<{ conversationId: string; messageId: string; response: string }> {
     const useModelPicker = !!options?.model_key;
     const result = await this.dataSource.transaction(async (manager) => {
@@ -736,6 +737,7 @@ export class ChatService {
     if (modelKey) {
       const result = await this.providerRouter.runChatCompletion({
         selectedModelKey: modelKey,
+        selectedModelIdOverride: options?.modelIdOverride,
         messages,
         mode: 'decision',
       });
@@ -793,7 +795,7 @@ export class ChatService {
   async getSimpleConversationResponse(
     userId: string,
     message: string,
-    options?: { conversationId?: string; model_key?: ModelOptionKey },
+    options?: { conversationId?: string; model_key?: ModelOptionKey; modelIdOverride?: string },
   ): Promise<{ reply: string; details?: string; followUps?: string[]; conversationId: string; messageId: string }> {
     const useModelPicker = !!options?.model_key;
     const result = await this.dataSource.transaction(async (manager) => {
@@ -879,6 +881,7 @@ export class ChatService {
     if (modelKey) {
       const llmResult = await this.providerRouter.runChatCompletion({
         selectedModelKey: modelKey,
+        selectedModelIdOverride: options?.modelIdOverride,
         messages,
         mode: 'decision',
       });
@@ -916,7 +919,7 @@ export class ChatService {
     pushEvent: (ev: { type: string; data: Record<string, any> }) => void,
     agentInfo?: { index: number; label: string },
     memoryScopeIdOverride?: string,
-    options?: { emitDoneEvent?: boolean; abortSignal?: AbortSignal; model_key?: ModelOptionKey; maxAgentsForRun?: number },
+    options?: { emitDoneEvent?: boolean; abortSignal?: AbortSignal; model_key?: ModelOptionKey; modelIdOverride?: string; maxAgentsForRun?: number },
   ): Promise<{ conversationId: string; messageId: string; response: string }> {
     const useModelPicker = !!options?.model_key;
     const result = await this.dataSource.transaction(async (manager) => {
@@ -1109,6 +1112,7 @@ export class ChatService {
         ? await this.providerRouter
             .generateWithTools({
               selectedModelKey: modelKey,
+              selectedModelIdOverride: options?.modelIdOverride,
               messages: truncateMessagesForContext(messages),
               tools: PENTEST_TOOL_DEFS,
               mode: 'decision',
@@ -1221,6 +1225,7 @@ export class ChatService {
         ? await this.providerRouter
             .generateWithTools({
               selectedModelKey: modelKeySummary,
+              selectedModelIdOverride: options?.modelIdOverride,
               messages: summaryMessages,
               tools: PENTEST_TOOL_DEFS,
               mode: 'decision',
@@ -2076,12 +2081,18 @@ export class ChatService {
   }
 
   /**
-   * Get available models
+   * Get available models for the chat/pentest model picker.
+   * Only returns models that are chat-capable (metadata.key in openai_gpt5, gemini, claude, etc.),
+   * so image-generation and other non-chat models never appear and never cause "Invalid or unsupported model_id".
    */
   async getModels(): Promise<Model[]> {
-    return await this.modelRepo.find({
+    const all = await this.modelRepo.find({
       where: { isActive: true },
       order: { isDefault: 'DESC', displayName: 'ASC' },
+    });
+    return all.filter((m) => {
+      const key = (m.metadata as Record<string, string> | null)?.key;
+      return key && isChatCapableModelKey(key);
     });
   }
 }
