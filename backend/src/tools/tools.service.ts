@@ -216,6 +216,33 @@ export class ToolsService {
     return name?.trim() || 'gwehai-pentest-tools';
   }
 
+  /** Normalize sqlmap args: ensure -u/--url has a fully-qualified URL (prepend http:// if missing). */
+  private normalizeSqlmapArgs(options: {
+    args?: string[];
+    commandLine?: string;
+  }): { args?: string[]; commandLine?: string } {
+    const out: { args?: string[]; commandLine?: string } = { args: options.args, commandLine: options.commandLine };
+    const args = options.args;
+    if (!args || args.length === 0) return out;
+    const urlFlagIndex = args.findIndex((a) => a === '-u' || a === '--url');
+    if (urlFlagIndex === -1 || urlFlagIndex + 1 >= args.length) return out;
+    const originalUrl = args[urlFlagIndex + 1];
+    if (!originalUrl || /^https?:\/\//i.test(originalUrl.trim())) return out;
+    const fixedUrl = `http://${originalUrl.trim()}`;
+    const newArgs = [...args];
+    newArgs[urlFlagIndex + 1] = fixedUrl;
+    out.args = newArgs;
+    if (options.commandLine) {
+      const parts = options.commandLine.split(/\s+/).filter(Boolean);
+      const flagIndex = parts.findIndex((p) => p === '-u' || p === '--url');
+      if (flagIndex !== -1 && flagIndex + 1 < parts.length) {
+        parts[flagIndex + 1] = fixedUrl;
+        out.commandLine = parts.join(' ');
+      }
+    }
+    return out;
+  }
+
   async execCommand(options: {
     command: string;
     args?: string[];
@@ -233,6 +260,14 @@ export class ToolsService {
     const allow = this.getAllowlist();
     if (!allow.has(command)) {
       throw new BadRequestException(`Command not allowed: ${command}`);
+    }
+
+    // sqlmap is strict about URL format. If -u/--url is missing a scheme, prepend http:// so the agent
+    // can pass "testasp.vulnweb.com/..." and still get a valid target instead of "invalid target URL".
+    if (command === 'sqlmap') {
+      const normalized = this.normalizeSqlmapArgs({ args: options.args, commandLine: options.commandLine });
+      options.args = normalized.args;
+      options.commandLine = normalized.commandLine ?? options.commandLine;
     }
 
     if (allow.get(command)?.requiresTarget) {
