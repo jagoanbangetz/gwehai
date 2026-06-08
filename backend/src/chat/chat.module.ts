@@ -16,6 +16,10 @@ import { HacktivityModule } from '../hacktivity/hacktivity.module';
 import { PlansModule } from '../plans/plans.module';
 import { PentestJobsModule } from '../pentest-jobs/pentest-jobs.module';
 import { BillingModule } from '../billing/billing.module';
+import { ConversationService } from './conversation.service';
+import { CostService } from './cost.service';
+import { ToolExecutorService } from './tool-executor.service';
+import { AgentOrchestratorService } from './agent-orchestrator.service';
 
 @Module({
   imports: [
@@ -30,7 +34,13 @@ import { BillingModule } from '../billing/billing.module';
     forwardRef(() => PentestJobsModule),
   ],
   controllers: [ChatController],
-  providers: [ChatService],
-  exports: [ChatService],
+  providers: [
+    ConversationService,
+    CostService,
+    ToolExecutorService,
+    AgentOrchestratorService,
+    ChatService,
+  ],
+  exports: [ChatService, ConversationService, AgentOrchestratorService],
 })
 export class ChatModule {}

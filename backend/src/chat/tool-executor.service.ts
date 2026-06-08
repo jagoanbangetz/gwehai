@@ -1,0 +1,412 @@
+/**
+ * Tool Executor Service
+ * 
+ * Handles tool execution dispatch — the massive switch statement from ChatService.
+ * Each tool has its own handler method for clean separation.
+ * Extracted from ChatService for single-responsibility and testability.
+ */
+
+import { Injectable } from '@nestjs/common';
+import { ToolsService } from '../tools/tools.service';
+import { ReportsService } from '../reports/reports.service';
+import { HacktivityService } from '../hacktivity/hacktivity.service';
+import { PentestJobsService } from '../pentest-jobs/pentest-jobs.service';
+import { ConversationService } from './conversation.service';
+import { getAgentLabel } from './agent-names';
+import type { ModelOptionKey } from '../config/model-options.config';
+
+/** Allowed agent roles for sessions_spawn. */
+export const ALLOWED_AGENT_ROLES = ['recon', 'exploit', 'general'] as const;
+
+export interface ToolExecutionContext {
+  jobId: string;
+  conversationId?: string;
+  userId?: string;
+  memoryScopeId: string;
+  nextAgentIndexRef: { current: number };
+  pushEvent: (ev: { type: string; data: Record<string, any> }) => void;
+  abortSignal?: AbortSignal;
+  modelKey?: ModelOptionKey;
+  maxAgentsForRun?: number;
+}
+
+@Injectable()
+export class ToolExecutorService {
+  constructor(
+    private toolsService: ToolsService,
+    private reportsService: ReportsService,
+    private hacktivityService: HacktivityService,
+    private pentestJobs: PentestJobsService,
+    private conversationService: ConversationService,
+  ) {}
+
+  /**
+   * Run a tool by name with the given arguments.
+   * Returns the tool result as a JSON string.
+   */
+  async runTool(
+    name: string,
+    args: Record<string, any>,
+    context: ToolExecutionContext,
+  ): Promise<string> {
+    if (context.abortSignal?.aborted) {
+      return JSON.stringify({ error: 'Job stopped by user' });
+    }
+    const safeArgs = args ?? {};
+    const scopeId = context.memoryScopeId;
+
+    switch (name) {
+      case 'memory_search':
+        return this.handleMemorySearch(safeArgs, scopeId);
+      case 'memory_get':
+        return this.handleMemoryGet(safeArgs, scopeId);
+      case 'write_file':
+        return this.handleWriteFile(safeArgs, scopeId);
+      case 'write_script':
+        return this.handleWriteScript(safeArgs);
+      case 'exec':
+        return this.handleExec(safeArgs);
+      case 'craft_payload':
+        return this.handleCraftPayload(safeArgs);
+      case 'report_finding':
+        return this.handleReportFinding(safeArgs, context);
+      case 'update_pentest_phase':
+        return this.handleUpdatePentestPhase(safeArgs, context);
+      case 'add_skill':
+        return this.handleAddSkill(safeArgs);
+      case 'download_skill':
+        return this.handleDownloadSkill(safeArgs);
+      case 'download_agent':
+        return this.handleDownloadAgent();
+      case 'git_search':
+        return this.handleGitSearch(safeArgs);
+      case 'agents_list':
+        return this.handleAgentsList();
+      case 'sessions_list':
+        return this.handleSessionsList(safeArgs, context);
+      case 'sessions_history':
+        return this.handleSessionsHistory(safeArgs, context);
+      case 'sessions_send':
+        return this.handleSessionsSend(safeArgs, context);
+      case 'sessions_spawn':
+        return this.handleSessionsSpawn(safeArgs, context);
+      case 'session_status':
+        return this.handleSessionStatus(safeArgs, context);
+      default:
+        return JSON.stringify({ error: `Unknown tool: ${name}` });
+    }
+  }
+
+  // ─── Individual Tool Handlers ───────────────────────────────────────────
+
+  private async handleMemorySearch(args: Record<string, any>, scopeId: string): Promise<string> {
+    const results = await this.toolsService.memorySearch(
+      String(args.query || ''),
+      Number(args.max_results) || 10,
+      scopeId,
+    );
+    const payload: { results: any[]; hint?: string } = { results };
+    if (results.length === 0) {
+      payload.hint = 'No notes yet for this conversation. Use write_file (path: main or daily/website/YYYY-MM-DD, append: true) to save notes.';
+    }
+    return JSON.stringify(payload, null, 2);
+  }
+
+  private async handleMemoryGet(args: Record<string, any>, scopeId: string): Promise<string> {
+    const text = await this.toolsService.memoryGet(
+      String(args.path || ''),
+      args.from != null ? Number(args.from) : undefined,
+      args.lines != null ? Number(args.lines) : undefined,
+      scopeId,
+    );
+    if (!text || !text.trim()) {
+      return '(empty) No content for this path yet. Use write_file (path: main or daily/website/YYYY-MM-DD, append: true) to save notes.';
+    }
+    return text;
+  }
+
+  private async handleWriteFile(args: Record<string, any>, scopeId: string): Promise<string> {
+    const out = await this.toolsService.writeFile(
+      String(args.path || ''),
+      String(args.content || ''),
+      Boolean(args.append),
+      scopeId,
+    );
+    return JSON.stringify(out);
+  }
+
+  private async handleWriteScript(args: Record<string, any>): Promise<string> {
+    const out = await this.toolsService.writeScript(
+      String(args.filename || '').trim(),
+      String(args.content || ''),
+    );
+    return JSON.stringify(out);
+  }
+
+  private async handleExec(args: Record<string, any>): Promise<string> {
+    const cmdLine = String(args.command || '').trim();
+    const parts = cmdLine.split(/\s+/).filter(Boolean);
+    const command = parts[0] || '';
+    const cmdArgs = parts.slice(1);
+    const target = args.target != null ? String(args.target) : undefined;
+    const out = await this.toolsService.execCommand({
+      command,
+      args: cmdArgs.length ? cmdArgs : undefined,
+      commandLine: cmdLine,
+      target,
+    });
+    return JSON.stringify({ stdout: out.stdout, stderr: out.stderr, exitCode: out.exitCode });
+  }
+
+  private async handleCraftPayload(args: Record<string, any>): Promise<string> {
+    const script = String(args.script ?? '').trim();
+    if (!script) {
+      return JSON.stringify({ error: 'craft_payload requires script (e.g. bash or python3 -c "...")' });
+    }
+    const out = await this.toolsService.runPayloadScript(script);
+    return JSON.stringify({ stdout: out.stdout, stderr: out.stderr, exitCode: out.exitCode });
+  }
+
+  private async handleReportFinding(args: Record<string, any>, context: ToolExecutionContext): Promise<string> {
+    if (!context.userId || !context.conversationId) {
+      return JSON.stringify({ error: 'report_finding requires an active conversation' });
+    }
+    const detail = String(args.detail ?? '').trim();
+    if (!detail) {
+      return JSON.stringify({ error: 'report_finding requires detail (description of the bug/finding)' });
+    }
+    const report = await this.reportsService.createFinding(context.userId, context.conversationId, detail, {
+      title: args.title ? String(args.title) : undefined,
+      severity: args.severity ? String(args.severity) : undefined,
+      target: args.target ? String(args.target) : undefined,
+      poc: args.poc ? String(args.poc) : undefined,
+      finding_key: args.finding_key ? String(args.finding_key) : undefined,
+    });
+    return JSON.stringify({ ok: true, report_id: report.id, message: 'Finding saved to database' });
+  }
+
+  private async handleUpdatePentestPhase(args: Record<string, any>, context: ToolExecutionContext): Promise<string> {
+    if (!context.userId || !context.conversationId) {
+      return JSON.stringify({ error: 'update_pentest_phase requires an active conversation' });
+    }
+    const convId = String(args.conversation_id ?? context.conversationId).trim();
+    if (!convId) {
+      return JSON.stringify({ error: 'conversation_id is required' });
+    }
+    await this.pentestJobs.updateStateByConversationId(context.userId, convId, {
+      phase: args.phase != null ? String(args.phase) : undefined,
+      checklist: args.checklist && typeof args.checklist === 'object' ? args.checklist as Record<string, boolean> : undefined,
+      last_action_summary: args.last_action_summary != null ? String(args.last_action_summary) : undefined,
+    });
+    return JSON.stringify({ ok: true, message: 'Pentest phase updated' });
+  }
+
+  private async handleAddSkill(args: Record<string, any>): Promise<string> {
+    const name = String(args.name ?? '').trim();
+    const content = String(args.content ?? '').trim();
+    const description = args.description != null ? String(args.description) : undefined;
+    const out = await this.toolsService.addSkill(name, content, description);
+    return JSON.stringify(out);
+  }
+
+  private async handleDownloadSkill(args: Record<string, any>): Promise<string> {
+    const skillPath = args.path != null ? String(args.path).trim() : '';
+    if (!skillPath) {
+      const list = await this.toolsService.listSkills();
+      return JSON.stringify(list);
+    }
+    const out = await this.toolsService.downloadSkill(skillPath);
+    return JSON.stringify(out);
+  }
+
+  private handleDownloadAgent(): string {
+    const roles = [...ALLOWED_AGENT_ROLES];
+    const agentLabels: Record<number, string> = {};
+    for (let i = 1; i <= 10; i++) {
+      agentLabels[i] = getAgentLabel(i);
+    }
+    return JSON.stringify({
+      roles,
+      agent_labels: agentLabels,
+      hint: 'Use sessions_spawn with role to create a sub-agent (recon, exploit, general).',
+    });
+  }
+
+  private async handleGitSearch(args: Record<string, any>): Promise<string> {
+    const query = String(args.query ?? '').trim();
+    const apiUrl = args.api_url != null ? String(args.api_url) : undefined;
+    const out = await this.toolsService.gitSearch(query, apiUrl);
+    return JSON.stringify(out);
+  }
+
+  private handleAgentsList(): string {
+    const roles = [...ALLOWED_AGENT_ROLES];
+    return JSON.stringify({ roles, hint: 'Use sessions_spawn with role to create a sub-agent (recon, exploit, general).' });
+  }
+
+  private async handleSessionsList(args: Record<string, any>, context: ToolExecutionContext): Promise<string> {
+    if (!context.userId) return JSON.stringify({ error: 'sessions_list requires an active user' });
+    const list = await this.conversationService.listSessions(context.userId, {
+      parent_id: args.parent_id ? String(args.parent_id) : undefined,
+      role: args.role ? String(args.role) : undefined,
+      last: args.last != null ? Number(args.last) : undefined,
+    });
+    return JSON.stringify({ sessions: list });
+  }
+
+  private async handleSessionsHistory(args: Record<string, any>, context: ToolExecutionContext): Promise<string> {
+    const sessionId = String(args.session_id ?? '').trim();
+    if (!sessionId) return JSON.stringify({ error: 'sessions_history requires session_id' });
+    if (!context.userId) return JSON.stringify({ error: 'sessions_history requires an active user' });
+    const history = await this.conversationService.getSessionHistory(context.userId, sessionId, args.last != null ? Number(args.last) : 50);
+    return JSON.stringify({ session_id: sessionId, messages: history });
+  }
+
+  private async handleSessionsSend(args: Record<string, any>, context: ToolExecutionContext): Promise<string> {
+    const sessionId = String(args.session_id ?? '').trim();
+    const msg = String(args.message ?? '').trim();
+    if (!sessionId || !msg) return JSON.stringify({ error: 'sessions_send requires session_id and message' });
+    if (!context.userId || !context.conversationId) return JSON.stringify({ error: 'sessions_send requires an active conversation' });
+    
+    const waitForReply = args.wait_for_reply !== false;
+    const subIndex = context.nextAgentIndexRef ? context.nextAgentIndexRef.current++ : 2;
+    const subLabel = getAgentLabel(subIndex);
+    
+    // This delegates back to the agent orchestrator — we import it lazily to avoid circular deps
+    // The actual sendToSession logic will be handled by AgentOrchestratorService
+    return JSON.stringify({
+      _delegate: 'sessions_send',
+      sessionId,
+      message: msg,
+      waitForReply,
+      subIndex,
+      subLabel,
+    });
+  }
+
+  private async handleSessionsSpawn(args: Record<string, any>, context: ToolExecutionContext): Promise<string> {
+    if (!context.userId || !context.conversationId) return JSON.stringify({ error: 'sessions_spawn requires an active conversation' });
+    
+    const result = await this.conversationService.spawnSession(
+      context.userId,
+      context.conversationId,
+      args.role ? String(args.role) : undefined,
+      args.title ? String(args.title) : undefined,
+      ALLOWED_AGENT_ROLES,
+    );
+    return JSON.stringify(result);
+  }
+
+  private async handleSessionStatus(args: Record<string, any>, context: ToolExecutionContext): Promise<string> {
+    const sessionId = (args.session_id ?? context.conversationId) ?? '';
+    if (!sessionId) return JSON.stringify({ error: 'session_status requires session_id (or current conversation)' });
+    if (!context.userId) return JSON.stringify({ error: 'session_status requires an active user' });
+    const status = await this.conversationService.getSessionStatus(context.userId, sessionId);
+    return JSON.stringify(status);
+  }
+
+  /**
+   * Extract domain/target from tool args for Hacktivity logging.
+   */
+  extractDomainFromArgs(args: Record<string, any>): string | null {
+    const a = args ?? {};
+    const target = (a.target ?? '').toString().trim();
+    if (target) return target;
+    const url = (a.url ?? '').toString().trim();
+    if (url) return url;
+    const cmd = (a.command ?? '').toString().trim();
+    if (cmd) {
+      const urlLike = cmd.match(/https?:\/\/[^\s]+/);
+      if (urlLike) return urlLike[0];
+    }
+    return null;
+  }
+
+  /**
+   * One-line description for reasoning event before each tool (Cursor-style).
+   */
+  formatToolReasoning(name: string, args: Record<string, any>): string {
+    const safeArgs = args ?? {};
+    const q = (safeArgs.query ?? '').toString().trim();
+    const pathVal = (safeArgs.path ?? '').toString().trim();
+    const cmd = (safeArgs.command ?? '').toString().trim();
+    const maxLen = 60;
+    switch (name) {
+      case 'memory_search':
+        return q ? `Searching memory for: ${q.slice(0, maxLen)}${q.length > maxLen ? '...' : ''}` : 'Searching memory...';
+      case 'memory_get':
+        return pathVal ? `Reading ${pathVal}` : 'Reading file...';
+      case 'write_file':
+        return pathVal ? `Writing to ${pathVal}` : 'Writing...';
+      case 'write_script':
+        return (safeArgs.filename as string)?.trim()
+          ? `Writing script: ${String(safeArgs.filename).slice(0, maxLen)}`
+          : 'Writing script...';
+      case 'exec':
+        return cmd ? `Running: ${cmd.slice(0, maxLen)}${cmd.length > maxLen ? '...' : ''}` : 'Running command...';
+      case 'craft_payload':
+        return (safeArgs.script as string)?.trim()
+          ? `Running payload script: ${String(safeArgs.script).slice(0, maxLen)}${String(safeArgs.script).length > maxLen ? '...' : ''}`
+          : 'Running payload script...';
+      case 'report_finding':
+        return (safeArgs.detail as string)?.trim()
+          ? `Saving finding: ${String(safeArgs.detail).slice(0, maxLen)}${String(safeArgs.detail).length > maxLen ? '...' : ''}`
+          : 'Saving finding to report...';
+      case 'update_pentest_phase':
+        return safeArgs.phase ? `Updating phase: ${String(safeArgs.phase)}` : 'Updating pentest phase...';
+      case 'add_skill':
+        return (safeArgs.name as string)?.trim()
+          ? `Adding skill: ${String(safeArgs.name).slice(0, maxLen)}`
+          : 'Adding skill...';
+      case 'download_skill':
+        return (safeArgs.path as string)?.trim()
+          ? `Downloading skill: ${String(safeArgs.path).slice(0, maxLen)}`
+          : 'Listing skills...';
+      case 'download_agent':
+        return 'Downloading agent info...';
+      case 'git_search':
+        return (safeArgs.query as string)?.trim()
+          ? `Searching GitHub: ${String(safeArgs.query).slice(0, maxLen)}`
+          : 'Searching GitHub...';
+      case 'agents_list':
+        return 'Listing allowed agent roles...';
+      case 'sessions_list':
+        return 'Listing sessions...';
+      case 'sessions_history':
+        return safeArgs.session_id ? `Fetching history for session ${String(safeArgs.session_id).slice(0, 8)}...` : 'Fetching session history...';
+      case 'sessions_send':
+        return (safeArgs.message as string)?.trim()
+          ? `Sending to session: ${String(safeArgs.message).slice(0, maxLen)}${String(safeArgs.message).length > maxLen ? '...' : ''}`
+          : 'Sending message to session...';
+      case 'sessions_spawn':
+        return safeArgs.role ? `Spawning sub-agent: ${String(safeArgs.role)}` : 'Spawning sub-agent session...';
+      case 'session_status':
+        return safeArgs.session_id ? `Status for session ${String(safeArgs.session_id).slice(0, 8)}...` : 'Session status...';
+      default:
+        return `Running: ${name}`;
+    }
+  }
+
+  /**
+   * Log tool execution to Hacktivity.
+   */
+  async logToolExecution(
+    userId: string,
+    conversationId: string | undefined,
+    args: Record<string, any>,
+    toolResult: string,
+  ): Promise<void> {
+    if (!userId) return;
+    const domain = this.extractDomainFromArgs(args);
+    try {
+      await this.hacktivityService.create(userId, {
+        conversationId: conversationId ?? null,
+        domain: domain ?? null,
+        result: toolResult,
+        toolArgs: args,
+      });
+    } catch (err: any) {
+      console.warn('[Hacktivity] log failed', err?.message);
+    }
+  }
+}
