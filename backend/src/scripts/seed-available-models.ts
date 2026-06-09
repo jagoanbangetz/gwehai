@@ -1,7 +1,12 @@
 /**
- * Seed chat models for the picker: Auto, DeepSeek Reasoner, DeepSeek Coder, GPT-4o, Claude Opus 4.5, Gemini 2.5 Flash.
- * - GPT-4o: supports function calling (tools) for pentest. GPT-5-class reasoning (o1) may need different API.
- * - DeepSeek: Auto = deepseek-chat, plus deepseek-reasoner (R1) and deepseek-coder. All use DEEPSEEK_API_KEY.
+ * Seed chat models for the picker: Auto, DeepSeek Reasoner (R1), GPT-4o, GPT-4.1, o3-mini, o4-mini,
+ * Claude Sonnet 4, Claude 3.5 Haiku, Gemini 2.5 Flash, Gemini 2.5 Pro, Grok 3, Llama 4.
+ * - DeepSeek: Auto = deepseek-chat (V3), plus deepseek-reasoner (R1). All use DEEPSEEK_API_KEY.
+ * - OpenAI: GPT-4o, GPT-4.1, o3-mini, o4-mini. All use OPENAI_API_KEY.
+ * - Anthropic: Claude Sonnet 4, Claude 3.5 Haiku. All use ANTHROPIC_API_KEY.
+ * - Google: Gemini 2.5 Flash, Gemini 2.5 Pro. All use GEMINI_API_KEY.
+ * - xAI: Grok 3. Uses XAI_API_KEY (OpenAI-compatible API at api.x.ai).
+ * - Meta: Llama 4. Uses META_API_KEY + META_BASE_URL (OpenAI-compatible, e.g. Groq/Together).
  * Run: npm run db:seed-models
  */
 
@@ -28,14 +33,33 @@ function getEnv(key: string, fallback: string): string {
   return (v && String(v).trim()) ? String(v).trim() : fallback;
 }
 
-// Picker models. DeepSeek options use key 'auto' (same API, different model id). GPT-4o supports tools for pentest.
+// Picker models. DeepSeek options use key 'auto' (same API, different model id). All OpenAI models use key 'openai' (same API key).
 const MODELS: ModelSeedRow[] = [
+  // --- Auto (default) ---
   { name: 'auto/deepseek', displayName: 'Auto', provider: ModelProvider.CUSTOM, key: 'auto', apiModelId: getEnv('DEFAULT_AUTO_MODEL', getEnv('DEEPSEEK_MODEL_ID', 'deepseek-chat')), pointsPer1kInput: 3, pointsPer1kOutput: 6 },
-  { name: 'deepseek/reasoner', displayName: 'DeepSeek Reasoner', provider: ModelProvider.CUSTOM, key: 'auto', apiModelId: 'deepseek-reasoner', pointsPer1kInput: 6, pointsPer1kOutput: 44 },
-  { name: 'deepseek/coder', displayName: 'DeepSeek Coder', provider: ModelProvider.CUSTOM, key: 'auto', apiModelId: 'deepseek-coder', pointsPer1kInput: 3, pointsPer1kOutput: 6 },
+
+  // --- DeepSeek ---
+  { name: 'deepseek/reasoner', displayName: 'DeepSeek Reasoner (R1)', provider: ModelProvider.CUSTOM, key: 'auto', apiModelId: 'deepseek-reasoner', pointsPer1kInput: 6, pointsPer1kOutput: 44 },
+
+  // --- OpenAI ---
   { name: 'openai/gpt-4o', displayName: 'GPT-4o', provider: ModelProvider.OPENAI, key: 'openai_gpt5', apiModelId: getEnv('OPENAI_GPT5_MODEL_ID', 'gpt-4o'), pointsPer1kInput: 50, pointsPer1kOutput: 200 },
-  { name: 'anthropic/claude-opus-4-5', displayName: 'Claude Opus 4.5', provider: ModelProvider.ANTHROPIC, key: 'claude', apiModelId: getEnv('CLAUDE_MODEL_ID', 'claude-opus-4-5-20251101'), pointsPer1kInput: 60, pointsPer1kOutput: 300 },
-  { name: 'gemini/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', provider: ModelProvider.GOOGLE, key: 'gemini', apiModelId: getEnv('GEMINI_MODEL_ID', 'gemini-2.5-flash'), pointsPer1kInput: 2, pointsPer1kOutput: 8 },
+  { name: 'openai/gpt-4.1', displayName: 'GPT-4.1', provider: ModelProvider.OPENAI, key: 'openai_gpt5', apiModelId: 'gpt-4.1', pointsPer1kInput: 40, pointsPer1kOutput: 160 },
+  { name: 'openai/o3-mini', displayName: 'o3-mini', provider: ModelProvider.OPENAI, key: 'openai_gpt5', apiModelId: 'o3-mini', pointsPer1kInput: 22, pointsPer1kOutput: 88 },
+  { name: 'openai/o4-mini', displayName: 'o4-mini', provider: ModelProvider.OPENAI, key: 'openai_gpt5', apiModelId: 'o4-mini', pointsPer1kInput: 22, pointsPer1kOutput: 88 },
+
+  // --- Anthropic ---
+  { name: 'anthropic/claude-sonnet-4', displayName: 'Claude Sonnet 4', provider: ModelProvider.ANTHROPIC, key: 'claude', apiModelId: 'claude-sonnet-4-20250514', pointsPer1kInput: 60, pointsPer1kOutput: 300 },
+  { name: 'anthropic/claude-haiku-3.5', displayName: 'Claude 3.5 Haiku', provider: ModelProvider.ANTHROPIC, key: 'claude', apiModelId: 'claude-3-5-haiku-20241022', pointsPer1kInput: 8, pointsPer1kOutput: 40 },
+
+  // --- Google ---
+  { name: 'google/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', provider: ModelProvider.GOOGLE, key: 'gemini', apiModelId: getEnv('GEMINI_MODEL_ID', 'gemini-2.5-flash'), pointsPer1kInput: 2, pointsPer1kOutput: 8 },
+  { name: 'google/gemini-2.5-pro', displayName: 'Gemini 2.5 Pro', provider: ModelProvider.GOOGLE, key: 'gemini', apiModelId: 'gemini-2.5-pro', pointsPer1kInput: 25, pointsPer1kOutput: 200 },
+
+  // --- xAI (OpenAI-compatible API) ---
+  { name: 'xai/grok-3', displayName: 'Grok 3', provider: ModelProvider.CUSTOM, key: 'xai', apiModelId: 'grok-3', pointsPer1kInput: 60, pointsPer1kOutput: 300 },
+
+  // --- Meta (OpenAI-compatible via Groq/Together/etc.) ---
+  { name: 'meta/llama-4', displayName: 'Llama 4', provider: ModelProvider.CUSTOM, key: 'meta', apiModelId: 'llama-4', pointsPer1kInput: 4, pointsPer1kOutput: 12 },
 ];
 
 async function seedAvailableModels() {
@@ -68,7 +92,7 @@ async function seedAvailableModels() {
   }
 
   const metadataProvider = (key: string) =>
-    key === 'gemini' ? 'gemini' : key === 'auto' ? 'deepseek' : key === 'claude' ? 'anthropic' : 'openai';
+    key === 'gemini' ? 'gemini' : key === 'auto' ? 'deepseek' : key === 'claude' ? 'anthropic' : key === 'xai' ? 'xai' : key === 'meta' ? 'meta' : 'openai';
 
   for (const row of MODELS) {
     const isDefault = row.name === 'auto/deepseek';
@@ -100,7 +124,7 @@ async function seedAvailableModels() {
     }
   }
 
-  console.log('\nDone. Picker shows: Auto, DeepSeek Reasoner, DeepSeek Coder, GPT-4o, Claude Opus 4.5, Gemini 2.5 Flash.');
+  console.log('\nDone. Picker shows: Auto, DeepSeek R1, GPT-4o, GPT-4.1, o3-mini, o4-mini, Claude Sonnet 4, Claude 3.5 Haiku, Gemini 2.5 Flash, Gemini 2.5 Pro, Grok 3, Llama 4.');
   await dataSource.destroy();
   process.exit(0);
 }

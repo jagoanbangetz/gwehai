@@ -13,7 +13,7 @@ config({ path: path.join(__dirname, '../../.env') });
 import { Model, ModelProvider } from '../entities/model.entity';
 import { getModelOptions } from '../config/model-options.config';
 
-const MODEL_OPTION_NAMES = ['model-picker/auto', 'model-picker/deepseek', 'model-picker/openai_gpt5', 'model-picker/claude', 'model-picker/gemini'] as const;
+const MODEL_OPTION_NAMES = ['model-picker/auto', 'model-picker/deepseek', 'model-picker/openai_gpt5', 'model-picker/claude', 'model-picker/gemini', 'model-picker/xai', 'model-picker/meta'] as const;
 
 async function seedModelOptions() {
   const dataSource = new DataSource({
@@ -47,7 +47,9 @@ async function seedModelOptions() {
         ? ModelProvider.OPENAI
         : opt.provider === 'anthropic'
           ? ModelProvider.ANTHROPIC
-          : ModelProvider.CUSTOM;
+          : opt.provider === 'google'
+            ? ModelProvider.GOOGLE
+            : ModelProvider.CUSTOM;
     const model = modelRepo.create({
       name,
       displayName: opt.label,

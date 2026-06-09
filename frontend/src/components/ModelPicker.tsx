@@ -18,6 +18,7 @@ const STORAGE_MODEL_ID_KEY = 'gwehai_model_id'
 const GROUP_ORDER: ModelKey[] = ['auto', 'openai_gpt5', 'claude', 'gemini']
 const GROUP_LABELS: Record<ModelKey, string> = {
   auto: 'Auto',
+  deepseek: 'DeepSeek',
   openai_gpt5: 'OpenAI',
   claude: 'Claude',
   gemini: 'Gemini',

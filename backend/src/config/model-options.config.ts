@@ -5,10 +5,10 @@
  * IMPORTANT: Auto = DeepSeek. The "Auto" option uses the DeepSeek provider and DEEPSEEK_API_KEY.
  */
 
-export type ModelOptionKey = 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini';
+export type ModelOptionKey = 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini' | 'xai' | 'meta';
 
 /** Keys for models that support chat/completion (not image-generation or other specialty). Used to filter model picker list. */
-export const CHAT_CAPABLE_MODEL_KEYS: ModelOptionKey[] = ['auto', 'deepseek', 'openai_gpt5', 'claude', 'gemini'];
+export const CHAT_CAPABLE_MODEL_KEYS: ModelOptionKey[] = ['auto', 'deepseek', 'openai_gpt5', 'claude', 'gemini', 'xai', 'meta'];
 
 export function isChatCapableModelKey(key: unknown): key is ModelOptionKey {
   return typeof key === 'string' && CHAT_CAPABLE_MODEL_KEYS.includes(key as ModelOptionKey);
@@ -17,7 +17,7 @@ export function isChatCapableModelKey(key: unknown): key is ModelOptionKey {
 export interface ModelOption {
   key: ModelOptionKey;
   label: string;
-  provider: 'deepseek' | 'openai' | 'anthropic' | 'gemini';
+  provider: 'deepseek' | 'openai' | 'anthropic' | 'gemini' | 'xai' | 'meta';
   defaultModel: string;
   apiKeyEnv: string;
 }
@@ -68,6 +68,20 @@ export function getModelOptions(): ModelOption[] {
       provider: 'gemini',
       defaultModel: getEnv('GEMINI_MODEL_ID', 'gemini-2.5-flash'),
       apiKeyEnv: 'GEMINI_API_KEY',
+    },
+    {
+      key: 'xai',
+      label: 'Grok',
+      provider: 'xai',
+      defaultModel: getEnv('XAI_MODEL_ID', 'grok-3'),
+      apiKeyEnv: 'XAI_API_KEY',
+    },
+    {
+      key: 'meta',
+      label: 'Llama',
+      provider: 'meta',
+      defaultModel: getEnv('META_MODEL_ID', 'llama-4'),
+      apiKeyEnv: 'META_API_KEY',
     },
   ];
 }
