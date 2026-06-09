@@ -79,11 +79,11 @@ export default function SidebarHeader({
           </span>
           <span className="nav-text">Search Chat</span>
         </button>
-        <button className="nav-item" onClick={() => navigate('/agent/pentest-runner')} title="Pentest Job Runner">
+        <button className="nav-item" onClick={() => navigate('/agent/pentest-runner')} title="Pentest Job Runner" data-tour="pentest-runner">
           <span className="nav-icon">&#9876;</span>
           <span className="nav-text">Pentest Runner</span>
         </button>
-        <button className="nav-item" onClick={onShowReport} title="Security Reports">
+        <button className="nav-item" onClick={onShowReport} title="Security Reports" data-tour="report-button">
           <span className="nav-icon">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -95,7 +95,7 @@ export default function SidebarHeader({
           </span>
           <span className="nav-text">Report</span>
         </button>
-        <button className="nav-item" onClick={onShowHacktivity} title="Hacktivity">
+        <button className="nav-item" onClick={onShowHacktivity} title="Hacktivity" data-tour="hacktivity-button">
           <span className="nav-icon">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>

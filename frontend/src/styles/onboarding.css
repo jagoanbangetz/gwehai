@@ -1,0 +1,152 @@
+/* ─── GwehAI Onboarding Tour — Driver.js Theme Override ─── */
+
+.gwehai-tour-popover.driver-popover {
+  background: #1a1a2e;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(139, 92, 246, 0.1);
+  color: #e2e8f0;
+  max-width: 360px;
+  min-width: 280px;
+  font-family: inherit;
+}
+
+.gwehai-tour-popover .driver-popover-title {
+  color: #f8fafc;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+}
+
+.gwehai-tour-popover .driver-popover-description {
+  color: #cbd5e1;
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.gwehai-tour-popover .driver-popover-progress-text {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.gwehai-tour-popover .driver-popover-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(139, 92, 246, 0.15);
+  margin-top: 4px;
+}
+
+.gwehai-tour-popover .driver-popover-btn {
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 16px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: none;
+  font-family: inherit;
+}
+
+.gwehai-tour-popover .driver-popover-close-btn {
+  color: #94a3b8;
+  background: transparent;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  font-size: 18px;
+  line-height: 1;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.gwehai-tour-popover .driver-popover-close-btn:hover {
+  color: #f8fafc;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.gwehai-tour-popover .driver-popover-btn-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.gwehai-tour-popover .driver-popover-prev-btn {
+  background: rgba(255, 255, 255, 0.06);
+  color: #cbd5e1;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.gwehai-tour-popover .driver-popover-prev-btn:hover:not(.driver-popover-btn-disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+}
+
+.gwehai-tour-popover .driver-popover-next-btn {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  color: #fff;
+  border: none;
+}
+
+.gwehai-tour-popover .driver-popover-next-btn:hover:not(.driver-popover-btn-disabled) {
+  background: linear-gradient(135deg, #9d74f7, #8b5cf6);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+/* Skip button styling (close btn doubles as skip) */
+.gwehai-tour-popover .driver-popover-close-btn::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+
+/* Highlighted stage */
+.gwehai-tour-popover-active-stage {
+  border-radius: 8px !important;
+}
+
+/* Arrow color */
+.gwehai-tour-popover .driver-popover-arrow {
+  border-color: #1a1a2e;
+}
+
+.gwehai-tour-popover .driver-popover-arrow-side-over::after,
+.gwehai-tour-popover .driver-popover-arrow-side-left::after,
+.gwehai-tour-popover .driver-popover-arrow-side-right::after,
+.gwehai-tour-popover .driver-popover-arrow-side-bottom::after {
+  border-bottom-color: #1a1a2e;
+}
+
+.gwehai-tour-popover .driver-popover-arrow-side-top::after {
+  border-top-color: #1a1a2e;
+}
+
+/* Mobile responsive */
+@media (max-width: 640px) {
+  .gwehai-tour-popover.driver-popover {
+    max-width: calc(100vw - 32px);
+    min-width: unset;
+    margin: 0 16px;
+  }
+
+  .gwehai-tour-popover .driver-popover-title {
+    font-size: 15px;
+  }
+
+  .gwehai-tour-popover .driver-popover-description {
+    font-size: 13px;
+  }
+}

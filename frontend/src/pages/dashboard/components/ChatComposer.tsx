@@ -70,7 +70,7 @@ export default function ChatComposer({
         </div>
       )}
       <div className="chat-input-row">
-        <div className="chat-mode-selector" role="group" aria-label="Chat mode">
+        <div className="chat-mode-selector" role="group" aria-label="Chat mode" data-tour="chat-mode">
           <button
             type="button"
             className={`chat-mode-btn ${chatMode === 'agent' ? 'active' : ''}`}
@@ -96,7 +96,7 @@ export default function ChatComposer({
             <span className="chat-mode-label">Ask</span>
           </button>
         </div>
-        <div className="chat-model-picker">
+        <div className="chat-model-picker" data-tour="model-picker">
           <ModelPicker
             value={selectedModelKey}
             onChange={(key, modelId) => onModelChange(key, modelId ?? null)}
@@ -140,6 +140,7 @@ export default function ChatComposer({
               rows={1}
               disabled={isLoading}
               aria-label="Chat input"
+              data-tour="chat-input"
             />
             <div className="input-actions">
               {isLoading ? (
@@ -177,6 +178,7 @@ export default function ChatComposer({
                     disabled={!input.trim()}
                     title="Send message (Enter)"
                     aria-label="Send message"
+                    data-tour="send-button"
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <line x1="22" y1="2" x2="11" y2="13" />
