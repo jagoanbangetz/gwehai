@@ -16,6 +16,8 @@ import { HacktivityModule } from '../hacktivity/hacktivity.module';
 import { PlansModule } from '../plans/plans.module';
 import { PentestJobsModule } from '../pentest-jobs/pentest-jobs.module';
 import { BillingModule } from '../billing/billing.module';
+import { AttackChainModule } from '../attack-chain/attack-chain.module';
+import { BrowserAgentModule } from '../browser-agent/browser-agent.module';
 import { ConversationService } from './conversation.service';
 import { CostService } from './cost.service';
 import { ToolExecutorService } from './tool-executor.service';
@@ -32,6 +34,8 @@ import { AgentOrchestratorService } from './agent-orchestrator.service';
     HacktivityModule,
     PlansModule,
     forwardRef(() => PentestJobsModule),
+    AttackChainModule,
+    BrowserAgentModule,
   ],
   controllers: [ChatController],
   providers: [

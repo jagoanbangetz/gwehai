@@ -16,6 +16,7 @@ import { ConversationService } from './conversation.service';
 import { AttackChainService } from '../attack-chain/attack-chain.service';
 import { JwtAnalyzerService } from '../tools/jwt-analyzer.service';
 import { BrowserAgentService } from '../browser-agent/browser-agent.service';
+import { GlobalMemoryService } from '../tools/global-memory.service';
 import { getAgentLabel } from './agent-names';
 import type { ModelOptionKey } from '../config/model-options.config';
 
@@ -46,6 +47,7 @@ export class ToolExecutorService {
     private conversationService: ConversationService,
     private attackChainService: AttackChainService,
     private browserAgentService: BrowserAgentService,
+    private globalMemoryService: GlobalMemoryService,
   ) {}
 
   /**
@@ -108,6 +110,8 @@ export class ToolExecutorService {
         return this.handleAttackChain(safeArgs);
       case 'browser_action':
         return this.handleBrowserAction(safeArgs, context);
+      case 'global_memory':
+        return this.handleGlobalMemory(safeArgs);
       default:
         return JSON.stringify({ error: `Unknown tool: ${name}` });
     }
@@ -239,6 +243,35 @@ export class ToolExecutorService {
       confidence_reason: confidenceReason,
       confidence_label: confidenceLabel,
     });
+
+    // Auto-learning: save successful payload to GlobalMemory when confidence >= 80
+    if (confidence >= 80) {
+      try {
+        const vulnType = args.severity ? String(args.severity).toLowerCase() : 'unknown';
+        const detailLower = detail.toLowerCase();
+        // Extract vuln type from detail text
+        const vulnMatch = detailLower.match(/(sqli|sql.?injection|xss|csrf|idor|ssrf|xxe|rce|lfi|rfi|open.?redirect|auth.?bypass|privilege.?escalation)/);
+        const detectedVuln = vulnMatch ? vulnMatch[1].replace(/\s+/g, '_') : vulnType;
+        const pocStr = args.poc ? String(args.poc) : '';
+        const payloadMatch = pocStr.match(/(?:payload|inject|send|curl|request)[:\s]*[`"']?([^`"'\n]{10,200})/i);
+        const extractedPayload = payloadMatch ? payloadMatch[1].trim() : pocStr.substring(0, 200);
+
+        await this.globalMemoryService.autoSavePayload({
+          vulnType: detectedVuln,
+          payload: extractedPayload,
+          context: {
+            detail: detail.substring(0, 500),
+            target: args.target ? String(args.target) : undefined,
+            poc: pocStr.substring(0, 500),
+            findingKey: args.finding_key ? String(args.finding_key) : undefined,
+          },
+          confidence,
+        });
+      } catch {
+        // Silent fail — auto-learning is best-effort, shouldn't break report_finding
+      }
+    }
+
     return JSON.stringify({ ok: true, report_id: report.id, confidence, confidence_label: confidenceLabel, message: 'Finding saved to database' });
   }
 
@@ -619,6 +652,12 @@ export class ToolExecutorService {
         return safeArgs.action
           ? `Browser: ${String(safeArgs.action)}${safeArgs.url ? ` on ${String(safeArgs.url).slice(0, maxLen)}` : ''}${safeArgs.selector ? ` → ${String(safeArgs.selector).slice(0, maxLen)}` : ''}`
           : 'Running browser action...';
+      case 'global_memory':
+        return safeArgs.action === 'search'
+          ? `Searching global memory: ${String(safeArgs.query || '').slice(0, maxLen)}...`
+          : safeArgs.action === 'save'
+            ? `Saving to global memory: ${String(safeArgs.key || '').slice(0, maxLen)}`
+            : `Updating global memory: ${String(safeArgs.key || '').slice(0, maxLen)}`;
       default:
         return `Running: ${name}`;
     }
