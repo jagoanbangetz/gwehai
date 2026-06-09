@@ -79,10 +79,13 @@ jobs:
 
       - name: Health check
         run: |
-          sleep 3
-          curl -sSf http://45.77.250.83:3100/api/health | jq -e '.status == "ok"'
-          echo "✅ Health check passed — backend OK"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no root@45.77.250.83 "
+            sleep 3
+            curl -sSf http://127.0.0.1:3100/api/health | jq -e '.status == \"ok\"'
+            echo '✅ Health check passed — backend OK'
+          "
 
       - name: Verify frontend
         run: |
+          sleep 2
           curl -sSf -o /dev/null -w "Frontend HTTP %{http_code}\n" https://dev.gweh.sh/
