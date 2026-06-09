@@ -2,6 +2,8 @@ import MarkdownMessage from '../../../components/MarkdownMessage'
 import FollowUpChips from '../../../components/FollowUpChips'
 import ThinkingBar from '../../../components/ThinkingBar'
 import StatusBadge from '../../../components/StatusBadge'
+import ProgressIndicator from '../../../components/ProgressIndicator'
+import type { ProgressState } from '../../../components/ProgressIndicator'
 import { GwehLogRenderer } from '../../../components/GwehLog'
 import { getModelLabel } from '../../../components/ModelPicker'
 import type { Message } from '../types'
@@ -18,6 +20,7 @@ interface ChatMessagesProps {
   pentestChecklistProgress: { phase: string; phase_display?: string; current_section_display?: string | null; checklist: Record<string, boolean> } | null
   onSendWithText: (text: string) => void
   showToast: (msg: string, type?: 'success' | 'error' | 'info' | 'warning') => void
+  onStop?: () => void
   disabled?: boolean
 }
 
@@ -38,8 +41,23 @@ export default function ChatMessages({
   pentestChecklistProgress,
   onSendWithText,
   showToast: _showToast,
+  onStop,
   disabled,
 }: ChatMessagesProps) {
+  // Derive progress state for ProgressIndicator
+  const lastMsg = messages[messages.length - 1]
+  const isStreaming = lastMsg?.role === 'assistant' && lastMsg.isStreaming && !lastMsg.done
+  const progressState: ProgressState = (() => {
+    if (!isLoading && !isStreaming) return 'idle'
+    if (lastMsg?.eventType === 'error') return 'error'
+    if (isStreaming) {
+      if (lastMsg?.eventType === 'thinking' || lastMsg?.eventType === 'planning') return 'thinking'
+      return 'generating'
+    }
+    if (lastMsg?.done) return 'done'
+    return 'thinking'
+  })()
+
   if (messages.length === 0) {
     return (
       <div className="chat-empty">
@@ -51,6 +69,13 @@ export default function ChatMessages({
 
   return (
     <div className="chat-messages">
+      {/* Progress indicator — AI builder style status bar */}
+      <ProgressIndicator
+        state={progressState}
+        currentStep={currentStep}
+        activityLog={activityLog}
+        onStop={onStop}
+      />
       {messages
         .filter((message) => {
           if (message.role === 'user') return true
