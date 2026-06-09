@@ -23,7 +23,7 @@ export interface Message {
   done?: boolean
   toolIds?: string[]
   /** Selected model key for this turn (shown as badge on assistant bubble) */
-  modelKey?: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini'
+  modelKey?: 'auto' | 'openai_gpt5' | 'claude' | 'gemini'
   /** AI thinking (<think> block) — shown above the final reply */
   thinking?: string
   /** Animated substring of thinking for typing effect; hidden when done */

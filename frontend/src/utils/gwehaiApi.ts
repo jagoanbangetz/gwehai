@@ -123,7 +123,7 @@ export class GwehAIClient {
     message: string,
     stream: boolean = true,
     jobId?: string,
-    modelKey?: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini',
+    modelKey?: 'auto' | 'openai_gpt5' | 'claude' | 'gemini',
     mode?: 'agent' | 'ask',
     modelId?: string,
     maxAgents?: number

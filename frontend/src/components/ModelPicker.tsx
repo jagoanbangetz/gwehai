@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react'
 import apiClient from '../utils/api'
 import './ModelPicker.css'
 
-export type ModelKey = 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini'
+export type ModelKey = 'auto' | 'openai_gpt5' | 'claude' | 'gemini'
 
 /** Auto uses DeepSeek under the hood; DeepSeek is not shown as a separate option. */
 export const MODEL_OPTIONS: { key: ModelKey; label: string }[] = [
@@ -18,7 +18,6 @@ const STORAGE_MODEL_ID_KEY = 'gwehai_model_id'
 const GROUP_ORDER: ModelKey[] = ['auto', 'openai_gpt5', 'claude', 'gemini']
 const GROUP_LABELS: Record<ModelKey, string> = {
   auto: 'Auto',
-  deepseek: 'DeepSeek',
   openai_gpt5: 'OpenAI',
   claude: 'Claude',
   gemini: 'Gemini',
@@ -27,7 +26,7 @@ const GROUP_LABELS: Record<ModelKey, string> = {
 export function getStoredModelKey(): ModelKey {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw === 'deepseek') return 'auto' // Auto uses DeepSeek; migrate stored deepseek to auto
+    if (raw === 'deepseek' || raw === 'auto') return 'auto'
     if (raw && MODEL_OPTIONS.some(o => o.key === raw)) return raw as ModelKey
   } catch (_) {}
   return 'auto'
@@ -47,7 +46,6 @@ export function setStoredModelKey(key: ModelKey): void {
 }
 
 export function getModelLabel(key: ModelKey): string {
-  if (key === 'deepseek') return 'Auto' // Auto uses DeepSeek; treat stored "deepseek" as Auto
   return MODEL_OPTIONS.find(o => o.key === key)?.label ?? key
 }
 
