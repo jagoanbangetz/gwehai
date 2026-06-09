@@ -9,9 +9,13 @@
 import { Injectable } from '@nestjs/common';
 import { ToolsService } from '../tools/tools.service';
 import { ReportsService } from '../reports/reports.service';
+import { ReVerifyService } from '../reports/re-verify.service';
 import { HacktivityService } from '../hacktivity/hacktivity.service';
 import { PentestJobsService } from '../pentest-jobs/pentest-jobs.service';
 import { ConversationService } from './conversation.service';
+import { AttackChainService } from '../attack-chain/attack-chain.service';
+import { JwtAnalyzerService } from '../tools/jwt-analyzer.service';
+import { BrowserAgentService } from '../browser-agent/browser-agent.service';
 import { getAgentLabel } from './agent-names';
 import type { ModelOptionKey } from '../config/model-options.config';
 
@@ -34,10 +38,14 @@ export interface ToolExecutionContext {
 export class ToolExecutorService {
   constructor(
     private toolsService: ToolsService,
+    private jwtAnalyzer: JwtAnalyzerService,
     private reportsService: ReportsService,
+    private reVerifyService: ReVerifyService,
     private hacktivityService: HacktivityService,
     private pentestJobs: PentestJobsService,
     private conversationService: ConversationService,
+    private attackChainService: AttackChainService,
+    private browserAgentService: BrowserAgentService,
   ) {}
 
   /**
@@ -70,8 +78,12 @@ export class ToolExecutorService {
         return this.handleCraftPayload(safeArgs);
       case 'report_finding':
         return this.handleReportFinding(safeArgs, context);
+      case 'jwt_analyze':
+        return this.handleJwtAnalyze(safeArgs);
       case 'update_pentest_phase':
         return this.handleUpdatePentestPhase(safeArgs, context);
+      case 're_verify_findings':
+        return this.handleReVerifyFindings(safeArgs, context);
       case 'add_skill':
         return this.handleAddSkill(safeArgs);
       case 'download_skill':
@@ -92,6 +104,10 @@ export class ToolExecutorService {
         return this.handleSessionsSpawn(safeArgs, context);
       case 'session_status':
         return this.handleSessionStatus(safeArgs, context);
+      case 'attack_chain':
+        return this.handleAttackChain(safeArgs);
+      case 'browser_action':
+        return this.handleBrowserAction(safeArgs, context);
       default:
         return JSON.stringify({ error: `Unknown tool: ${name}` });
     }
@@ -175,14 +191,68 @@ export class ToolExecutorService {
     if (!detail) {
       return JSON.stringify({ error: 'report_finding requires detail (description of the bug/finding)' });
     }
+
+    // --- Confidence validation ---
+    const rawConfidence = args.confidence;
+    if (rawConfidence == null || rawConfidence === '') {
+      return JSON.stringify({ error: 'report_finding requires confidence (0-100). Provide a number indicating how sure you are this finding is real.' });
+    }
+    const confidence = Number(rawConfidence);
+    if (isNaN(confidence) || confidence < 0 || confidence > 100 || !Number.isInteger(confidence)) {
+      return JSON.stringify({ error: 'report_finding confidence must be an integer between 0 and 100.' });
+    }
+
+    const confidenceReason = String(args.confidence_reason ?? '').trim();
+    if (!confidenceReason) {
+      return JSON.stringify({ error: 'report_finding requires confidence_reason — explain why you gave this confidence score.' });
+    }
+    if (confidenceReason.length < 20) {
+      return JSON.stringify({ error: `report_finding confidence_reason must be at least 20 characters (got ${confidenceReason.length}). Explain what evidence supports or weakens the finding.` });
+    }
+
+    // Anti-hallucination gate: low confidence + weak evidence → block and ask to verify
+    if (confidence < 50) {
+      const detailLower = detail.toLowerCase();
+      const hasStrongSignal = /sqlmap|nuclei|nikto|confirmed|verified|exploited|dumped|injected|executed|bypassed/.test(detailLower);
+      const pocLower = String(args.poc ?? '').toLowerCase();
+      const hasPocEvidence = pocLower.length > 50 && /(response|output|result|payload|evidence|proof|snippet)/.test(pocLower);
+      if (!hasStrongSignal && !hasPocEvidence) {
+        return JSON.stringify({
+          error: 'report_finding BLOCKED: confidence < 50 with weak evidence. Verify the finding again before reporting. Run additional tools (sqlmap, curl, nuclei, etc.) to confirm, or increase confidence with stronger evidence.',
+          confidence,
+          confidence_reason: confidenceReason,
+          hint: 'Either re-run verification tools and report with stronger evidence, or if this is genuinely uncertain, mark confidence 0 with a clear reason why it needs manual review.',
+        });
+      }
+    }
+
+    // Confidence label for metadata
+    const confidenceLabel = confidence >= 80 ? 'high' : confidence >= 50 ? 'medium' : 'low';
+
     const report = await this.reportsService.createFinding(context.userId, context.conversationId, detail, {
       title: args.title ? String(args.title) : undefined,
       severity: args.severity ? String(args.severity) : undefined,
       target: args.target ? String(args.target) : undefined,
       poc: args.poc ? String(args.poc) : undefined,
       finding_key: args.finding_key ? String(args.finding_key) : undefined,
+      confidence,
+      confidence_reason: confidenceReason,
+      confidence_label: confidenceLabel,
     });
-    return JSON.stringify({ ok: true, report_id: report.id, message: 'Finding saved to database' });
+    return JSON.stringify({ ok: true, report_id: report.id, confidence, confidence_label: confidenceLabel, message: 'Finding saved to database' });
+  }
+
+  private async handleJwtAnalyze(args: Record<string, any>): Promise<string> {
+    const token = String(args.token ?? '').trim();
+    if (!token) {
+      return JSON.stringify({ error: 'jwt_analyze requires a JWT token string' });
+    }
+    try {
+      const result = await this.jwtAnalyzer.analyze(token);
+      return JSON.stringify(result, null, 2);
+    } catch (err: any) {
+      return JSON.stringify({ error: `JWT analysis failed: ${err?.message || String(err)}` });
+    }
   }
 
   private async handleUpdatePentestPhase(args: Record<string, any>, context: ToolExecutionContext): Promise<string> {
@@ -199,6 +269,22 @@ export class ToolExecutorService {
       last_action_summary: args.last_action_summary != null ? String(args.last_action_summary) : undefined,
     });
     return JSON.stringify({ ok: true, message: 'Pentest phase updated' });
+  }
+
+  private async handleReVerifyFindings(args: Record<string, any>, context: ToolExecutionContext): Promise<string> {
+    if (!context.userId || !context.conversationId) {
+      return JSON.stringify({ error: 're_verify_findings requires an active conversation' });
+    }
+    const convId = String(args.conversation_id ?? context.conversationId).trim();
+    if (!convId) {
+      return JSON.stringify({ error: 'conversation_id is required' });
+    }
+    const result = await this.reVerifyService.reVerifyAllHighCritical(context.userId, convId);
+    return JSON.stringify({
+      ok: true,
+      message: `Re-verification complete: ${result.passed} passed, ${result.failed} failed, ${result.skipped} skipped, ${result.disputed} disputed out of ${result.total} HIGH/CRITICAL findings`,
+      ...result,
+    });
   }
 
   private async handleAddSkill(args: Record<string, any>): Promise<string> {
@@ -305,6 +391,145 @@ export class ToolExecutorService {
     return JSON.stringify(status);
   }
 
+  private async handleAttackChain(args: Record<string, any>): Promise<string> {
+    // If list_chains is true, just return available chains
+    if (args.list_chains === true) {
+      return JSON.stringify({
+        chains: this.attackChainService.listChains(),
+        safety: {
+          max_steps: 10,
+          rate_limit_ms: 500,
+          max_duration_ms: 120000,
+        },
+      });
+    }
+
+    const targetUrl = String(args.target_url ?? '').trim();
+    if (!targetUrl) {
+      return JSON.stringify({ error: 'attack_chain requires target_url' });
+    }
+
+    const chainName = args.chain_name ? String(args.chain_name) : undefined;
+    const steps = Array.isArray(args.steps) ? args.steps : undefined;
+
+    if (!chainName && (!steps || steps.length === 0)) {
+      return JSON.stringify({
+        error: 'attack_chain requires either chain_name (built-in) or steps (custom). Set list_chains=true to see available chains.',
+      });
+    }
+
+    const result = await this.attackChainService.runChain({
+      chainName,
+      steps,
+      targetUrl,
+      variables: args.variables && typeof args.variables === 'object' ? args.variables : undefined,
+      approval: args.approval === true,
+      defaultHeaders: args.default_headers && typeof args.default_headers === 'object' ? args.default_headers : undefined,
+      maxSteps: args.max_steps != null ? Number(args.max_steps) : undefined,
+    });
+
+    return JSON.stringify(result);
+  }
+
+  private async handleBrowserAction(args: Record<string, any>, context: ToolExecutionContext): Promise<string> {
+    const action = String(args.action ?? '').trim();
+    if (!action) {
+      return JSON.stringify({ error: 'browser_action requires action (navigate, auto_login, click, type, extract, screenshot, analyze, test_xss, check_csrf, get_auth_state, set_auth_state, save_storage_state)' });
+    }
+
+    const conversationId = context.conversationId || context.jobId;
+    if (!conversationId) {
+      return JSON.stringify({ error: 'browser_action requires an active conversation' });
+    }
+
+    const opts = args.options && typeof args.options === 'object' ? args.options : {};
+    const scope: string[] = Array.isArray(args.scope) ? args.scope : [];
+
+    try {
+      let result: any;
+      switch (action) {
+        case 'navigate':
+          result = await this.browserAgentService.navigate(conversationId, String(args.url ?? ''), {
+            scope,
+            waitForSelector: opts.waitForSelector,
+            timeout: opts.timeout,
+          });
+          break;
+        case 'auto_login':
+          result = await this.browserAgentService.autoLogin(
+            conversationId,
+            String(args.url ?? ''),
+            String(args.username ?? ''),
+            String(args.value ?? ''),
+            {
+              scope,
+              usernameSelector: opts.usernameSelector,
+              passwordSelector: opts.passwordSelector,
+              submitSelector: opts.submitSelector,
+            },
+          );
+          break;
+        case 'click':
+          result = await this.browserAgentService.click(conversationId, String(args.selector ?? ''), {
+            scope,
+            waitForNavigation: opts.waitForNavigation,
+          });
+          break;
+        case 'type':
+          result = await this.browserAgentService.type(
+            conversationId,
+            String(args.selector ?? ''),
+            String(args.value ?? ''),
+            { scope, delay: opts.delay, clear: opts.clear },
+          );
+          break;
+        case 'extract':
+          result = await this.browserAgentService.extract(conversationId, {
+            selector: args.selector ? String(args.selector) : undefined,
+            attribute: opts.attribute,
+            scope,
+          });
+          break;
+        case 'screenshot':
+          result = await this.browserAgentService.screenshot(conversationId, {
+            fullPage: opts.fullPage,
+            scope,
+          });
+          break;
+        case 'analyze': {
+          const analysis = await this.browserAgentService.analyzePage(undefined, conversationId);
+          result = { success: true, action: 'analyze', pageAnalysis: analysis };
+          break;
+        }
+        case 'test_xss':
+          result = await this.browserAgentService.testReflectedXss(
+            conversationId,
+            String(opts.formSelector ?? ''),
+            String(opts.payload ?? ''),
+            { scope, inputSelector: opts.inputSelector },
+          );
+          break;
+        case 'check_csrf':
+          result = await this.browserAgentService.checkCsrfTokens(conversationId, scope);
+          break;
+        case 'get_auth_state':
+          result = await this.browserAgentService.getAuthState(conversationId);
+          break;
+        case 'set_auth_state':
+          result = await this.browserAgentService.setAuthState(conversationId, opts.authState || {}, scope);
+          break;
+        case 'save_storage_state':
+          result = await this.browserAgentService.saveStorageState(conversationId);
+          break;
+        default:
+          return JSON.stringify({ error: `Unknown browser_action: ${action}` });
+      }
+      return JSON.stringify(result);
+    } catch (e) {
+      return JSON.stringify({ success: false, action, error: (e as Error).message });
+    }
+  }
+
   /**
    * Extract domain/target from tool args for Hacktivity logging.
    */
@@ -352,6 +577,8 @@ export class ToolExecutorService {
         return (safeArgs.detail as string)?.trim()
           ? `Saving finding: ${String(safeArgs.detail).slice(0, maxLen)}${String(safeArgs.detail).length > maxLen ? '...' : ''}`
           : 'Saving finding to report...';
+      case 'jwt_analyze':
+        return 'Analyzing JWT token for vulnerabilities...';
       case 'update_pentest_phase':
         return safeArgs.phase ? `Updating phase: ${String(safeArgs.phase)}` : 'Updating pentest phase...';
       case 'add_skill':
@@ -382,6 +609,16 @@ export class ToolExecutorService {
         return safeArgs.role ? `Spawning sub-agent: ${String(safeArgs.role)}` : 'Spawning sub-agent session...';
       case 'session_status':
         return safeArgs.session_id ? `Status for session ${String(safeArgs.session_id).slice(0, 8)}...` : 'Session status...';
+      case 'attack_chain':
+        return safeArgs.chain_name
+          ? `Running attack chain: ${String(safeArgs.chain_name)}`
+          : safeArgs.list_chains
+            ? 'Listing available attack chains...'
+            : 'Running custom attack chain...';
+      case 'browser_action':
+        return safeArgs.action
+          ? `Browser: ${String(safeArgs.action)}${safeArgs.url ? ` on ${String(safeArgs.url).slice(0, maxLen)}` : ''}${safeArgs.selector ? ` → ${String(safeArgs.selector).slice(0, maxLen)}` : ''}`
+          : 'Running browser action...';
       default:
         return `Running: ${name}`;
     }

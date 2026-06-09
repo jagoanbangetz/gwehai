@@ -4,17 +4,20 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
 import { ToolsController } from './tools.controller';
 import { ToolsService } from './tools.service';
+import { JwtAnalyzerService } from './jwt-analyzer.service';
 import { PayloadSandboxService } from './payload-sandbox.service';
+import { GlobalMemoryService } from './global-memory.service';
 import { ConversationMemory } from '../entities/conversation-memory.entity';
+import { GlobalMemory } from '../entities/global-memory.entity';
 
 @Module({
   imports: [
     ConfigModule,
-    TypeOrmModule.forFeature([ConversationMemory]),
+    TypeOrmModule.forFeature([ConversationMemory, GlobalMemory]),
     AuthModule,
   ],
   controllers: [ToolsController],
-  providers: [ToolsService, PayloadSandboxService],
-  exports: [ToolsService, PayloadSandboxService],
+  providers: [ToolsService, JwtAnalyzerService, PayloadSandboxService, GlobalMemoryService],
+  exports: [ToolsService, JwtAnalyzerService, PayloadSandboxService, GlobalMemoryService],
 })
 export class ToolsModule {}
