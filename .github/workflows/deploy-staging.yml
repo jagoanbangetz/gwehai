@@ -58,14 +58,18 @@ jobs:
             set -e
             cd /home/www/gwehai
 
+            # Clean git state (jaga-jaga kalo ada manual edit)
+            git stash --include-untracked 2>/dev/null || true
+            git checkout main 2>/dev/null || true
+
             # Restore .env jika belum ada
             test -f backend/.env || cp /home/www/gwehai_bak/backend/.env backend/.env 2>/dev/null || echo 'WARNING: no .env found'
 
             # Backend production deps
             cd backend && npm ci --omit=dev && cd ..
 
-            # Frontend (need dev deps for vite build — or use prebuilt)
-            cd frontend && npm ci && npx vite build && cd ..
+            # Frontend deps (dist udah di-rsync dari runner)
+            cd frontend && npm ci --omit=dev && cd ..
 
             # Restart PM2
             pm2 restart gwehai-api --update-env
