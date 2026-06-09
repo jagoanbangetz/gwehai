@@ -1,16 +1,16 @@
 import MarkdownMessage from '../../../components/MarkdownMessage'
 import FollowUpChips from '../../../components/FollowUpChips'
 import ThinkingBar from '../../../components/ThinkingBar'
+import StatusBadge from '../../../components/StatusBadge'
 import { GwehLogRenderer } from '../../../components/GwehLog'
 import { getModelLabel } from '../../../components/ModelPicker'
-import type { Message, ToolState } from '../types'
+import type { Message } from '../types'
 import type { LogEvent } from '../../../components/GwehLog'
 
 interface ChatMessagesProps {
   messages: Message[]
   isLoading: boolean
   isSimpleConversation: boolean
-  messageToolState: Record<string, ToolState>
   messageToolsSnapshot: Record<string, string[]>
   currentStep: string | null
   activityLog: string[]
@@ -21,6 +21,8 @@ interface ChatMessagesProps {
   disabled?: boolean
 }
 
+/** Remove unused warning */
+
 /**
  * Renders the chat messages list: user bubbles, assistant responses,
  * thinking bars, tool states, loading indicators, and checklist progress.
@@ -29,14 +31,13 @@ export default function ChatMessages({
   messages,
   isLoading,
   isSimpleConversation,
-  messageToolState,
   messageToolsSnapshot,
   currentStep,
   activityLog,
   logEvents,
   pentestChecklistProgress,
   onSendWithText,
-  showToast,
+  showToast: _showToast,
   disabled,
 }: ChatMessagesProps) {
   if (messages.length === 0) {
@@ -62,205 +63,168 @@ export default function ChatMessages({
           if (content === '0' || content === 'false' || content === 'undefined' || content === 'null') {
             return false
           }
-          const hasTools = (messageToolsSnapshot[message.id]?.length ?? 0) > 0
-          return content.length > 0 || hasThinking || (message.role === 'assistant' && hasTools)
+          const hasTools = (messageToolsSnapshot[message.id] || []).length > 0
+          if (!content && !hasThinking && !hasTools) return false
+          return true
         })
         .map((message) => {
-          const toolState = messageToolState[message.id]
-          const fullThinking = String(message.thinking || '')
-          const thinkingLen = fullThinking.length
-          const thinkingDisplayLen = (message.thinkingDisplay?.length ?? 0)
-          const hasThinking = thinkingLen > 0
-          const thinkingFinished = !hasThinking || thinkingDisplayLen >= thinkingLen
-          const canShowFinalContent = thinkingFinished
-          const showThinkingBlock = hasThinking && !canShowFinalContent
-          const isStreamingThisMessage = message.role === 'assistant' && message.isStreaming
+          const isUser = message.role === 'user'
+          const isAssistant = message.role === 'assistant'
+          const toolIds = messageToolsSnapshot[message.id] || []
+          const hasTools = toolIds.length > 0
+
+          // Determine status for badge
+          let badgeStatus: 'streaming' | 'done' | 'error' | 'stopped' | 'thinking' | null = null
+          if (isAssistant) {
+            if (message.isStreaming && !message.done) {
+              badgeStatus = message.eventType === 'thinking' || message.eventType === 'planning' ? 'thinking' : 'streaming'
+            } else if (message.eventType === 'error') {
+              badgeStatus = 'error'
+            } else if (message.done) {
+              badgeStatus = 'done'
+            }
+          }
 
           return (
-            <div key={message.id} className={`chat-message ${message.role} ${message.eventType ? `event-${message.eventType}` : ''}`}>
-              <div className="message-content">
-                <div className="message-bubble">
-                  {message.role === 'assistant' && message.modelKey && !isSimpleConversation && (
-                    <span className="model-badge" title={`Model: ${getModelLabel(message.modelKey)}`}>
-                      {getModelLabel(message.modelKey)}
-                    </span>
-                  )}
-                  <div className="message-text">
-                    {message.role === 'assistant' && (isStreamingThisMessage || (isLoading && !message.content)) && (
-                      isSimpleConversation ? (
-                        <div className="chat-simple-indicator">
-                          <span className="chat-simple-indicator-text">Replying...</span>
-                          <span className="chat-simple-indicator-dots">
-                            <span></span><span></span><span></span>
-                          </span>
-                        </div>
-                      ) : (
-                        <>
-                          <ThinkingBar
-                            currentStep={currentStep}
-                            steps={activityLog}
-                            isStreaming={isStreamingThisMessage || isLoading}
-                            checklistProgress={pentestChecklistProgress}
-                          />
-                          {logEvents.length > 0 && (
-                            <GwehLogRenderer events={logEvents} compact copyableBlocks className="chat-gweh-log" />
-                          )}
-                        </>
-                      )
-                    )}
-                    {message.eventType === 'planning' && !message.content ? null : message.eventType === 'thinking' && !message.content ? null : (
-                      <>
-                        {message.role === 'assistant' && showThinkingBlock && (
-                          <div className="message-thinking chat-thinking">
-                            <div className="message-thinking-label">Thinking</div>
-                            <div
-                              className={`message-thinking-content${(message.thinkingDisplay?.length ?? 0) < (message.thinking?.length ?? 0) ? ' streaming' : ''}`}
-                            >
-                              <MarkdownMessage
-                                content={message.thinkingDisplay !== undefined ? message.thinkingDisplay : (message.thinking ?? '')}
-                                isStreaming={false}
-                              />
-                            </div>
-                          </div>
-                        )}
-                        {message.content && canShowFinalContent ? (
-                          <>
-                            {message.role === 'assistant' ? (
-                              <MarkdownMessage
-                                content={
-                                  !message.done && message.contentDisplay !== undefined
-                                    ? message.contentDisplay
-                                    : typeof message.content === 'string'
-                                      ? message.content
-                                      : message.content
-                                        ? String(message.content)
-                                        : ''
-                                }
-                                isStreaming={message.isStreaming && !!message.content}
-                                conversational={isSimpleConversation}
-                              />
-                            ) : (
-                              <span className="message-content-text">
-                                {typeof message.content === 'string'
-                                  ? message.content
-                                  : message.content
-                                    ? String(message.content)
-                                    : ''}
-                              </span>
-                            )}
-                            {message.role === 'assistant' && message.details && (
-                              <details className="message-details-collapsible">
-                                <summary>More details</summary>
-                                <div className="message-details-content">
-                                  <MarkdownMessage content={message.details} conversational />
-                                </div>
-                              </details>
-                            )}
-                            {message.role === 'assistant' && message.followUps && message.followUps.length > 0 && (
-                              <FollowUpChips
-                                items={message.followUps}
-                                onSelect={onSendWithText}
-                                disabled={disabled}
-                              />
-                            )}
-                            {message.role === 'assistant' && (() => {
-                              if (toolState?.toolsComplete && toolState.hasTools) {
-                                return (
-                                  <div className="assistant-loading">
-                                    Planning next plan
-                                    <span className="loading-dots">
-                                      <span></span><span></span><span></span>
-                                    </span>
-                                  </div>
-                                )
-                              }
-                              if (!toolState?.toolsComplete && toolState?.activeTools && toolState.activeTools > 0) {
-                                return (
-                                  <div className="assistant-loading">
-                                    {currentStep || (isLoading ? 'Running tools...' : '')}
-                                    <span className="loading-dots">
-                                      <span></span><span></span><span></span>
-                                    </span>
-                                  </div>
-                                )
-                              }
-                              if (message.isStreaming && isLoading) {
-                                return (
-                                  <div className="assistant-loading">
-                                    {currentStep || 'Working...'}
-                                    <span className="loading-dots">
-                                      <span></span><span></span><span></span>
-                                    </span>
-                                  </div>
-                                )
-                              }
-                              return null
-                            })()}
-                          </>
-                        ) : null}
-                      </>
-                    )}
-                  </div>
+            <div
+              key={message.id}
+              className={`chat-message ${isUser ? 'chat-message--user' : 'chat-message--assistant'} ${message.isStreaming ? 'chat-message--streaming' : ''}`}
+            >
+              {/* Assistant avatar */}
+              {isAssistant && (
+                <div className="chat-message__avatar">
+                  <span className="chat-message__avatar-icon">G</span>
                 </div>
-                {!message.isStreaming && (
-                  <div className="message-footer">
-                    <div className="message-time">
-                      {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                    {message.role === 'assistant' && (message.content || message.details) && (
-                      <button
-                        type="button"
-                        className="message-copy-btn"
-                        onClick={() => {
-                          const text = [message.content, message.details].filter(Boolean).join('\n\n---\n\n')
-                          navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard', 'success')).catch(() => {})
-                        }}
-                        title="Copy"
-                      >
-                        Copy
-                      </button>
-                    )}
+              )}
+
+              <div className="chat-message__content">
+                {/* Status badge for assistant messages */}
+                {isAssistant && badgeStatus && (
+                  <StatusBadge status={badgeStatus} modelKey={message.modelKey} />
+                )}
+
+                {/* Model label */}
+                {isAssistant && message.modelKey && message.modelKey !== 'auto' && !badgeStatus && (
+                  <div className="assistant-model-label">
+                    <span className="assistant-model-name">{getModelLabel(message.modelKey)}</span>
                   </div>
                 )}
+
+                {/* Thinking block */}
+                {isAssistant && message.thinking && (message.thinkingDisplay || message.thinking) && (
+                  <div className="assistant-thinking">
+                    <div className="assistant-thinking__header">
+                      <span className="assistant-thinking__icon">◎</span>
+                      <span className="assistant-thinking__title">Reasoning</span>
+                    </div>
+                    <div className="assistant-thinking__text">
+                      {message.thinkingDisplay || message.thinking}
+                      {message.isStreaming && (!message.thinkingDisplay || message.thinkingDisplay.length < message.thinking.length) && (
+                        <span className="thinking-cursor" />
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Simple conversation indicator */}
+                {isAssistant && isSimpleConversation && message.isStreaming && !message.done && !message.content && (
+                  <div className="chat-simple-indicator">
+                    <span className="chat-simple-indicator-text">Replying</span>
+                    <span className="chat-simple-indicator-dots">
+                      <span /><span /><span />
+                    </span>
+                  </div>
+                )}
+
+                {/* ThinkingBar (for agent mode) */}
+                {isAssistant && !isSimpleConversation && (message.isStreaming || currentStep || activityLog.length > 0) && (
+                  <ThinkingBar
+                    currentStep={currentStep}
+                    steps={activityLog}
+                    isStreaming={message.isStreaming}
+                    checklistProgress={pentestChecklistProgress}
+                  />
+                )}
+
+                {/* GwehLog events */}
+                {isAssistant && logEvents.length > 0 && message.isStreaming && (
+                  <GwehLogRenderer events={logEvents} />
+                )}
+
+                {/* Tool terminals */}
+                {isAssistant && hasTools && toolIds.map((toolId: string) => {
+                  const tool = (window as any).__gwehai_tools?.[toolId]
+                  if (!tool) return null
+                  const isRunning = tool.status === 'running'
+                  return (
+                    <div key={toolId} className="tool-terminal">
+                      <div className="tool-terminal__header">
+                        <span className={`tool-terminal__status ${isRunning ? 'tool-terminal__status--running' : ''}`}>
+                          {isRunning ? '◉' : tool.status === 'ok' ? '✓' : '✕'}
+                        </span>
+                        <span className="tool-terminal__name">{tool.name}</span>
+                        {tool.reasoning && (
+                          <span className="tool-terminal__reasoning">{tool.reasoning}</span>
+                        )}
+                      </div>
+                      {tool.logs.length > 0 && (
+                        <pre className="tool-terminal__logs">
+                          {tool.logs.join('\n')}
+                        </pre>
+                      )}
+                    </div>
+                  )
+                })}
+
+                {/* Main content */}
+                {isAssistant && message.content ? (
+                  <div className={`assistant-response ${message.isStreaming && !message.done ? 'assistant-response--streaming' : ''}`}>
+                    <MarkdownMessage
+                      content={message.contentDisplay ?? message.content}
+                    />
+                    {message.isStreaming && !message.done && (!message.thinking || (message.thinkingDisplay?.length ?? 0) >= (message.thinking?.length ?? 0)) && (
+                      <span className="streaming-cursor" />
+                    )}
+                  </div>
+                ) : isUser ? (
+                  <div className="user-message-text">{message.content}</div>
+                ) : null}
+
+                {/* Error styling */}
+                {message.eventType === 'error' && (
+                  <div className="assistant-error">
+                    <span className="assistant-error__icon">✕</span>
+                    <span>{message.content}</span>
+                  </div>
+                )}
+
+                {/* Follow-up chips */}
+                {isAssistant && message.done && message.followUps && message.followUps.length > 0 && (
+                  <FollowUpChips
+                    items={message.followUps}
+                    onSelect={(text) => onSendWithText(text)}
+                    disabled={disabled || isLoading}
+                  />
+                )}
+
+                {/* Details expander */}
+                {isAssistant && message.done && message.details && (
+                  <details className="assistant-details">
+                    <summary className="assistant-details__summary">More details</summary>
+                    <div className="assistant-details__content">
+                      <MarkdownMessage content={message.details} />
+                    </div>
+                  </details>
+                )}
+
+                {/* Timestamp */}
+                <div className="message-timestamp">
+                  {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
               </div>
             </div>
           )
         })}
-      {isLoading && !messages.some((m) => m.role === 'assistant' && m.isStreaming) && (
-        <div className="chat-message assistant chat-loading-dots" aria-hidden>
-          <div className="message-content">
-            <div className="message-bubble">
-              {isSimpleConversation ? (
-                <div className="chat-simple-indicator">
-                  <span className="chat-simple-indicator-text">Replying...</span>
-                  <span className="chat-simple-indicator-dots">
-                    <span></span><span></span><span></span>
-                  </span>
-                </div>
-              ) : (
-                <>
-                  <ThinkingBar currentStep={currentStep} steps={activityLog} isStreaming checklistProgress={pentestChecklistProgress} />
-                  {logEvents.length > 0 && (
-                    <GwehLogRenderer events={logEvents} compact copyableBlocks className="chat-gweh-log" />
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-      {!isLoading && pentestChecklistProgress && !isSimpleConversation && (
-        <div className="chat-message assistant" aria-hidden>
-          <div className="message-content">
-            <div className="message-bubble">
-              <ThinkingBar currentStep={null} steps={activityLog} isStreaming={false} checklistProgress={pentestChecklistProgress} />
-              {logEvents.length > 0 && (
-                <GwehLogRenderer events={logEvents} compact copyableBlocks className="chat-gweh-log" />
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

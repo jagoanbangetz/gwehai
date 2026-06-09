@@ -1,0 +1,80 @@
+/* StatusBadge: compact status indicator on assistant messages */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+
+.status-badge__icon {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.status-badge__label {
+  line-height: 1;
+}
+
+.status-badge__model {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: oklch(0.15 0 0);
+  font-size: 10px;
+  color: oklch(0.7 0 0);
+  margin-left: 2px;
+}
+
+/* Streaming */
+.status-badge--streaming {
+  background: oklch(0.12 0.06 250 / 0.2);
+  border: 1px solid oklch(0.3 0.08 250 / 0.3);
+  color: oklch(0.75 0.12 250);
+}
+
+.status-badge--streaming .status-badge__icon {
+  animation: badgePulse 1.5s ease-in-out infinite;
+}
+
+/* Thinking */
+.status-badge--thinking {
+  background: oklch(0.12 0.06 270 / 0.2);
+  border: 1px solid oklch(0.3 0.08 270 / 0.3);
+  color: oklch(0.75 0.12 270);
+}
+
+.status-badge--thinking .status-badge__icon {
+  animation: badgePulse 1.2s ease-in-out infinite;
+}
+
+/* Done */
+.status-badge--done {
+  background: oklch(0.12 0.06 145 / 0.15);
+  border: 1px solid oklch(0.3 0.08 145 / 0.25);
+  color: oklch(0.7 0.12 145);
+}
+
+/* Error */
+.status-badge--error {
+  background: oklch(0.12 0.06 25 / 0.2);
+  border: 1px solid oklch(0.3 0.08 25 / 0.3);
+  color: oklch(0.75 0.12 25);
+}
+
+/* Stopped */
+.status-badge--stopped {
+  background: oklch(0.1 0 0 / 0.3);
+  border: 1px solid oklch(0.25 0 0 / 0.3);
+  color: oklch(0.65 0 0);
+}
+
+@keyframes badgePulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
