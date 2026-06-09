@@ -4,14 +4,26 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: staging
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
 
       - name: Install SSH key
         run: |
@@ -20,35 +32,53 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H 45.77.250.83 >> ~/.ssh/known_hosts
 
-      - name: Build & Deploy via rsync
+      - name: Build backend
+        run: cd backend && npm ci && npm run build
+
+      - name: Build frontend
+        run: cd frontend && npm ci && npx vite build
+
+      - name: Deploy to staging server
         run: |
-          # Build backend
-          cd backend && npm ci && npm run build && cd ..
-
-          # Build frontend (skip tsc type check — known TS errors from refactor)
-          cd frontend && npm ci && npx vite build && cd ..
-
-          # Rsync ke server staging
           rsync -avz --delete -e 'ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no' \
             --exclude 'node_modules' \
             --exclude '.git' \
             --exclude '.env*' \
             --exclude '*.local' \
+            --exclude 'src/' \
+            --exclude 'tests/' \
+            --exclude 'test/' \
+            --exclude '__tests__/' \
+            --exclude 'docs/' \
             ./ root@45.77.250.83:/home/www/gwehai/
 
-      - name: Install deps & restart on server
+      - name: Install deps & restart services
         run: |
           ssh -i ~/.ssh/deploy_key root@45.77.250.83 "
-            cd /home/www/gwehai &&
-            cp /home/www/gwehai_bak/backend/.env /home/www/gwehai/backend/.env 2>/dev/null;
-            cd backend && npm ci --production && cd .. &&
-            cd frontend && npm ci && npx vite build && cd .. &&
-            pm2 restart gwehai-api &&
-            echo 'Deploy selesai!'
+            set -e
+            cd /home/www/gwehai
+
+            # Restore .env jika belum ada
+            test -f backend/.env || cp /home/www/gwehai_bak/backend/.env backend/.env 2>/dev/null || echo 'WARNING: no .env found'
+
+            # Backend production deps
+            cd backend && npm ci --omit=dev && cd ..
+
+            # Frontend (need dev deps for vite build — or use prebuilt)
+            cd frontend && npm ci && npx vite build && cd ..
+
+            # Restart PM2
+            pm2 restart gwehai-api --update-env
+
+            echo '=== DEPLOY COMPLETE ==='
           "
 
-      - name: Health Check
+      - name: Health check
         run: |
           sleep 3
-          curl -s --fail http://45.77.250.83:3100/api/health || exit 1
-          echo "Health check passed!"
+          curl -sSf http://45.77.250.83:3100/api/health | jq -e '.status == "ok"'
+          echo "✅ Health check passed — backend OK"
+
+      - name: Verify frontend
+        run: |
+          curl -sSf -o /dev/null -w "Frontend HTTP %{http_code}\n" https://dev.gweh.sh/
