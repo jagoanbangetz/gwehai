@@ -71,5 +71,3 @@ gwehai/
 ## License
 
 MIT
-
-<!-- CI/CD test deploy 1781040203 -->
