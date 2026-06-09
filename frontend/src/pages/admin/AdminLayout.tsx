@@ -49,6 +49,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'System',
     items: [
       { path: '/admin/system', label: 'System' },
+      { path: '/admin/settings', label: 'Settings' },
       { path: '/admin/audit', label: 'Audit' },
       { path: '/admin/models', label: 'Models' },
     ],
