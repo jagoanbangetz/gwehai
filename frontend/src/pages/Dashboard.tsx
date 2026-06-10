@@ -125,6 +125,7 @@ const Dashboard = () => {
   const initialDataLoadUserIdRef = useRef<string | undefined>(undefined)
   const sendInProgressRef = useRef(false)
   const pentestJobStreamAbortRef = useRef<AbortController | null>(null)
+  const startScanAbortRef = useRef<AbortController | null>(null)
   const stopRequestedRef = useRef(false)
   const intentionalCloseRef = useRef(false)
   const hacktivityPollRef = useRef({ page: 1, conversationId: null as string | null })
@@ -147,6 +148,7 @@ const Dashboard = () => {
     // Set intentional close BEFORE closing EventSource so onerror handler skips reconnect
     intentionalCloseRef.current = true
     stopRequestedRef.current = true
+    startScanAbortRef.current?.abort(); startScanAbortRef.current = null
     if (eventSourceRef.current) { eventSourceRef.current.close(); eventSourceRef.current = null }
     pentestJobStreamAbortRef.current?.abort(); pentestJobStreamAbortRef.current = null
     setSearchParams({}); setMessages([]); setCurrentChatId(null); setCurrentConversationId(null); setCurrentJobId(null)
@@ -219,7 +221,9 @@ const Dashboard = () => {
   const handleStopJob = async () => {
     // Always set stop flag + close SSE first — even if no job ID yet
     // (user might click Stop while startScan API is still in-flight)
+    intentionalCloseRef.current = true
     stopRequestedRef.current = true
+    startScanAbortRef.current?.abort(); startScanAbortRef.current = null
     if (eventSourceRef.current) { eventSourceRef.current.close(); eventSourceRef.current = null }
     pentestJobStreamAbortRef.current?.abort(); pentestJobStreamAbortRef.current = null
 
@@ -261,8 +265,16 @@ const Dashboard = () => {
     if (!isSimple) setIsSimpleConversation(false)
     if (currentConversationId) setConversationRunStatus((prev) => ({ ...prev, [currentConversationId]: 'running' }))
     if (eventSourceRef.current) { intentionalCloseRef.current = true; eventSourceRef.current.close(); eventSourceRef.current = null }
+    const abortCtrl = new AbortController(); startScanAbortRef.current = abortCtrl
     try {
-      const jobRes = await gwehaiClient.startScan(userInput, false, currentConversationId || undefined, selectedModelKey, chatMode, selectedModelId ?? undefined, maxAgents)
+      const jobRes = await gwehaiClient.startScan(userInput, false, currentConversationId || undefined, selectedModelKey, chatMode, selectedModelId ?? undefined, maxAgents, abortCtrl.signal)
+      startScanAbortRef.current = null
+      // If stop was requested while startScan was in-flight, bail out
+      if (stopRequestedRef.current || abortCtrl.signal.aborted) {
+        setIsLoading(false); sendInProgressRef.current = false
+        setMessages((prev) => { const l = prev[prev.length - 1]; return l && l.role === 'assistant' && !l.content && l.isStreaming ? prev.slice(0, -1) : prev })
+        return
+      }
       data.loadPlan().catch(() => {})
       const jobId = jobRes.job_id; setCurrentJobId(jobId); try { localStorage.setItem(ACTIVE_JOB_STORAGE_KEY, jobId) } catch (_) {}
       const convId = jobRes.conversation_id ?? undefined
@@ -280,7 +292,13 @@ const Dashboard = () => {
       }, () => {})
       eventSourceRef.current = es; intentionalCloseRef.current = false
     } catch (error: any) {
+      startScanAbortRef.current = null
       intentionalCloseRef.current = false; setIsLoading(false); streamingMessageRef.current = null; sendInProgressRef.current = false
+      // If aborted by user (Stop button), don't show error — just clean up
+      if (error.name === 'AbortError') {
+        setMessages((prev) => { const l = prev[prev.length - 1]; return l && l.role === 'assistant' && !l.content && l.isStreaming ? prev.slice(0, -1) : prev })
+        return
+      }
       setMessages((prev) => { const l = prev[prev.length - 1]; return l && l.role === 'assistant' && !l.content && l.isStreaming ? prev.slice(0, -1) : prev })
       const errorText = error.message || 'Unknown error'
       const isPlanLimit = /Plan limit|maximum.*concurrent|sessions per day/i.test(errorText)
@@ -333,6 +351,34 @@ const Dashboard = () => {
   const filteredChatHistory = chatHistory.filter((c) => c.title.toLowerCase().includes(searchQuery.toLowerCase()))
 
   useEffect(() => { if (String(effectivePlanId).toUpperCase() === 'FREE' && selectedModelKey !== 'auto') { setSelectedModelKey('auto'); setStoredModelKey('auto') } }, [effectivePlanId, selectedModelKey])
+
+  // ─── Bug 2 fix: Reset agent context when model or mode changes ───
+  const prevModelKeyRef = useRef(selectedModelKey)
+  const prevChatModeRef = useRef(chatMode)
+  useEffect(() => {
+    const modelChanged = prevModelKeyRef.current !== selectedModelKey
+    const modeChanged = prevChatModeRef.current !== chatMode
+    prevModelKeyRef.current = selectedModelKey
+    prevChatModeRef.current = chatMode
+    if (!modelChanged && !modeChanged) return
+
+    // If stream is active, stop it first
+    if (isLoading && eventSourceRef.current) {
+      intentionalCloseRef.current = true
+      stopRequestedRef.current = true
+      startScanAbortRef.current?.abort(); startScanAbortRef.current = null
+      eventSourceRef.current.close(); eventSourceRef.current = null
+      pentestJobStreamAbortRef.current?.abort(); pentestJobStreamAbortRef.current = null
+      setIsLoading(false); sendInProgressRef.current = false
+      streamingMessageRef.current = null; currentAssistantMessageIdRef.current = null
+    }
+
+    // Reset agent-specific UI state — fresh context for new agent/model
+    setIsSimpleConversation(false)
+    setCurrentStep(null)
+    setActivityLog([])
+    setLogEvents([])
+  }, [selectedModelKey, chatMode])
 
   // ─── Render ───
   return (

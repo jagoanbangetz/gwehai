@@ -126,7 +126,8 @@ export class GwehAIClient {
     modelKey?: 'auto' | 'openai_gpt5' | 'claude' | 'gemini',
     mode?: 'agent' | 'ask',
     modelId?: string,
-    maxAgents?: number
+    maxAgents?: number,
+    signal?: AbortSignal
   ): Promise<GwehAIJobResponse> {
     const user = localStorage.getItem('scout_user');
     const token = user ? JSON.parse(user).token : null;
@@ -146,6 +147,7 @@ export class GwehAIClient {
         ...(modelId && { model_id: modelId }), // Optional: specific model from DB (e.g. GPT-5.4, Gemini 2.5 Flash)
         ...(maxAgents != null && maxAgents >= 1 && maxAgents <= 20 && { max_agents: maxAgents }),
       }),
+      signal,
     });
 
     if (!response.ok) {
