@@ -65,11 +65,11 @@ jobs:
             # Restore .env jika belum ada
             test -f backend/.env || cp /home/www/gwehai_bak/backend/.env backend/.env 2>/dev/null || echo 'WARNING: no .env found'
 
-            # Backend production deps
-            cd backend && npm ci --omit=dev && cd ..
+            # Backend deps (include dev — needed for runtime like @sentry/node, @nestjs/*)
+            cd backend && npm ci && cd ..
 
             # Frontend deps (dist udah di-rsync dari runner)
-            cd frontend && npm ci --omit=dev && cd ..
+            cd frontend && npm ci && cd ..
 
             # Restart PM2
             pm2 restart gwehai-api --update-env
