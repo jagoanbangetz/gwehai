@@ -268,9 +268,9 @@ const Signup = () => {
                       />
                       <span>
                         I agree to the{' '}
-                        <a href="/terms" className="inline-link" style={{ color: 'white' }} target="_blank" rel="noopener noreferrer">Terms of Service</a>
+                        <a href="/terms" className="inline-link" style={{ color: 'white' }} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Terms of Service</a>
                         {' '}and{' '}
-                        <a href="/privacy" className="inline-link" style={{ color: 'white' }} target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+                        <a href="/privacy" className="inline-link" style={{ color: 'white' }} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>Privacy Policy</a>
                       </span>
                     </label>
                   </div>

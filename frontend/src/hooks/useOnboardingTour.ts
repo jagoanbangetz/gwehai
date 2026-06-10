@@ -226,20 +226,29 @@ export function useOnboardingTour({
     const shouldTrigger = !tourDone && !tourSkipped
 
     if (shouldTrigger) {
-      // Wait for tour target elements to be in the DOM with multiple retries
+      // Wait for ALL tour target elements to be in the DOM and visible
       let retryCount = 0
-      const maxRetries = 5
+      const maxRetries = 8
       const waitForElements = () => {
-        const firstStep = quickStartSteps[0]
-        if (firstStep && typeof firstStep.element === 'string') {
-          const el = document.querySelector(firstStep.element)
-          if (!el && retryCount < maxRetries) {
-            retryCount++
-            const retryTimer = setTimeout(() => waitForElements(), 1500)
-            return () => clearTimeout(retryTimer)
-          }
+        // Check that ALL required elements for the tour exist and are visible
+        const requiredSelectors = quickStartSteps
+          .filter((s): s is DriveStep & { element: string } => typeof s.element === 'string')
+          .map(s => s.element)
+
+        const allReady = requiredSelectors.every(selector => {
+          const el = document.querySelector(selector)
+          if (!el) return false
+          // Check element is actually visible (not display:none or collapsed sidebar)
+          const rect = el.getBoundingClientRect()
+          return rect.width > 0 && rect.height > 0
+        })
+
+        if (!allReady && retryCount < maxRetries) {
+          retryCount++
+          const retryTimer = setTimeout(() => waitForElements(), 1500)
+          return () => clearTimeout(retryTimer)
         }
-        const timer = setTimeout(() => startTour('quick-start'), 1200)
+        const timer = setTimeout(() => startTour('quick-start'), 800)
         return () => clearTimeout(timer)
       }
       return waitForElements()
