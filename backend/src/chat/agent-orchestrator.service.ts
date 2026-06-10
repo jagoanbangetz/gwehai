@@ -301,7 +301,16 @@ export class AgentOrchestratorService {
     await repos.messagePart.save(repos.messagePart.create({ messageId: assistantMessage.id, type: 'text' as any, content: '', order: 0 }));
 
     if (usageForEvent) {
-      await this.costService.saveUsageEvent(null as any, userId, usageForEvent.modelId, assistantMessage.id, usageForEvent.inputTokens, usageForEvent.outputTokens, usageForEvent.costPoints);
+      const usageRepo = this.dataSource.getRepository(UsageEvent);
+      const u = usageRepo.create({
+        userId,
+        modelId: usageForEvent.modelId,
+        messageId: assistantMessage.id,
+        inputTokens: usageForEvent.inputTokens,
+        outputTokens: usageForEvent.outputTokens,
+        costPoints: usageForEvent.costPoints,
+      });
+      await usageRepo.save(u);
     }
 
     if (conversation.title === 'New Conversation' || !conversation.title) {
