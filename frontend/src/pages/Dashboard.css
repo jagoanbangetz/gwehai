@@ -2568,9 +2568,9 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: oklch(0.07 0.005 60 / 0.85);
+  background: oklch(0 0 0 / 0.8);
   backdrop-filter: blur(8px);
-  z-index: 10000;
+  z-index: 20000;
   display: flex;
   align-items: flex-start;
   justify-content: center;

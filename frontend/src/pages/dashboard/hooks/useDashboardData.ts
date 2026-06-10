@@ -70,8 +70,9 @@ export function useDashboardData(showToast: (msg: string, type?: 'success' | 'er
       setHacktivityConversations((prev) => (hacktivityConversationsEqual(prev, next) ? prev : next))
     } catch (error: any) {
       console.error('Failed to load Hacktivity conversations', error)
+      showToast('Failed to load hacktivity conversations.', 'error')
     }
-  }, [])
+  }, [showToast])
 
   const loadHacktivity = useCallback(async (page: number = 1, conversationId: string | null = null, options?: { isBackgroundPoll?: boolean }) => {
     const isBackgroundPoll = options?.isBackgroundPoll === true

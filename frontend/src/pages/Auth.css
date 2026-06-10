@@ -34,7 +34,9 @@
     inset 0 1px 0 oklch(1 0 0 / 0.05);
   animation: slideUp 0.5s cubic-bezier(0.22, 1, 0.36, 1);
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: calc(100vh - 4rem);
 }
 
 .auth-modal::before {

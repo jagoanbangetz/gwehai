@@ -207,6 +207,11 @@ export function useOnboardingTour({
     driverObj.current.drive()
   }, [])
 
+  const stopTour = useCallback(() => {
+    driverObj.current?.destroy()
+    driverObj.current = null
+  }, [])
+
   // Auto-trigger for first-time users
   useEffect(() => {
     if (isLoading) return
@@ -220,9 +225,21 @@ export function useOnboardingTour({
     const shouldTrigger = !tourDone && !tourSkipped && (scanCount === 0 || scanCount === undefined)
 
     if (shouldTrigger) {
-      // Small delay to let the page render
-      const timer = setTimeout(() => startTour('quick-start'), 800)
-      return () => clearTimeout(timer)
+      // Wait for tour target elements to be in the DOM
+      const waitForElements = () => {
+        const firstStep = quickStartSteps[0]
+        if (firstStep && typeof firstStep.element === 'string') {
+          const el = document.querySelector(firstStep.element)
+          if (!el) {
+            // Elements not ready yet, retry after a short delay
+            const retryTimer = setTimeout(() => startTour('quick-start'), 1500)
+            return () => clearTimeout(retryTimer)
+          }
+        }
+        const timer = setTimeout(() => startTour('quick-start'), 1200)
+        return () => clearTimeout(timer)
+      }
+      return waitForElements()
     }
   }, [scanCount, isLoading, startTour])
 
@@ -249,5 +266,5 @@ export function useOnboardingTour({
     return () => { driverObj.current?.destroy() }
   }, [])
 
-  return { startTour, resetTour, resetAllTours, isTourCompleted }
+  return { startTour, stopTour, resetTour, resetAllTours, isTourCompleted }
 }
