@@ -98,7 +98,7 @@ export default function ChatSidebar({
                           onToggleMenu(openMenuId === chat.id ? null : chat.id)
                         }}
                       >
-                        <i className="fa-solid fa-ellipsis-vertical" />
+                        ...
                       </button>
                       {openMenuId === chat.id && (
                         <div className="chat-menu-dropdown">
@@ -109,7 +109,6 @@ export default function ChatSidebar({
                               onStartRename(chat.id)
                             }}
                           >
-                            <i className="fa-solid fa-pen" />
                             Rename
                           </button>
                           <button
@@ -119,7 +118,6 @@ export default function ChatSidebar({
                               onDeleteChat(chat.id)
                             }}
                           >
-                            <i className="fa-solid fa-trash-can" />
                             Delete chat
                           </button>
                         </div>
@@ -127,9 +125,7 @@ export default function ChatSidebar({
                     </div>
                   </>
                 ) : (
-                  <div className="chat-icon-wrapper collapsed">
-                    <i className="fa-solid fa-message" />
-                  </div>
+                  <span className="chat-icon-wrapper collapsed" />
                 )}
               </div>
             ))}

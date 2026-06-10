@@ -80,7 +80,6 @@ export default function ChatComposer({
             }}
             title="Full agent: pentest, tools, step-by-step"
           >
-            <span className="chat-mode-icon" aria-hidden><i className="chat-mode-icon-agent">⚡</i></span>
             <span className="chat-mode-label">Agent</span>
           </button>
           <button
@@ -92,7 +91,6 @@ export default function ChatComposer({
             }}
             title="Quick ask: fast answers, no tools"
           >
-            <span className="chat-mode-icon" aria-hidden><i className="chat-mode-icon-ask">💬</i></span>
             <span className="chat-mode-label">Ask</span>
           </button>
         </div>
@@ -126,7 +124,7 @@ export default function ChatComposer({
         ) : (
           <div className="input-container">
             <button type="button" className="input-attach" title="Attach file (coming soon)" disabled>
-              <i className="fa-solid fa-paperclip" />
+              +
             </button>
             <textarea
               ref={inputRef}
