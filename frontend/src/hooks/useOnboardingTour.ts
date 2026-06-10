@@ -221,18 +221,21 @@ export function useOnboardingTour({
       try { return localStorage.getItem(`${TOUR_SKIPPED_KEY}_quick-start`) === 'true' } catch { return false }
     })()
 
-    // Trigger conditions: not completed, not skipped, and (scanCount === 0 OR no localStorage flag)
-    const shouldTrigger = !tourDone && !tourSkipped && (scanCount === 0 || scanCount === undefined)
+    // Trigger for any user who hasn't completed or skipped the tour
+    // (first-time users, or users who never saw the tour)
+    const shouldTrigger = !tourDone && !tourSkipped
 
     if (shouldTrigger) {
-      // Wait for tour target elements to be in the DOM
+      // Wait for tour target elements to be in the DOM with multiple retries
+      let retryCount = 0
+      const maxRetries = 5
       const waitForElements = () => {
         const firstStep = quickStartSteps[0]
         if (firstStep && typeof firstStep.element === 'string') {
           const el = document.querySelector(firstStep.element)
-          if (!el) {
-            // Elements not ready yet, retry after a short delay
-            const retryTimer = setTimeout(() => startTour('quick-start'), 1500)
+          if (!el && retryCount < maxRetries) {
+            retryCount++
+            const retryTimer = setTimeout(() => waitForElements(), 1500)
             return () => clearTimeout(retryTimer)
           }
         }

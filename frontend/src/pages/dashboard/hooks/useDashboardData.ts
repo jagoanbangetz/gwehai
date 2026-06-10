@@ -140,7 +140,9 @@ export function useDashboardData(showToast: (msg: string, type?: 'success' | 'er
       const profile = res.data
       setSettingsData({ email: profile.email || '', password: '' })
       if (profile.planId) setSubscriptionForSettings({ planId: profile.planId, providerSubscriptionId: profile.providerSubscriptionId || null })
-    } catch (e) { console.warn('Failed to load profile:', e) }
+    } catch {
+      // Silently ignore — profile endpoint may not exist yet
+    }
   }, [])
 
   const handleSaveSettings = useCallback(async (refreshUser: () => void) => {
