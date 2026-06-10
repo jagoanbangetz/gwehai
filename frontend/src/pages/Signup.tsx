@@ -268,9 +268,9 @@ const Signup = () => {
                       />
                       <span>
                         I agree to the{' '}
-                        <Link to="/terms" className="inline-link" style={{ color: 'white' }}>Terms of Service</Link>
+                        <Link to="/terms" className="inline-link" style={{ color: 'white' }} onClick={(e) => e.stopPropagation()}>Terms of Service</Link>
                         {' '}and{' '}
-                        <Link to="/privacy" className="inline-link" style={{ color: 'white' }}>Privacy Policy</Link>
+                        <Link to="/privacy" className="inline-link" style={{ color: 'white' }} onClick={(e) => e.stopPropagation()}>Privacy Policy</Link>
                       </span>
                     </label>
                   </div>

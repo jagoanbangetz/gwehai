@@ -6,6 +6,7 @@ import { UserRole } from '../entities/user.entity';
 import { GwehAIService } from '../gwehai/gwehai.service';
 import { PlanUsageService } from '../plans/plan-usage.service';
 import { AdminService } from './admin.service';
+import { CveFeedService } from '../cve-feed/cve-feed.service';
 import { Request } from 'express';
 
 @Controller('admin')
@@ -16,6 +17,7 @@ export class AdminOpsController {
     private readonly gwehaiService: GwehAIService,
     private readonly planUsageService: PlanUsageService,
     private readonly adminService: AdminService,
+    private readonly cveFeedService: CveFeedService,
   ) {}
 
   @Get('jobs/live')
@@ -89,5 +91,32 @@ export class AdminOpsController {
       ipAddress: ip,
     });
     return { ok: true };
+  }
+
+  @Get('cve-feed/status')
+  async getCveFeedStatus() {
+    return this.cveFeedService.getStatus();
+  }
+
+  @Post('cve-feed/refresh')
+  async postCveFeedRefresh(@Req() req: Request) {
+    const adminUser = req.user as { id: string };
+    const ip = this.adminService.getClientIp(req);
+    const result = await this.cveFeedService.forceRefresh();
+    await this.adminService.log(adminUser.id, 'ops_cve_feed_refresh', {
+      resource: 'cve-feed',
+      details: JSON.stringify(result),
+      ipAddress: ip,
+    });
+    return { ok: true, ...result };
+  }
+
+  @Get('cve-feed/search')
+  async searchCveFeed(@Query('q') query: string, @Query('limit') limit?: string) {
+    if (!query) {
+      throw new HttpException('q parameter required', HttpStatus.BAD_REQUEST);
+    }
+    const results = this.cveFeedService.search(query, limit ? parseInt(limit, 10) : 20);
+    return { query, count: results.length, results };
   }
 }

@@ -226,6 +226,24 @@ export function useOnboardingTour({
     }
   }, [scanCount, isLoading, startTour])
 
+  // Fallback: if dashboard data is slow to load, trigger tour after 5s for first-time users
+  useEffect(() => {
+    if (!isLoading) return // data already loaded, main effect handles it
+
+    const tourDone = isTourCompleted('quick-start')
+    const tourSkipped = (() => {
+      try { return localStorage.getItem(`${TOUR_SKIPPED_KEY}_quick-start`) === 'true' } catch { return false }
+    })()
+
+    if (!tourDone && !tourSkipped) {
+      const fallbackTimer = setTimeout(() => {
+        // Re-check after timeout — if data still not loaded, trigger anyway
+        startTour('quick-start')
+      }, 5000)
+      return () => clearTimeout(fallbackTimer)
+    }
+  }, [isLoading, startTour])
+
   // Cleanup on unmount
   useEffect(() => {
     return () => { driverObj.current?.destroy() }

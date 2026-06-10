@@ -255,10 +255,12 @@ const Dashboard = () => {
         if (isNewChat) { setCurrentChatId(convId); setChatHistory((prev) => { const n: ChatHistory = { id: convId, title: userInput.substring(0, 50), messages: messagesRef.current, createdAt: new Date(), updatedAt: new Date() }; const u = [n, ...prev.filter((c) => c.id !== convId)]; if (user?.id) localStorage.setItem(`gwehai_chat_history_${user.id}`, JSON.stringify(u)); return u }) }
       }
       const es = gwehaiClient.connectToEvents(jobId, (event: GwehAIEvent) => handleStreamEvent(event, streamCtx), (_error) => {
-        if (intentionalCloseRef.current) return; sendInProgressRef.current = false; setIsLoading(false); setCurrentStep(null)
-        setActivityLog((prev) => [...prev.slice(-49), 'Text: Connection lost']); streamingMessageRef.current = null; eventSourceRef.current = null
-        setMessages((prev) => { const l = prev[prev.length - 1]; return l && l.role === 'assistant' && l.isStreaming ? prev.map((m, i) => i === prev.length - 1 ? { ...m, isStreaming: false, content: m.content || 'Connection lost.' } : m) : prev })
-        showToast('Connection lost.', 'warning')
+        if (intentionalCloseRef.current) return
+        // Don't set isLoading=false here — EventSource auto-reconnects on transport errors.
+        // Keep the stop button visible so users can abort if needed.
+        // Only log the connection issue; typed SSE 'done'/'error' events handle cleanup.
+        setActivityLog((prev) => [...prev.slice(-49), 'Text: Connection interrupted, reconnecting…'])
+        showToast('Connection interrupted. Reconnecting…', 'warning')
       }, () => {})
       eventSourceRef.current = es; intentionalCloseRef.current = false
     } catch (error: any) {

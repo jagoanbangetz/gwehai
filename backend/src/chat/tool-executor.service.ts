@@ -17,6 +17,8 @@ import { AttackChainService } from '../attack-chain/attack-chain.service';
 import { JwtAnalyzerService } from '../tools/jwt-analyzer.service';
 import { BrowserAgentService } from '../browser-agent/browser-agent.service';
 import { GlobalMemoryService } from '../tools/global-memory.service';
+import { OobDetectorService } from '../tools/oob-detector.service';
+import { OobPayloadType } from '../entities/oob-log.entity';
 import { getAgentLabel } from './agent-names';
 import type { ModelOptionKey } from '../config/model-options.config';
 
@@ -48,6 +50,7 @@ export class ToolExecutorService {
     private attackChainService: AttackChainService,
     private browserAgentService: BrowserAgentService,
     private globalMemoryService: GlobalMemoryService,
+    private oobDetectorService: OobDetectorService,
   ) {}
 
   /**
@@ -112,6 +115,8 @@ export class ToolExecutorService {
         return this.handleBrowserAction(safeArgs, context);
       case 'global_memory':
         return this.handleGlobalMemory(safeArgs);
+      case 'oob_test':
+        return this.handleOobTest(safeArgs);
       default:
         return JSON.stringify({ error: `Unknown tool: ${name}` });
     }
@@ -660,6 +665,150 @@ export class ToolExecutorService {
             : `Updating global memory: ${String(safeArgs.key || '').slice(0, maxLen)}`;
       default:
         return `Running: ${name}`;
+    }
+  }
+
+  // ─── Global Memory Handler ──────────────────────────────────────────
+
+  private async handleGlobalMemory(args: Record<string, any>): Promise<string> {
+    const action = String(args.action ?? '').trim();
+    if (!action) {
+      return JSON.stringify({ error: 'global_memory requires action (search, save, update)' });
+    }
+
+    try {
+      switch (action) {
+        case 'search': {
+          const query = String(args.query ?? '').trim();
+          if (!query) {
+            return JSON.stringify({ error: 'search requires query' });
+          }
+          const category = args.category ? String(args.category) : undefined;
+          const maxResults = Number(args.max_results) || 20;
+          const results = await this.globalMemoryService.search(
+            query,
+            category as any,
+            maxResults,
+          );
+          return JSON.stringify({
+            results,
+            count: results.length,
+            hint: results.length === 0
+              ? 'No patterns found. Use global_memory(action: "save") to add a new learning.'
+              : undefined,
+          }, null, 2);
+        }
+
+        case 'save': {
+          const category = String(args.category ?? '').trim();
+          const key = String(args.key ?? '').trim();
+          if (!category || !key) {
+            return JSON.stringify({ error: 'save requires category and key' });
+          }
+          const value = args.value && typeof args.value === 'object' ? args.value : {};
+          const confidence = args.confidence != null ? Number(args.confidence) : undefined;
+          const saved = await this.globalMemoryService.save({
+            category: category as any,
+            key,
+            value,
+            confidence,
+          });
+          return JSON.stringify({
+            ok: true,
+            id: saved.id,
+            category: saved.category,
+            key: saved.key,
+            confidence: saved.confidence,
+            message: 'Pattern saved to global memory',
+          });
+        }
+
+        case 'update': {
+          const category = String(args.category ?? '').trim();
+          const key = String(args.key ?? '').trim();
+          if (!category || !key) {
+            return JSON.stringify({ error: 'update requires category and key' });
+          }
+          const updates: { confidence?: number; value?: Record<string, any> } = {};
+          if (args.confidence != null) updates.confidence = Number(args.confidence);
+          if (args.value && typeof args.value === 'object') updates.value = args.value;
+
+          const updated = await this.globalMemoryService.update(
+            category as any,
+            key,
+            updates,
+          );
+          if (!updated) {
+            return JSON.stringify({ error: `Not found: ${category}/${key}. Use save action first.` });
+          }
+          return JSON.stringify({
+            ok: true,
+            id: updated.id,
+            hitCount: updated.hitCount,
+            confidence: updated.confidence,
+            lastUsedAt: updated.lastUsedAt,
+            message: 'Pattern updated (hit_count incremented)',
+          });
+        }
+
+        default:
+          return JSON.stringify({ error: `Unknown global_memory action: ${action}. Use search, save, or update.` });
+      }
+    } catch (err: any) {
+      return JSON.stringify({ error: `global_memory failed: ${err?.message || String(err)}` });
+    }
+  }
+
+  // ─── OOB Detector ─────────────────────────────────────────────
+
+  private async handleOobTest(args: Record<string, any>): Promise<string> {
+    const action = String(args.action ?? 'create').trim();
+    try {
+      switch (action) {
+        case 'create': {
+          const result = await this.oobDetectorService.createTest({
+            payloadType: args.payload_type ? String(args.payload_type) as OobPayloadType : undefined,
+            targetUrl: args.target_url ? String(args.target_url) : undefined,
+            vulnType: args.vuln_type ? String(args.vuln_type) : undefined,
+            timeoutMs: args.timeout_ms ? Number(args.timeout_ms) : undefined,
+            templateId: args.template_id ? String(args.template_id) : undefined,
+          });
+          return JSON.stringify(result);
+        }
+        case 'status': {
+          const testId = String(args.test_id ?? '').trim();
+          if (!testId) return JSON.stringify({ error: 'oob_test status requires test_id' });
+          const result = await this.oobDetectorService.getStatus(testId);
+          return JSON.stringify(result);
+        }
+        case 'wait': {
+          const testId = String(args.test_id ?? '').trim();
+          if (!testId) return JSON.stringify({ error: 'oob_test wait requires test_id' });
+          const waitMs = args.wait_ms ? Number(args.wait_ms) : undefined;
+          const result = await this.oobDetectorService.waitForCallback(testId, waitMs);
+          return JSON.stringify(result);
+        }
+        case 'cancel': {
+          const testId = String(args.test_id ?? '').trim();
+          if (!testId) return JSON.stringify({ error: 'oob_test cancel requires test_id' });
+          const result = await this.oobDetectorService.cancelTest(testId);
+          return JSON.stringify(result);
+        }
+        case 'templates': {
+          const vulnType = args.vuln_type ? String(args.vuln_type) : undefined;
+          const templates = this.oobDetectorService.getTemplates(vulnType);
+          return JSON.stringify({ templates, count: templates.length });
+        }
+        case 'list': {
+          const limit = args.limit ? Number(args.limit) : 20;
+          const tests = await this.oobDetectorService.listTests(limit);
+          return JSON.stringify({ tests, count: tests.length });
+        }
+        default:
+          return JSON.stringify({ error: `Unknown oob_test action: ${action}. Use create, status, wait, cancel, templates, or list.` });
+      }
+    } catch (err: any) {
+      return JSON.stringify({ error: `oob_test failed: ${err?.message || String(err)}` });
     }
   }
 

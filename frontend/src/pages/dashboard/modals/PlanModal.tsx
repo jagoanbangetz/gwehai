@@ -11,7 +11,7 @@ interface Props {
 
 export default function PlanModal({ isLoading, myPlan, currentPlan, onUpgrade, onClose }: Props) {
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="modal-content plan-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">My Plan & Usage</h2>

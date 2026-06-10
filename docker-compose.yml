@@ -41,7 +41,7 @@ services:
   pentest-tools:
     build:
       context: ./backend/skills
-      dockerfile: Dockerfile.pentest-tools
+      dockerfile: Dockerfile.pentest-tools-light
     image: gwehai-pentest-tools
     container_name: gwehai-pentest-tools
     # Keep running so backend can: docker exec gwehai-pentest-tools <cmd>
@@ -49,9 +49,11 @@ services:
     volumes:
       # AI-written JS scripts (write_script tool); backend writes here, container runs node /opt/browser/scripts/<name>.js
       - ./backend/skills/browser/scripts:/opt/browser/scripts
-    # Optional: mount workspace for saving outputs (e.g. reports) into host
-    # volumes:
-    #   - ./backend/workspace:/workspace
+      # Persistent templates & wordlists — survive container rebuild, updated via cron
+      - /opt/nuclei-templates:/opt/nuclei-templates
+      - /opt/wordlists:/opt/wordlists
+      # Update scripts accessible inside container
+      - /opt/scripts:/opt/scripts:ro
     networks:
       - gwehai-network
 

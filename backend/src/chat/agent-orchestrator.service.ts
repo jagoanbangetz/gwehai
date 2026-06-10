@@ -22,10 +22,12 @@ import type { ModelOptionKey } from '../config/model-options.config';
 import { PENTEST_SYSTEM_PROMPT, SIMPLE_SECURITY_SYSTEM_PROMPT } from '../prompt/pentest.system-prompt';
 import { GWEHAI_CONVERSATION_SYSTEM_PROMPT } from '../prompt/gwehai-identity';
 import { PENTEST_TOOL_DEFS } from '../prompt/pentest-tools.def';
+import { PromptManagerService } from '../prompt/prompt-manager.service';
 import { LlmMessage, LlmToolCall } from '../llm/llm.types';
 import { ConversationService } from './conversation.service';
 import { CostService } from './cost.service';
 import { ToolExecutorService, ToolExecutionContext } from './tool-executor.service';
+import { ReVerifyService } from '../reports/re-verify.service';
 import { getAgentLabel } from './agent-names';
 import { PlanResolutionService } from '../plans/plan-resolution.service';
 import { PlanUsageService } from '../plans/plan-usage.service';
@@ -34,9 +36,14 @@ import { validateStep } from '../plans/plan-limits.validation';
 import { getPlanPayload } from '../config/plans.config';
 import { PentestJobsService } from '../pentest-jobs/pentest-jobs.service';
 import { truncateMessagesForContext, clipTextPreserveHeadTail, MAX_CONTEXT_CHARS_PER_ROLE } from './context-manager';
+import { CveFeedService } from '../cve-feed/cve-feed.service';
+import type { TechFingerprint } from '../cve-feed/cve-feed.types';
 
 /** Small delay so SSE client receives events over time and frontend typing effect can run */
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Max wait for a parallel sub-agent batch (5 min). After this, partial results are used. */
+const PARALLEL_BATCH_TIMEOUT_MS = 5 * 60 * 1000;
 
 @Injectable()
 export class AgentOrchestratorService {
@@ -44,6 +51,7 @@ export class AgentOrchestratorService {
     private conversationService: ConversationService,
     private costService: CostService,
     private toolExecutor: ToolExecutorService,
+    private reVerifyService: ReVerifyService,
     private llmService: LlmService,
     private providerRouter: ProviderRouterService,
     private costManager: CostManagerService,
@@ -54,12 +62,16 @@ export class AgentOrchestratorService {
     private pentestJobs: PentestJobsService,
     private dataSource: DataSource,
     private pointsService: PointsService,
+    private cveFeedService: CveFeedService,
+    private promptManager: PromptManagerService,
   ) {}
 
   /** Tracks main-agent done + pending sub-agents per parent conversation. */
   private readonly pendingSubAgentsByParent = new Map<string, { mainDone: boolean; pending: number }>();
   /** Resolvers for callers waiting until conversation is fully finished. */
   private readonly pendingFinishResolvers = new Map<string, () => void>();
+  /** Promises for background sub-agents spawned with wait_for_reply=false. Keyed by parentCid. */
+  private readonly parallelSubAgentPromises = new Map<string, Promise<string>[]>();
 
   /**
    * Mark main agent done for cid; if no pending sub-agents, set finished and push done.
@@ -114,6 +126,48 @@ export class AgentOrchestratorService {
     } else {
       this.pendingSubAgentsByParent.set(parentCid, state);
     }
+  }
+
+  /**
+   * Wait for all parallel (wait_for_reply=false) sub-agents spawned in this turn.
+   * Emits SSE events for progress + completion. Uses timeout protection.
+   */
+  private async waitForParallelSubAgents(
+    cid: string,
+    push: (ev: { type: string; data: Record<string, any> }) => void,
+  ): Promise<void> {
+    const promises = this.parallelSubAgentPromises.get(cid);
+    if (!promises || promises.length === 0) return;
+
+    const count = promises.length;
+    push({
+      type: 'sub_agents_parallel_start',
+      data: { count, timeout_ms: PARALLEL_BATCH_TIMEOUT_MS },
+    });
+
+    let completed = 0;
+    const wrapped = promises.map((p) =>
+      p.then((v) => {
+        completed++;
+        push({
+          type: 'sub_agents_parallel_progress',
+          data: { completed, total: count },
+        });
+        return v;
+      }),
+    );
+
+    await Promise.race([
+      Promise.allSettled(wrapped),
+      delay(PARALLEL_BATCH_TIMEOUT_MS),
+    ]);
+
+    this.parallelSubAgentPromises.delete(cid);
+
+    push({
+      type: 'sub_agents_parallel_done',
+      data: { completed, total: count },
+    });
   }
 
   /**
@@ -287,10 +341,48 @@ export class AgentOrchestratorService {
     }));
 
     let messages: LlmMessage[] = [
-      { role: 'system', content: PENTEST_SYSTEM_PROMPT },
+      { role: 'system', content: PENTEST_SYSTEM_PROMPT }, // placeholder, rebuilt below
       ...priorLlm,
       { role: 'user', content: message },
     ];
+
+    // ── Dynamic Prompt Assembly ──────────────────────────────────────
+    // Track prior tool call names for phase detection across turns.
+    const priorToolCallNames: string[] = [];
+    // Build initial dynamic prompt (turn 0, no tool calls yet)
+    const initialPromptResult = this.promptManager.buildSystemPrompt(messages, undefined, priorToolCallNames);
+    messages[0] = { role: 'system', content: initialPromptResult.prompt };
+    push({
+      type: 'status',
+      data: {
+        message: `Prompt: dynamic mode (${initialPromptResult.charCount} chars, phase=${initialPromptResult.phase ?? 'none'}, tools=[${initialPromptResult.toolsInjected.join(',')}])`,
+      },
+    });
+
+    // ── CVE Feed Injection ───────────────────────────────────────────
+    // Extract tech fingerprints from user message + prior context,
+    // then inject relevant CVEs as an additional system message.
+    try {
+      const fingerprints = this.extractTechFingerprints(message, priorLlm);
+      if (fingerprints.length > 0) {
+        const cvePayload = this.cveFeedService.lookupForTech(fingerprints);
+        if (cvePayload.count > 0) {
+          messages.splice(1, 0, {
+            role: 'system',
+            content: cvePayload.formattedText,
+          });
+          push({
+            type: 'status',
+            data: {
+              message: `CVE Feed: ${cvePayload.count} relevant CVEs found (${cvePayload.queryTime}ms)`,
+            },
+          });
+        }
+      }
+    } catch (err: any) {
+      // Non-blocking: CVE injection is best-effort
+      push({ type: 'status', data: { message: `CVE Feed skipped: ${err?.message || 'unknown'}` } });
+    }
 
     const MAX_TURNS = 100;
     let turn = 0;
@@ -361,55 +453,132 @@ export class AgentOrchestratorService {
           tool_calls: response.tool_calls,
         });
 
-        for (const tc of response.tool_calls) {
+        // ── Parallel tool execution ──────────────────────────────────────
+        // Parse all tool call args upfront & push status messages
+        const parsedToolCalls = response.tool_calls.map((tc) => {
           if (abortSignal?.aborted) throw new Error('Request was cancelled');
           let args: Record<string, any> = {};
           try {
-            const parsed = typeof tc.arguments === 'string' ? JSON.parse(tc.arguments) : tc.arguments;
-            args = parsed && typeof parsed === 'object' ? parsed : {};
+            const p = typeof tc.arguments === 'string' ? JSON.parse(tc.arguments) : tc.arguments;
+            args = p && typeof p === 'object' ? p : {};
           } catch { args = {}; }
+          push({ type: 'status', data: { message: this.toolExecutor.formatToolReasoning(tc.name, args) } });
+          return { tc, args };
+        });
 
-          const stepDescription = this.toolExecutor.formatToolReasoning(tc.name, args);
-          push({ type: 'status', data: { message: stepDescription } });
+        // Split: sessions_send must run last (needs orchestrator context + depends on other results)
+        const regularToolCalls = parsedToolCalls.filter((t) => t.tc.name !== 'sessions_send');
+        const sendToolCalls = parsedToolCalls.filter((t) => t.tc.name === 'sessions_send');
 
-          let toolResult: string;
+        // Helper: build ToolExecutionContext
+        const mkContext = (): ToolExecutionContext => ({
+          jobId, conversationId: cid, userId, memoryScopeId,
+          nextAgentIndexRef, pushEvent: push, abortSignal,
+          modelKey: options?.model_key, maxAgentsForRun: options?.maxAgentsForRun,
+        });
+
+        // Rate-limit guard: group by target, sequential-ize if >3 to same target
+        // Target = exec hostname, write_file dir, or tool name for others
+        const resolveTarget = (name: string, args: Record<string, any>): string => {
+          if (name === 'exec' && args.url) { try { return new URL(args.url).hostname; } catch { /* fall through */ } }
+          if (name === 'write_file' && args.path) return args.path.replace(/[/\\][^/\\]*$/, '');
+          return name;
+        };
+
+        const targetCounts = new Map<string, number>();
+        for (const t of regularToolCalls) {
+          const key = resolveTarget(t.tc.name, t.args);
+          targetCounts.set(key, (targetCounts.get(key) || 0) + 1);
+        }
+        const heavyTargets = new Set<string>();
+        for (const [k, v] of targetCounts) { if (v > 3) heavyTargets.add(k); }
+
+        const executeOne = async (tc: LlmToolCall, args: Record<string, any>): Promise<string> => {
+          if (abortSignal?.aborted) throw new Error('Request was cancelled');
           try {
-            // Handle sessions_send delegation inline (needs access to this orchestrator)
             if (tc.name === 'sessions_send') {
-              toolResult = await this.handleSessionsSendTool(args, userId, cid, jobId, pushEvent, nextAgentIndexRef, memoryScopeId, abortSignal, options?.model_key, options?.maxAgentsForRun);
-            } else {
-              const context: ToolExecutionContext = {
-                jobId,
-                conversationId: cid,
-                userId,
-                memoryScopeId,
-                nextAgentIndexRef,
-                pushEvent: push,
-                abortSignal,
-                modelKey: options?.model_key,
-                maxAgentsForRun: options?.maxAgentsForRun,
-              };
-              toolResult = await this.toolExecutor.runTool(tc.name, args, context);
+              return await this.handleSessionsSendTool(args, userId, cid, jobId, pushEvent, nextAgentIndexRef, memoryScopeId, abortSignal, options?.model_key, options?.maxAgentsForRun);
             }
+            return await this.toolExecutor.runTool(tc.name, args, mkContext());
           } catch (err: any) {
-            toolResult = `Error: ${err?.message || String(err)}`;
+            return `Error: ${err?.message || String(err)}`;
           }
+        };
 
-          await this.toolExecutor.logToolExecution(userId, cid, args, toolResult);
+        // Run regular tools — parallel with settle, sequential for heavy targets
+        const regularResults: { tc: LlmToolCall; args: Record<string, any>; result: string }[] = [];
+        const lightCalls = regularToolCalls.filter((t) => !heavyTargets.has(resolveTarget(t.tc.name, t.args)));
+        const heavyCalls = regularToolCalls.filter((t) => heavyTargets.has(resolveTarget(t.tc.name, t.args)));
 
+        // Fire light tools in parallel
+        const settled = await Promise.allSettled(
+          lightCalls.map(async ({ tc, args }) => ({ tc, args, result: await executeOne(tc, args) })),
+        );
+        for (let i = 0; i < settled.length; i++) {
+          const s = settled[i];
+          regularResults.push(s.status === 'fulfilled' ? s.value : { tc: lightCalls[i].tc, args: lightCalls[i].args, result: `Error: ${String(s.reason)}` });
+        }
+
+        // Run heavy-target tools sequentially to avoid WAF / rate limits
+        for (const { tc, args } of heavyCalls) {
+          regularResults.push({ tc, args, result: await executeOne(tc, args) });
+        }
+
+        // sessions_send always last (depends on upstream tool results)
+        const sendResults: { tc: LlmToolCall; args: Record<string, any>; result: string }[] = [];
+        for (const { tc, args } of sendToolCalls) {
+          sendResults.push({ tc, args, result: await executeOne(tc, args) });
+        }
+
+        // Log & push results in original order (preserves message sequence for LLM)
+        const resultMap = new Map<string, { tc: LlmToolCall; args: Record<string, any>; result: string }>();
+        for (const r of [...regularResults, ...sendResults]) resultMap.set(r.tc.id, r);
+
+        for (const { tc } of parsedToolCalls) {
+          const r = resultMap.get(tc.id);
+          if (!r) continue;
+          await this.toolExecutor.logToolExecution(userId, cid, r.args, r.result);
           messages.push({
             role: 'tool',
             tool_call_id: tc.id,
-            content: clipTextPreserveHeadTail(toolResult, MAX_CONTEXT_CHARS_PER_ROLE.tool),
+            content: clipTextPreserveHeadTail(r.result, MAX_CONTEXT_CHARS_PER_ROLE.tool),
           });
           push({
             type: 'tool_log',
-            data: { tool: tc.name, output: clipTextPreserveHeadTail(toolResult, 4000) },
+            data: { tool: tc.name, output: clipTextPreserveHeadTail(r.result, 4000) },
           });
         }
+
+        // ── Wait for parallel sub-agents (wait_for_reply=false) ───────────
+        // If any background sub-agents were spawned this turn, wait for them
+        // before the next LLM turn so their results are available.
+        await this.waitForParallelSubAgents(cid, push);
+
         const tokensThisTurn =
           Math.ceil((response.content?.length || 0) / 4) + 500 + (response.tool_calls?.length || 0) * 200;
         await this.planUsage.recordStep(userId, cid, tokensThisTurn);
+
+        // ── Dynamic Prompt Rebuild for Next Turn ─────────────────────
+        // Track tool names from this turn for phase detection
+        for (const tc of response.tool_calls) {
+          priorToolCallNames.push(tc.name);
+        }
+        // Rebuild system prompt with updated phase + tool context
+        const nextPromptResult = this.promptManager.buildSystemPrompt(
+          messages,
+          response.tool_calls,
+          priorToolCallNames,
+        );
+        messages[0] = { role: 'system', content: nextPromptResult.prompt };
+        if (nextPromptResult.phase || nextPromptResult.toolsInjected.length > 0) {
+          push({
+            type: 'status',
+            data: {
+              message: `Prompt: ${nextPromptResult.charCount} chars, phase=${nextPromptResult.phase ?? 'none'}, tools=[${nextPromptResult.toolsInjected.join(',')}]`,
+            },
+          });
+        }
+
         push({ type: 'status', data: { message: 'Planning next plan...' } });
         continue;
       }
@@ -420,13 +589,37 @@ export class AgentOrchestratorService {
       break;
     }
 
+    // ─── Re-verify HIGH/CRITICAL findings before final report ───────────────
+    // This catches false positives from VerifyAgent — if the tool output was
+    // misread, the re-verification will detect it and exclude from report.
+    let reVerifySummary = '';
+    try {
+      push({ type: 'status', data: { message: 'Re-verifying HIGH/CRITICAL findings...' } });
+      const reVerifyResult = await this.reVerifyService.reVerifyAllHighCritical(userId, cid);
+      if (reVerifyResult.total > 0) {
+        reVerifySummary = `\n\n[RE-VERIFY] ${reVerifyResult.passed}/${reVerifyResult.total} HIGH/CRITICAL findings re-verified. ` +
+          `${reVerifyResult.disputed} disputed (likely false positives, excluded from report).`;
+        push({
+          type: 'status',
+          data: {
+            message: `Re-verify: ${reVerifyResult.passed} passed, ${reVerifyResult.failed} failed, ${reVerifyResult.disputed} disputed`,
+            re_verify: reVerifyResult,
+          },
+        });
+      }
+    } catch (err: any) {
+      // Non-blocking: if re-verify fails, continue with original findings
+      push({ type: 'status', data: { message: `Re-verify skipped: ${err?.message || 'unknown error'}` } });
+    }
+
     // Summary if no text reply
     const modelKeySummary = options?.model_key || 'auto';
     if (!finalContent?.trim()) {
       push({ type: 'status', data: { message: 'Writing response...' } });
+      const reVerifyContext = reVerifySummary ? `\n\nRE-VERIFICATION RESULTS:${reVerifySummary}` : '';
       const summaryPrompt = stepLimitReached
-        ? 'Step limit for this session was reached. Summarize what you found so far (list each report_finding). In <final>, also list which checklist areas you did NOT get to test (e.g. XSS, LFI, auth) so the user knows. Reply only with <think>brief</think> then <final>summary + unchecked areas</final>. No tool calls.'
-        : 'Summarize what you did so far. Reply only with <think>brief reasoning</think> then <final>your summary for the user</final>. No tool calls.';
+        ? `Step limit for this session was reached. Summarize what you found so far (list each report_finding). In <final>, also list which checklist areas you did NOT get to test (e.g. XSS, LFI, auth) so the user knows.${reVerifyContext} Reply only with <think>brief</think> then <final>summary + unchecked areas + re-verify status</final>. No tool calls.`
+        : `Summarize what you did so far.${reVerifyContext} Reply only with <think>brief reasoning</think> then <final>your summary for the user (include re-verification status if any)</final>. No tool calls.`;
       const summaryMessage: LlmMessage = { role: 'user', content: summaryPrompt };
       const summaryMessages = truncateMessagesForContext([...messages, summaryMessage]);
       const summaryCaps = this.costManager.getToolsOutputCap() ?? this.costManager.getCaps('auto', 'decision').maxOutputTokens;
@@ -533,12 +726,14 @@ export class AgentOrchestratorService {
       onSubAgentDone = () => this.tryFinishParentAfterSubAgent(currentConversationId, jobId, pushEvent);
     }
 
-    void this.processMessageWithTools(
+    // Track promise so main agent can wait for parallel completion
+    const subAgentPromise = this.processMessageWithTools(
       userId, msg.trim(), sessionId, sessionId, push, agentInfo,
       memoryScopeId, { emitDoneEvent: false, abortSignal, ...(modelKey && { model_key: modelKey }) },
     ).then(async () => {
       push({ type: 'status', data: { message: "I'm done with my work. Please continue with the next step." } });
       await onSubAgentDone?.();
+      return JSON.stringify({ ok: true, session_id: sessionId, status: 'completed' });
     }).catch(async (err: any) => {
       if (pushEvent && agentInfo) {
         const raw = err?.message ?? err?.response?.message ?? String(err);
@@ -548,9 +743,177 @@ export class AgentOrchestratorService {
         });
       }
       await onSubAgentDone?.();
+      return JSON.stringify({ ok: false, session_id: sessionId, error: String(err?.message || err) });
     });
 
+    // Accumulate promises for parallel batch wait
+    if (currentConversationId) {
+      const existing = this.parallelSubAgentPromises.get(currentConversationId) || [];
+      existing.push(subAgentPromise);
+      this.parallelSubAgentPromises.set(currentConversationId, existing);
+    }
+
     return JSON.stringify({ ok: true, message: 'Message sent (sub-agent running in background)' });
+  }
+
+  /**
+   * Extract technology stack strings from user message and prior conversation.
+   * Returns strings like "WordPress 6.5", "PHP 8.2", "Apache 2.4" for CVE lookup.
+   */
+  private extractTechStack(
+    message: string,
+    priorMessages: LlmMessage[],
+  ): string[] {
+    const allText = [
+      message,
+      ...priorMessages.map((m) => (typeof m.content === 'string' ? m.content : '')),
+    ].join(' ');
+
+    const techPatterns: RegExp[] = [
+      // CMS & frameworks with version
+      /\b(wordpress|wp)\s+[\d.]+/gi,
+      /\b(laravel)\s+[\d.]+/gi,
+      /\b(django)\s+[\d.]+/gi,
+      /\b(ruby\s+on\s+rails|rails)\s+[\d.]+/gi,
+      /\b(express|fastapi|flask|spring)\s+[\d.]+/gi,
+      /\b(drupal|joomla|magento)\s+[\d.]+/gi,
+      // Languages with version
+      /\b(php)\s+[\d.]+/gi,
+      /\b(python|node|ruby|java|go)\s+[\d.]+/gi,
+      // Servers with version
+      /\b(apache|nginx|tomcat|iis)\s+[\d.]+/gi,
+      // Databases with version
+      /\b(mysql|postgresql|postgres|mongodb|redis|mariadb)\s+[\d.]+/gi,
+      // Operating systems
+      /\b(ubuntu|debian|centos|rhel|alpine)\s+[\d.]+/gi,
+      // Common tech without version (still useful for CVE lookup)
+      /\b(react|angular|vue|next\.?js|nuxt)\b/gi,
+    ];
+
+    const found = new Set<string>();
+    for (const pattern of techPatterns) {
+      const matches = allText.match(pattern);
+      if (matches) {
+        for (const match of matches) {
+          found.add(match.trim());
+        }
+      }
+    }
+
+    // Also detect tech from common URL patterns in the message
+    const urlTechMap: [RegExp, string][] = [
+      [/\/wp-admin|\/wp-content|\/wp-includes|\/wp-json/i, 'WordPress'],
+      [/\/administrator\/|\/components\/com_/i, 'Joomla'],
+      [/\/sites\/default\/|\/core\/misc\/drupal/i, 'Drupal'],
+      [/\/admin\/(login|dashboard).*laravel|\.env\.example/i, 'Laravel'],
+    ];
+
+    for (const [pattern, tech] of urlTechMap) {
+      if (pattern.test(allText) && !found.has(tech)) {
+        found.add(tech);
+      }
+    }
+
+    return Array.from(found);
+  }
+
+  /**
+   * Extract tech fingerprints from user message and prior context.
+   * Looks for common technology names + version patterns.
+   */
+  private extractTechFingerprints(
+    message: string,
+    priorMessages: LlmMessage[],
+  ): TechFingerprint[] {
+    const combined = [
+      message,
+      ...priorMessages.map((m) => m.content || ''),
+    ].join(' ');
+
+    const fingerprints: TechFingerprint[] = [];
+    const seen = new Set<string>();
+
+    // Technology patterns: name + optional version
+    const techPatterns: { regex: RegExp; product: string }[] = [
+      // CMS
+      { regex: /wordpress[\s\-_]*(\d+[\.\d]*)/gi, product: 'wordpress' },
+      { regex: /drupal[\s\-_]*(\d+[\.\d]*)/gi, product: 'drupal' },
+      { regex: /joomla[\s\-_]*(\d+[\.\d]*)/gi, product: 'joomla' },
+      { regex: /magento[\s\-_]*(\d+[\.\d]*)/gi, product: 'magento' },
+      { regex: /shopify/gi, product: 'shopify' },
+      // Frameworks
+      { regex: /laravel[\s\-_]*(\d+[\.\d]*x?)/gi, product: 'laravel' },
+      { regex: /django[\s\-_]*(\d+[\.\d]*)/gi, product: 'django' },
+      { regex: /flask[\s\-_]*(\d+[\.\d]*)/gi, product: 'flask' },
+      { regex: /rails[\s\-_]*(\d+[\.\d]*)/gi, product: 'rails' },
+      { regex: /spring[\s\-_]*(\d+[\.\d]*)/gi, product: 'spring' },
+      { regex: /express[\s\-_]*(\d+[\.\d]*)/gi, product: 'express' },
+      { regex: /next[\s\.\-_]*(?:js)?[\s\-_]*(\d+[\.\d]*)/gi, product: 'next.js' },
+      { regex: /angular[\s\-_]*(\d+[\.\d]*)/gi, product: 'angular' },
+      { regex: /react[\s\-_]*(\d+[\.\d]*)/gi, product: 'react' },
+      { regex: /vue[\s\.\-_]*(?:js)?[\s\-_]*(\d+[\.\d]*)/gi, product: 'vue.js' },
+      // Servers
+      { regex: /nginx[\s\-_]*(\d+[\.\d]*)/gi, product: 'nginx' },
+      { regex: /apache[\s\-_]*(\d+[\.\d]*)/gi, product: 'apache' },
+      { regex: /tomcat[\s\-_]*(\d+[\.\d]*)/gi, product: 'tomcat' },
+      { regex: /iis[\s\-_]*(\d+[\.\d]*)/gi, product: 'iis' },
+      { regex: /caddy[\s\-_]*(\d+[\.\d]*)/gi, product: 'caddy' },
+      // Languages / Runtimes
+      { regex: /php[\s\-_]*(\d+[\.\d]*)/gi, product: 'php' },
+      { regex: /python[\s\-_]*(\d+[\.\d]*)/gi, product: 'python' },
+      { regex: /node[\s\._]*(?:js)?[\s\-_]*(\d+[\.\d]*)/gi, product: 'node.js' },
+      { regex: /java[\s\-_]*(\d+[\.\d]*)/gi, product: 'java' },
+      { regex: /ruby[\s\-_]*(\d+[\.\d]*)/gi, product: 'ruby' },
+      // Databases
+      { regex: /mysql[\s\-_]*(\d+[\.\d]*)/gi, product: 'mysql' },
+      { regex: /postgres(?:ql)?[\s\-_]*(\d+[\.\d]*)/gi, product: 'postgresql' },
+      { regex: /mongodb[\s\-_]*(\d+[\.\d]*)/gi, product: 'mongodb' },
+      { regex: /redis[\s\-_]*(\d+[\.\d]*)/gi, product: 'redis' },
+      { regex: /elasticsearch[\s\-_]*(\d+[\.\d]*)/gi, product: 'elasticsearch' },
+      // Other
+      { regex: /docker[\s\-_]*(\d+[\.\d]*)/gi, product: 'docker' },
+      { regex: /kubernetes[\s\-_]*(\d+[\.\d]*)/gi, product: 'kubernetes' },
+      { regex: /grafana[\s\-_]*(\d+[\.\d]*)/gi, product: 'grafana' },
+      { regex: /gitlab[\s\-_]*(\d+[\.\d]*)/gi, product: 'gitlab' },
+      { regex: /jenkins[\s\-_]*(\d+[\.\d]*)/gi, product: 'jenkins' },
+      { regex: /woocommerce[\s\-_]*(\d+[\.\d]*)/gi, product: 'woocommerce' },
+      { regex: /prestashop[\s\-_]*(\d+[\.\d]*)/gi, product: 'prestashop' },
+    ];
+
+    for (const { regex, product } of techPatterns) {
+      regex.lastIndex = 0;
+      const match = regex.exec(combined);
+      if (match) {
+        const key = product.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          fingerprints.push({
+            product: key,
+            version: match[1] || undefined,
+          });
+        }
+      }
+    }
+
+    // Also detect tech from common URL patterns
+    const urlPatterns: { pattern: RegExp; product: string }[] = [
+      { pattern: /\/wp-admin|\/wp-content|\/wp-includes|\/wp-json/i, product: 'wordpress' },
+      { pattern: /\/administrator\/|\/components\/com_/i, product: 'joomla' },
+      { pattern: /\/sites\/default\/|\/core\/misc\/drupal/i, product: 'drupal' },
+      { pattern: /\/admin\/(login|dashboard).*laravel|\.env\.example/i, product: 'laravel' },
+    ];
+
+    for (const { pattern, product } of urlPatterns) {
+      if (pattern.test(combined)) {
+        const key = product.toLowerCase();
+        if (!seen.has(key)) {
+          seen.add(key);
+          fingerprints.push({ product: key });
+        }
+      }
+    }
+
+    return fingerprints;
   }
 
   /**
