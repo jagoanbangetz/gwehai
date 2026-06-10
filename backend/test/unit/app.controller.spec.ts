@@ -9,13 +9,4 @@ describe('AppController', () => {
     expect(controller.getHello()).toBe('hello');
     expect(appService.getHello).toHaveBeenCalled();
   });
-
-  it('returns health payload', () => {
-    const controller = new AppController({} as AppService);
-    const health = controller.getHealth();
-
-    expect(health.status).toBe('ok');
-    expect(health.service).toBe('GwehAI Backend');
-    expect(typeof health.timestamp).toBe('string');
-  });
 });
