@@ -75,26 +75,26 @@
 }
 
 .chat-message__avatar-icon {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 14px;
   font-weight: 700;
-  color: oklch(0.9 0 0);
+  color: oklch(0.92 0.003 60);
   line-height: 1;
 }
 
 /* User message text bubble */
 .user-message-text {
-  background: oklch(0.16 0 0);
+  background: oklch(0.2 0.006 60);
   border: 1px solid oklch(0.25 0 0 / 0.4);
   border-radius: 16px 16px 4px 16px;
   padding: 10px 16px;
-  color: oklch(0.95 0 0);
+  color: oklch(0.96 0.003 60);
   font-size: 0.95rem;
   line-height: 1.6;
   max-width: 100%;
   overflow-wrap: anywhere;
   word-break: break-word;
-  box-shadow: 0 1px 4px oklch(0 0 0 / 0.15);
+  box-shadow: 0 1px 4px oklch(0.07 0.005 60 / 0.18);
 }
 
 /* Assistant response area */
@@ -154,7 +154,7 @@
 .assistant-thinking__icon {
   font-size: 12px;
   color: oklch(0.6 0.12 270);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .assistant-thinking__title {
@@ -163,14 +163,14 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: oklch(0.6 0.08 270);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .assistant-thinking__text {
   font-size: 13px;
-  color: oklch(0.7 0 0);
+  color: oklch(0.72 0.005 60);
   line-height: 1.5;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -186,12 +186,12 @@
 .assistant-model-name {
   font-size: 11px;
   font-weight: 500;
-  color: oklch(0.55 0 0);
-  font-family: 'JetBrains Mono', monospace;
+  color: oklch(0.57 0.005 60);
+  font-family: var(--font-mono);
   padding: 2px 8px;
   background: oklch(0.1 0 0 / 0.5);
   border-radius: 4px;
-  border: 1px solid oklch(0.2 0 0 / 0.3);
+  border: 1px solid oklch(0.24 0.006 60 / 0.3);
 }
 
 /* Error message */
@@ -217,7 +217,7 @@
 
 /* Tool terminal (inside message) */
 .chat-message--assistant .tool-terminal {
-  background: oklch(0.06 0 0);
+  background: oklch(0.1 0.006 60);
   border: 1px solid oklch(0.18 0 0 / 0.4);
   border-radius: 10px;
   overflow: hidden;
@@ -229,15 +229,15 @@
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: oklch(0.08 0 0);
+  background: oklch(0.12 0.006 60);
   border-bottom: 1px solid oklch(0.15 0 0 / 0.3);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 
 .chat-message--assistant .tool-terminal__status {
   font-size: 10px;
-  color: oklch(0.6 0 0);
+  color: oklch(0.62 0.005 60);
 }
 
 .chat-message--assistant .tool-terminal__status--running {
@@ -247,22 +247,22 @@
 
 .chat-message--assistant .tool-terminal__name {
   font-weight: 600;
-  color: oklch(0.85 0 0);
+  color: oklch(0.87 0.003 60);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .chat-message--assistant .tool-terminal__reasoning {
-  color: oklch(0.6 0 0);
+  color: oklch(0.62 0.005 60);
   font-size: 11px;
   margin-left: auto;
 }
 
 .chat-message--assistant .tool-terminal__logs {
   padding: 10px 12px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
-  color: oklch(0.8 0 0);
+  color: oklch(0.82 0.003 60);
   line-height: 1.6;
   margin: 0;
   white-space: pre-wrap;
@@ -274,7 +274,7 @@
 /* Details expander */
 .assistant-details {
   margin-top: 8px;
-  border: 1px solid oklch(0.2 0 0 / 0.3);
+  border: 1px solid oklch(0.24 0.006 60 / 0.3);
   border-radius: 10px;
   overflow: hidden;
 }
@@ -283,11 +283,11 @@
   padding: 8px 14px;
   font-size: 13px;
   font-weight: 500;
-  color: oklch(0.7 0 0);
+  color: oklch(0.72 0.005 60);
   cursor: pointer;
   background: oklch(0.08 0 0 / 0.5);
   transition: background 0.15s;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .assistant-details__summary:hover {
@@ -301,8 +301,8 @@
 /* Message timestamp */
 .message-timestamp {
   font-size: 10px;
-  color: oklch(0.4 0 0);
-  font-family: 'JetBrains Mono', monospace;
+  color: oklch(0.42 0.005 60);
+  font-family: var(--font-mono);
   margin-top: 4px;
   opacity: 0;
   transition: opacity 0.2s;
@@ -349,10 +349,10 @@
   background: oklch(0.25 0.12 25);
   border: 1px solid oklch(0.4 0.12 25 / 0.6);
   border-radius: 10px;
-  color: oklch(0.95 0 0);
+  color: oklch(0.96 0.003 60);
   font-size: 13px;
   font-weight: 600;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   cursor: pointer;
   transition: all 0.15s ease;
   flex-shrink: 0;
@@ -385,8 +385,8 @@
   height: 36px;
   border-radius: 10px;
   border: none;
-  background: oklch(0.95 0 0);
-  color: oklch(0.08 0 0);
+  background: oklch(0.96 0.003 60);
+  color: oklch(0.12 0.006 60);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -398,12 +398,12 @@
 .input-send:hover:not(:disabled) {
   background: oklch(1 0 0);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px oklch(0 0 0 / 0.3);
+  box-shadow: 0 4px 12px oklch(0.07 0.005 60 / 0.35);
 }
 
 .input-send:disabled {
-  background: oklch(0.25 0 0);
-  color: oklch(0.5 0 0);
+  background: oklch(0.28 0.006 60);
+  color: oklch(0.52 0.005 60);
   cursor: not-allowed;
 }
 
@@ -418,7 +418,7 @@
   border-radius: 10px;
   border: 1px solid oklch(0.25 0 0 / 0.4);
   background: transparent;
-  color: oklch(0.65 0 0);
+  color: oklch(0.67 0.005 60);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -428,7 +428,7 @@
 }
 
 .input-voice:hover {
-  color: oklch(0.9 0 0);
+  color: oklch(0.92 0.003 60);
   background: oklch(0.15 0 0 / 0.3);
   border-color: oklch(0.35 0 0 / 0.5);
 }

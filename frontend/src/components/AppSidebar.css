@@ -3,8 +3,8 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: oklch(0.05 0 0);
-  border-right: 1px solid oklch(0.2 0 0 / 0.3);
+  background: oklch(0.09 0.006 60);
+  border-right: 1px solid oklch(0.24 0.006 60 / 0.3);
   flex-shrink: 0;
   transition: width 180ms ease;
 }
@@ -16,7 +16,7 @@
   flex-direction: column;
   min-height: 0;
   flex: 1;
-  background: oklch(0.05 0 0);
+  background: oklch(0.09 0.006 60);
 }
 
 .sidebarHeader {
@@ -24,8 +24,8 @@
   top: 0;
   z-index: 5;
   flex-shrink: 0;
-  background: oklch(0.05 0 0);
-  border-bottom: 1px solid oklch(0.2 0 0 / 0.3);
+  background: oklch(0.09 0.006 60);
+  border-bottom: 1px solid oklch(0.24 0.006 60 / 0.3);
 }
 
 .sidebarScroll {
@@ -72,7 +72,7 @@
   bottom: 0;
   z-index: 10;
   flex-shrink: 0;
-  background: oklch(0.05 0 0);
+  background: oklch(0.09 0.006 60);
   border-top: 1px solid rgba(0, 0, 0, 0.08);
   padding: 12px;
 }
@@ -123,7 +123,7 @@
   display: none;
   position: fixed;
   inset: 0;
-  background: oklch(0 0 0 / 0.5);
+  background: oklch(0.07 0.005 60 / 0.55);
   z-index: 999;
   opacity: 0;
   pointer-events: none;
@@ -150,7 +150,7 @@
 
 .app-sidebar-drawer-open {
   transform: translateX(0);
-  box-shadow: 4px 0 24px oklch(0 0 0 / 0.5);
+  box-shadow: 4px 0 24px oklch(0.07 0.005 60 / 0.55);
 }
 
 /* Mobile: <1024px — drawer overlay. Align with useMediaQuery("(max-width: 1023px)"). */

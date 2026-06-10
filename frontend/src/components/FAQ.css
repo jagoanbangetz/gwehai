@@ -58,7 +58,7 @@
 .faq-item:hover {
   border-color: oklch(1 0 0 / 0.3);
   transform: translateX(5px);
-  box-shadow: 0 8px 20px oklch(0 0 0 / 0.2);
+  box-shadow: 0 8px 20px oklch(0.07 0.005 60 / 0.25);
 }
 
 .faq-question {
@@ -89,7 +89,7 @@
   margin-left: 1rem;
   transition: transform 0.3s;
   display: inline-block;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .faq-item:hover .faq-icon {
@@ -115,7 +115,7 @@
 
 .faq-item.open {
   border-color: oklch(1 0 0 / 0.3);
-  box-shadow: 0 8px 20px oklch(0 0 0 / 0.2);
+  box-shadow: 0 8px 20px oklch(0.07 0.005 60 / 0.25);
 }
 
 @keyframes slideDown {

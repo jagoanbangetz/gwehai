@@ -22,12 +22,12 @@
   font-weight: 700;
   margin-bottom: 1rem;
   color: oklch(1 0 0);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .pricing-subtitle {
   font-size: 1.2rem;
-  color: oklch(0.7 0 0);
+  color: oklch(0.72 0.005 60);
   max-width: 600px;
   margin: 0 auto;
   line-height: 1.6;
@@ -35,7 +35,7 @@
 
 .pricing-footnote {
   font-size: 0.9rem;
-  color: oklch(0.55 0 0);
+  color: oklch(0.57 0.005 60);
   margin-top: 0.75rem;
   font-style: italic;
 }
@@ -70,7 +70,7 @@
 
 .price-period {
   font-size: 1.25rem;
-  color: oklch(0.7 0 0);
+  color: oklch(0.72 0.005 60);
   font-weight: 500;
   margin-left: 0.15rem;
 }
@@ -93,7 +93,7 @@
 
 .pack-limits {
   font-size: 0.85rem;
-  color: oklch(0.6 0 0);
+  color: oklch(0.62 0.005 60);
   margin-bottom: 1.5rem;
   line-height: 1.4;
 }
@@ -113,7 +113,7 @@
 .credit-pack-card {
   background: oklch(0.1 0 0 / 0.8);
   backdrop-filter: blur(20px);
-  border: 1px solid oklch(0.2 0 0 / 0.3);
+  border: 1px solid oklch(0.24 0.006 60 / 0.3);
   border-radius: 16px;
   padding: 2.5rem 2rem;
   position: relative;
@@ -125,7 +125,7 @@
 .credit-pack-card:hover {
   transform: translateY(-4px);
   border-color: oklch(0.4 0 0 / 0.5);
-  box-shadow: 0 8px 24px oklch(0 0 0 / 0.3);
+  box-shadow: 0 8px 24px oklch(0.07 0.005 60 / 0.35);
 }
 
 .credit-pack-card.popular {
@@ -149,7 +149,7 @@
   border-radius: 20px;
   font-size: 0.85rem;
   font-weight: 600;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   white-space: nowrap;
 }
 
@@ -169,15 +169,15 @@
   font-size: 3rem;
   font-weight: 700;
   color: oklch(1 0 0);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   line-height: 1;
 }
 
 .points-label {
   font-size: 1rem;
-  color: oklch(0.7 0 0);
+  color: oklch(0.72 0.005 60);
   margin-top: 0.25rem;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .pack-savings {
@@ -188,7 +188,7 @@
   font-size: 0.85rem;
   color: oklch(0.9 0.05 120);
   font-weight: 600;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .pack-price {
@@ -202,14 +202,14 @@
   font-size: 1.5rem;
   font-weight: 600;
   color: oklch(1 0 0);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .price-amount {
   font-size: 3rem;
   font-weight: 700;
   color: oklch(1 0 0);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   line-height: 1;
 }
 
@@ -219,10 +219,10 @@
 }
 
 .pack-value {
-  color: oklch(0.6 0 0);
+  color: oklch(0.62 0.005 60);
   font-size: 0.9rem;
   margin-bottom: 2rem;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .pack-purchase-button {
@@ -234,7 +234,7 @@
   border-radius: 8px;
   font-size: 1rem;
   font-weight: 600;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   cursor: pointer;
   transition: all 0.2s;
   margin-bottom: 2rem;
@@ -242,7 +242,7 @@
 
 .pack-purchase-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px oklch(0 0 0 / 0.3);
+  box-shadow: 0 4px 12px oklch(0.07 0.005 60 / 0.35);
 }
 
 .pack-purchase-button.free-button {
@@ -268,17 +268,17 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  color: oklch(0.9 0 0);
+  color: oklch(0.92 0.003 60);
   font-size: 0.9rem;
 }
 
 .feature-icon {
-  color: oklch(0.7 0 0);
+  color: oklch(0.72 0.005 60);
   font-weight: 600;
 }
 
 .feature-text {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .enterprise-section {
@@ -288,7 +288,7 @@
 .enterprise-card {
   background: oklch(0.1 0 0 / 0.8);
   backdrop-filter: blur(20px);
-  border: 1px solid oklch(0.2 0 0 / 0.3);
+  border: 1px solid oklch(0.24 0.006 60 / 0.3);
   border-radius: 16px;
   padding: 3rem;
   text-align: center;
@@ -305,12 +305,12 @@
   font-weight: 700;
   margin-bottom: 0.5rem;
   color: oklch(1 0 0);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .enterprise-subtitle {
   font-size: 1.1rem;
-  color: oklch(0.7 0 0);
+  color: oklch(0.72 0.005 60);
   line-height: 1.6;
 }
 
@@ -326,13 +326,13 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  color: oklch(0.9 0 0);
+  color: oklch(0.92 0.003 60);
   font-size: 0.95rem;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .enterprise-feature .feature-icon {
-  color: oklch(0.7 0 0);
+  color: oklch(0.72 0.005 60);
   font-weight: 600;
 }
 
@@ -344,14 +344,14 @@
   border-radius: 8px;
   font-size: 1.1rem;
   font-weight: 600;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .enterprise-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px oklch(0 0 0 / 0.3);
+  box-shadow: 0 4px 12px oklch(0.07 0.005 60 / 0.35);
 }
 
 @media (max-width: 968px) {

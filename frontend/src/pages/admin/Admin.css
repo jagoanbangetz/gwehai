@@ -2,15 +2,15 @@
 .admin-layout {
   display: flex;
   min-height: 100vh;
-  background: oklch(0.06 0 0);
-  color: oklch(0.95 0 0);
+  background: oklch(0.1 0.006 60);
+  color: oklch(0.96 0.003 60);
 }
 
 .admin-sidebar {
   width: 240px;
   flex-shrink: 0;
-  background: oklch(0.09 0 0);
-  border-right: 1px solid oklch(0.2 0 0 / 0.4);
+  background: oklch(0.13 0.006 60);
+  border-right: 1px solid oklch(0.24 0.006 60 / 0.4);
   display: flex;
   flex-direction: column;
   padding: 1rem 0;
@@ -18,7 +18,7 @@
 
 .admin-sidebar-header {
   padding: 0 1rem 1rem;
-  border-bottom: 1px solid oklch(0.2 0 0 / 0.3);
+  border-bottom: 1px solid oklch(0.24 0.006 60 / 0.3);
   margin-bottom: 0.75rem;
   display: flex;
   align-items: center;
@@ -29,7 +29,7 @@
   font-size: 1.1rem;
   font-weight: 700;
   margin: 0;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .admin-sidebar-badge {
@@ -49,7 +49,7 @@
 .admin-nav-item {
   display: block;
   padding: 0.5rem 0.75rem;
-  color: oklch(0.75 0 0);
+  color: oklch(0.77 0.005 60);
   text-decoration: none;
   font-size: 0.9rem;
   border-radius: 6px;
@@ -59,7 +59,7 @@
 
 .admin-nav-item:hover {
   background: oklch(0.15 0 0 / 0.5);
-  color: oklch(0.95 0 0);
+  color: oklch(0.96 0.003 60);
 }
 
 .admin-nav-item.active {
@@ -81,7 +81,7 @@
   padding: 0.5rem 0.75rem;
   background: transparent;
   border: none;
-  color: oklch(0.6 0 0);
+  color: oklch(0.62 0.005 60);
   font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -93,7 +93,7 @@
 
 .admin-nav-group-btn:hover {
   background: oklch(0.12 0 0 / 0.5);
-  color: oklch(0.85 0 0);
+  color: oklch(0.87 0.003 60);
 }
 
 .admin-nav-group-label {
@@ -109,7 +109,7 @@
 .admin-nav-group-items {
   padding-left: 0.5rem;
   margin-top: 2px;
-  border-left: 1px solid oklch(0.2 0 0 / 0.3);
+  border-left: 1px solid oklch(0.24 0.006 60 / 0.3);
   margin-left: 0.5rem;
 }
 
@@ -121,7 +121,7 @@
 
 .admin-sidebar-footer {
   padding: 1rem;
-  border-top: 1px solid oklch(0.2 0 0 / 0.3);
+  border-top: 1px solid oklch(0.24 0.006 60 / 0.3);
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -129,7 +129,7 @@
 
 .admin-user-email {
   font-size: 0.75rem;
-  color: oklch(0.6 0 0);
+  color: oklch(0.62 0.005 60);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -141,7 +141,7 @@
   padding: 0.4rem 0;
   background: transparent;
   border: none;
-  color: oklch(0.7 0 0);
+  color: oklch(0.72 0.005 60);
   cursor: pointer;
   text-align: left;
   text-decoration: none;
@@ -149,7 +149,7 @@
 
 .admin-logout:hover,
 .admin-back-app:hover {
-  color: oklch(0.95 0 0);
+  color: oklch(0.96 0.003 60);
 }
 
 .admin-main {
@@ -163,12 +163,12 @@
   font-size: 1.5rem;
   font-weight: 700;
   margin: 0 0 1rem 0;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .admin-card {
   background: oklch(0.1 0 0 / 0.6);
-  border: 1px solid oklch(0.2 0 0 / 0.35);
+  border: 1px solid oklch(0.24 0.006 60 / 0.35);
   border-radius: 10px;
   padding: 1.25rem;
   margin-bottom: 1rem;
@@ -182,7 +182,7 @@
   margin: 0 0 1rem 0;
   font-size: 1rem;
   font-weight: 600;
-  color: oklch(0.9 0 0);
+  color: oklch(0.92 0.003 60);
 }
 
 .admin-chart-wrap {
@@ -205,7 +205,7 @@
   text-align: left;
   padding: 0.6rem 0.75rem;
   background: oklch(0.12 0 0 / 0.95);
-  color: oklch(0.65 0 0);
+  color: oklch(0.67 0.005 60);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -216,8 +216,8 @@
 
 .admin-table td {
   padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid oklch(0.2 0 0 / 0.2);
-  color: oklch(0.9 0 0);
+  border-bottom: 1px solid oklch(0.24 0.006 60 / 0.2);
+  color: oklch(0.92 0.003 60);
 }
 
 .admin-table tbody tr:nth-child(even) td {
@@ -275,7 +275,7 @@
 
 .admin-detail-subtitle {
   font-size: 0.78rem;
-  color: oklch(0.7 0 0);
+  color: oklch(0.72 0.005 60);
 }
 
 .admin-detail-pre {
@@ -284,7 +284,7 @@
   line-height: 1.35;
   max-height: 260px;
   overflow: auto;
-  background: oklch(0.08 0 0);
+  background: oklch(0.12 0.006 60);
   border-radius: 6px;
   padding: 0.6rem 0.75rem;
 }
@@ -294,15 +294,15 @@
   display: inline-flex;
   gap: 0.75rem;
   align-items: center;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .admin-page-controls button {
   padding: 0.25rem 0.8rem;
   border-radius: 999px;
   border: 1px solid oklch(0.4 0.08 260);
-  background: oklch(0.16 0 0);
-  color: oklch(0.9 0 0);
+  background: oklch(0.2 0.006 60);
+  color: oklch(0.92 0.003 60);
   font-size: 0.8rem;
   cursor: pointer;
 }
@@ -319,14 +319,14 @@
 
 .admin-page-controls span {
   font-size: 0.8rem;
-  color: oklch(0.8 0 0);
+  color: oklch(0.82 0.003 60);
 }
 
 /* Generic admin modal (overlay) */
 .admin-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: oklch(0 0 0 / 0.6);
+  background: oklch(0.07 0.005 60 / 0.65);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -360,7 +360,7 @@
 
 .admin-modal-subtitle {
   font-size: 0.8rem;
-  color: oklch(0.7 0 0);
+  color: oklch(0.72 0.005 60);
 }
 
 .admin-modal-body {
@@ -372,7 +372,7 @@
   display: block;
   margin-bottom: 0.75rem;
   font-size: 0.88rem;
-  color: oklch(0.8 0 0);
+  color: oklch(0.82 0.003 60);
 }
 
 .admin-modal-label + .admin-modal-actions {
@@ -386,9 +386,9 @@
   margin-top: 0.35rem;
   padding: 0.5rem 0.65rem;
   border-radius: 6px;
-  border: 1px solid oklch(0.28 0 0);
-  background: oklch(0.12 0 0);
-  color: oklch(0.95 0 0);
+  border: 1px solid oklch(0.31 0.006 60);
+  background: oklch(0.16 0.006 60);
+  color: oklch(0.96 0.003 60);
   font-size: 0.9rem;
 }
 
@@ -435,13 +435,13 @@
 }
 
 .admin-btn-secondary {
-  background: oklch(0.2 0 0);
-  color: oklch(0.9 0 0);
-  border: 1px solid oklch(0.3 0 0);
+  background: oklch(0.24 0.006 60);
+  color: oklch(0.92 0.003 60);
+  border: 1px solid oklch(0.33 0.006 60);
 }
 
 .admin-btn-secondary:hover:not(:disabled) {
-  background: oklch(0.25 0 0);
+  background: oklch(0.28 0.006 60);
 }
 
 .admin-btn-sm {
@@ -480,7 +480,7 @@
 }
 
 .admin-detail-dl dt {
-  color: oklch(0.6 0 0);
+  color: oklch(0.62 0.005 60);
   font-weight: 500;
 }
 
@@ -493,14 +493,14 @@
   margin: 1rem 0 0.5rem 0;
   font-size: 0.85rem;
   font-weight: 600;
-  color: oklch(0.75 0 0);
+  color: oklch(0.77 0.005 60);
 }
 
 .admin-detail-block {
   margin: 0 0 0.75rem 0;
   padding: 0.75rem;
-  background: oklch(0.08 0 0);
-  border: 1px solid oklch(0.22 0 0);
+  background: oklch(0.12 0.006 60);
+  border: 1px solid oklch(0.26 0.006 60);
   border-radius: 6px;
   font-size: 0.82rem;
   white-space: pre-wrap;
@@ -519,7 +519,7 @@
 .admin-detail-msg {
   padding: 0.6rem 0.75rem;
   border-radius: 8px;
-  border-left: 3px solid oklch(0.3 0 0);
+  border-left: 3px solid oklch(0.33 0.006 60);
 }
 
 .admin-detail-msg-user {
@@ -533,7 +533,7 @@
 }
 
 .admin-detail-msg-system {
-  border-left-color: oklch(0.5 0 0);
+  border-left-color: oklch(0.52 0.005 60);
   background: oklch(0.12 0 0 / 0.5);
 }
 
@@ -543,7 +543,7 @@
   gap: 0.5rem;
   margin-bottom: 0.35rem;
   font-size: 0.75rem;
-  color: oklch(0.6 0 0);
+  color: oklch(0.62 0.005 60);
 }
 
 .admin-detail-msg-role {
@@ -564,7 +564,7 @@
 .admin-promo-desc {
   margin: 0 0 1rem 0;
   font-size: 0.9rem;
-  color: oklch(0.7 0 0);
+  color: oklch(0.72 0.005 60);
 }
 
 .admin-promo-textarea {
@@ -573,9 +573,9 @@
   margin-top: 0.35rem;
   padding: 0.6rem 0.65rem;
   border-radius: 6px;
-  border: 1px solid oklch(0.28 0 0);
-  background: oklch(0.12 0 0);
-  color: oklch(0.95 0 0);
+  border: 1px solid oklch(0.31 0.006 60);
+  background: oklch(0.16 0.006 60);
+  color: oklch(0.96 0.003 60);
   font-size: 0.88rem;
   font-family: inherit;
   resize: vertical;
@@ -604,16 +604,16 @@
 
 .admin-cost-filter-label {
   font-size: 0.8rem;
-  color: oklch(0.65 0 0);
+  color: oklch(0.67 0.005 60);
   font-weight: 500;
 }
 
 .admin-date-input {
   padding: 0.5rem 0.65rem;
   border-radius: 6px;
-  border: 1px solid oklch(0.3 0 0);
-  background: oklch(0.14 0 0);
-  color: oklch(0.95 0 0);
+  border: 1px solid oklch(0.33 0.006 60);
+  background: oklch(0.18 0.006 60);
+  color: oklch(0.96 0.003 60);
   font-size: 0.9rem;
   min-width: 160px;
   cursor: pointer;
@@ -639,16 +639,16 @@
 .admin-cost-text-input {
   padding: 0.5rem 0.65rem;
   border-radius: 6px;
-  border: 1px solid oklch(0.3 0 0);
-  background: oklch(0.12 0 0);
-  color: oklch(0.95 0 0);
+  border: 1px solid oklch(0.33 0.006 60);
+  background: oklch(0.16 0.006 60);
+  color: oklch(0.96 0.003 60);
   font-size: 0.9rem;
   width: 140px;
 }
 
 .admin-cost-empty {
   margin: 0.75rem 0 0;
-  color: oklch(0.6 0 0);
+  color: oklch(0.62 0.005 60);
   font-size: 0.9rem;
 }
 
@@ -657,11 +657,11 @@
   flex-wrap: wrap;
   gap: 1.25rem;
   font-size: 0.95rem;
-  color: oklch(0.9 0 0);
+  color: oklch(0.92 0.003 60);
 }
 
 .admin-usage-totals strong {
-  color: oklch(0.7 0 0);
+  color: oklch(0.72 0.005 60);
   margin-right: 0.35rem;
 }
 
@@ -680,7 +680,7 @@
 
 .admin-stat-card {
   background: oklch(0.1 0 0 / 0.6);
-  border: 1px solid oklch(0.2 0 0 / 0.35);
+  border: 1px solid oklch(0.24 0.006 60 / 0.35);
   border-radius: 10px;
   padding: 1rem;
 }
@@ -689,20 +689,20 @@
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: oklch(0.6 0 0);
+  color: oklch(0.62 0.005 60);
   margin-bottom: 0.25rem;
 }
 
 .admin-stat-value {
   font-size: 1.5rem;
   font-weight: 700;
-  font-family: 'JetBrains Mono', monospace;
-  color: oklch(0.95 0 0);
+  font-family: var(--font-mono);
+  color: oklch(0.96 0.003 60);
 }
 
 .admin-stat-sublabel {
   font-size: 0.65rem;
-  color: oklch(0.55 0 0);
+  color: oklch(0.57 0.005 60);
   margin-top: 0.2rem;
 }
 
@@ -723,22 +723,22 @@
 .admin-range-tab {
   padding: 0.4rem 0.85rem;
   font-size: 0.85rem;
-  border: 1px solid oklch(0.3 0 0);
-  background: oklch(0.14 0 0);
-  color: oklch(0.75 0 0);
+  border: 1px solid oklch(0.33 0.006 60);
+  background: oklch(0.18 0.006 60);
+  color: oklch(0.77 0.005 60);
   border-radius: 6px;
   cursor: pointer;
 }
 
 .admin-range-tab:hover {
-  background: oklch(0.2 0 0);
-  color: oklch(0.9 0 0);
+  background: oklch(0.24 0.006 60);
+  color: oklch(0.92 0.003 60);
 }
 
 .admin-range-tab.active {
   background: oklch(0.35 0.15 250);
   border-color: oklch(0.45 0.2 250);
-  color: oklch(0.95 0 0);
+  color: oklch(0.96 0.003 60);
 }
 
 .admin-error {
@@ -750,7 +750,7 @@
 }
 
 .admin-loading {
-  color: oklch(0.65 0 0);
+  color: oklch(0.67 0.005 60);
   padding: 1rem;
 }
 
@@ -758,7 +758,7 @@
 .admin-billing-intro {
   margin: 0 0 1.5rem 0;
   font-size: 0.9rem;
-  color: var(--admin-muted, oklch(0.6 0 0));
+  color: var(--admin-muted, oklch(0.62 0.005 60));
   max-width: 42rem;
 }
 
@@ -770,7 +770,7 @@
   margin: 0 0 1rem 0;
   font-size: 1.05rem;
   font-weight: 600;
-  color: oklch(0.92 0 0);
+  color: oklch(0.93 0.003 60);
 }
 
 .admin-billing-subheading {
@@ -803,13 +803,13 @@
 .admin-billing-label {
   font-size: 0.875rem;
   font-weight: 500;
-  color: oklch(0.75 0 0);
+  color: oklch(0.77 0.005 60);
 }
 
 .admin-billing-help {
   margin: 0 0 0.75rem 0;
   font-size: 0.875rem;
-  color: var(--admin-muted, oklch(0.6 0 0));
+  color: var(--admin-muted, oklch(0.62 0.005 60));
 }
 
 .admin-billing-toggle {
@@ -822,7 +822,7 @@
 .admin-billing-plan-ids {
   margin-top: 1.25rem;
   padding-top: 1rem;
-  border-top: 1px solid var(--admin-border, oklch(0.35 0 0));
+  border-top: 1px solid var(--admin-border, oklch(0.37 0.006 60));
 }
 
 .admin-billing-create-plans-btn {
@@ -867,7 +867,7 @@
   display: block;
   margin-top: 0.35rem;
   font-size: 0.8rem;
-  color: var(--admin-muted, oklch(0.55 0 0));
+  color: var(--admin-muted, oklch(0.57 0.005 60));
 }
 
 .admin-billing-price-grid {
@@ -901,7 +901,7 @@
 .admin-billing-actions-toggle {
   background: none;
   border: none;
-  color: var(--admin-muted, oklch(0.65 0 0));
+  color: var(--admin-muted, oklch(0.67 0.005 60));
   cursor: pointer;
   font-size: 0.95rem;
   padding: 0.5rem 0;
@@ -910,7 +910,7 @@
 }
 
 .admin-billing-actions-toggle:hover {
-  color: oklch(0.9 0 0);
+  color: oklch(0.92 0.003 60);
 }
 
 .admin-billing-actions-grid {
@@ -922,7 +922,7 @@
 
 .admin-billing-action-block {
   padding: 0.75rem 0;
-  border-top: 1px solid var(--admin-border, oklch(0.35 0 0));
+  border-top: 1px solid var(--admin-border, oklch(0.37 0.006 60));
 }
 
 .admin-billing-action-block .admin-billing-subheading {
@@ -939,7 +939,7 @@
 .admin-billing-tx-result {
   margin: 0.75rem 0 0;
   padding: 0.75rem;
-  background: oklch(0.18 0 0);
+  background: oklch(0.22 0.006 60);
   border-radius: 6px;
   font-size: 0.8rem;
   overflow: auto;
@@ -963,7 +963,7 @@
 
 /* ── Settings page ── */
 .admin-settings-loading {
-  color: oklch(0.65 0 0);
+  color: oklch(0.67 0.005 60);
   font-size: 0.9rem;
   padding: 2rem 0;
 }
@@ -1017,7 +1017,7 @@
 
 .admin-settings-label-text {
   font-size: 0.85rem;
-  color: oklch(0.8 0 0);
+  color: oklch(0.82 0.003 60);
   font-weight: 500;
 }
 
@@ -1050,17 +1050,17 @@
   width: 100%;
   padding: 0.5rem 2.5rem 0.5rem 0.75rem;
   border-radius: 6px;
-  background: oklch(0.1 0 0);
-  border: 1px solid oklch(0.25 0 0);
-  color: oklch(0.95 0 0);
-  font-family: 'JetBrains Mono', monospace;
+  background: oklch(0.14 0.006 60);
+  border: 1px solid oklch(0.28 0.006 60);
+  color: oklch(0.96 0.003 60);
+  font-family: var(--font-mono);
   font-size: 0.85rem;
   transition: border-color 0.15s;
   outline: none;
 }
 
 .admin-settings-input::placeholder {
-  color: oklch(0.4 0 0);
+  color: oklch(0.42 0.005 60);
 }
 
 .admin-settings-input:focus {
@@ -1095,17 +1095,17 @@
   font-weight: 600;
   z-index: 9999;
   animation: admin-toast-in 0.25s ease-out;
-  box-shadow: 0 4px 20px oklch(0 0 0 / 0.4);
+  box-shadow: 0 4px 20px oklch(0.07 0.005 60 / 0.45);
 }
 
 .admin-toast-success {
   background: oklch(0.3 0.1 150);
-  color: oklch(0.95 0 0);
+  color: oklch(0.96 0.003 60);
 }
 
 .admin-toast-error {
   background: oklch(0.35 0.15 25);
-  color: oklch(0.95 0 0);
+  color: oklch(0.96 0.003 60);
 }
 
 @keyframes admin-toast-in {
@@ -1122,7 +1122,7 @@
 .admin-payment-tx-result {
   margin-top: 1.25rem;
   padding-top: 1rem;
-  border-top: 1px solid var(--admin-border, oklch(0.25 0 0));
+  border-top: 1px solid var(--admin-border, oklch(0.28 0.006 60));
 }
 
 .admin-payment-tx-result .admin-billing-subheading {
@@ -1144,9 +1144,9 @@
 }
 
 .admin-payment-tx-code {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 0.78rem;
-  color: oklch(0.75 0 0);
+  color: oklch(0.77 0.005 60);
   background: oklch(0.15 0 0 / 0.5);
   padding: 0.2rem 0.4rem;
   border-radius: 4px;
@@ -1160,7 +1160,7 @@
   font-weight: 500;
   text-transform: capitalize;
   background: oklch(0.2 0.02 260 / 0.5);
-  color: oklch(0.9 0 0);
+  color: oklch(0.92 0.003 60);
 }
 
 .admin-payment-plan {
@@ -1195,7 +1195,7 @@
 .admin-payment-history-label {
   font-size: 0.8rem;
   font-weight: 500;
-  color: oklch(0.65 0 0);
+  color: oklch(0.67 0.005 60);
 }
 
 .admin-payment-history-input {
@@ -1219,7 +1219,7 @@
 }
 
 .admin-muted {
-  color: var(--admin-muted, oklch(0.55 0 0));
+  color: var(--admin-muted, oklch(0.57 0.005 60));
 }
 
 /* Success / failure notifications */
@@ -1293,19 +1293,19 @@
   gap: 0.5rem;
   margin-bottom: 0.75rem;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid oklch(0.2 0 0 / 0.4);
+  border-bottom: 1px solid oklch(0.24 0.006 60 / 0.4);
 }
 
 .admin-guardrails-plan-name {
   font-weight: 700;
   font-size: 1rem;
-  color: oklch(0.95 0 0);
+  color: oklch(0.96 0.003 60);
 }
 
 .admin-guardrails-plan-id {
   font-size: 0.75rem;
-  color: oklch(0.55 0 0);
-  font-family: 'JetBrains Mono', monospace;
+  color: oklch(0.57 0.005 60);
+  font-family: var(--font-mono);
 }
 
 .admin-guardrails-plan-price {
@@ -1321,7 +1321,7 @@
 }
 
 .admin-guardrails-plan-limits dt {
-  color: oklch(0.6 0 0);
+  color: oklch(0.62 0.005 60);
   font-weight: 500;
   margin-top: 0.4rem;
   margin-bottom: 0.15rem;
@@ -1333,8 +1333,8 @@
 
 .admin-guardrails-plan-limits dd {
   margin: 0 0 0 0.5rem;
-  color: oklch(0.9 0 0);
-  font-family: 'JetBrains Mono', monospace;
+  color: oklch(0.92 0.003 60);
+  font-family: var(--font-mono);
 }
 
 @media (max-width: 768px) {

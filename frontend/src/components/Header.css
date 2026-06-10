@@ -8,8 +8,8 @@
   padding: 1rem 0;
   transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   box-shadow: 
-    0 1px 3px oklch(0 0 0 / 0.3),
-    0 0 0 1px oklch(0.2 0 0 / 0.2);
+    0 1px 3px oklch(0.07 0.005 60 / 0.35),
+    0 0 0 1px oklch(0.24 0.006 60 / 0.2);
 }
 
 .header-container {
@@ -51,7 +51,7 @@
   border: 1px solid oklch(1 0 0 / 0.2);
   border-radius: 4px;
   animation: pulse 2s ease-in-out infinite;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   letter-spacing: 0.05em;
 }
 
@@ -113,7 +113,7 @@
   gap: 0.5rem;
   padding: 0.5rem 1rem;
   background: oklch(0.1 0 0 / 0.5);
-  border: 1px solid oklch(0.2 0 0 / 0.3);
+  border: 1px solid oklch(0.24 0.006 60 / 0.3);
   border-radius: var(--radius);
   font-size: 0.9rem;
 }
@@ -121,12 +121,12 @@
 .user-name {
   color: oklch(1 0 0);
   font-weight: 500;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .logout-button {
   padding: 0.5rem 1rem;
-  border: 1px solid oklch(0.2 0 0 / 0.3);
+  border: 1px solid oklch(0.24 0.006 60 / 0.3);
   border-radius: var(--radius);
   transition: all 0.3s;
 }
