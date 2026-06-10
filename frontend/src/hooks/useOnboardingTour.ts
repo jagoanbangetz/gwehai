@@ -20,8 +20,8 @@ const quickStartSteps: DriveStep[] = [
   {
     element: '[data-tour="chat-input"]',
     popover: {
-      title: 'Masukkan URL Target',
-      description: 'Ketik URL website yang mau kamu test di sini. Bisa URL lengkap kayak https://example.com atau domain aja.',
+      title: 'Enter Target URL',
+      description: 'Type the website URL you want to test here. Can be a full URL like https://example.com or just the domain.',
       side: 'top',
       align: 'center',
     },
@@ -29,8 +29,8 @@ const quickStartSteps: DriveStep[] = [
   {
     element: '[data-tour="send-button"]',
     popover: {
-      title: 'Klik Start Scan',
-      description: 'Tombol ini buat mulai pentest. Atau langsung tekan Enter aja setelah ketik URL.',
+      title: 'Click Start Scan',
+      description: 'This button starts the pentest. Or just press Enter after typing the URL.',
       side: 'top',
       align: 'center',
     },
@@ -38,8 +38,8 @@ const quickStartSteps: DriveStep[] = [
   {
     element: '[data-tour="model-picker"]',
     popover: {
-      title: 'Pilih Model AI',
-      description: 'Auto recommended — biarkan Auto atau ganti ke model lain sesuai kebutuhan. Free plan pakai Auto.',
+      title: 'Select AI Model',
+      description: 'Auto recommended — keep Auto or switch to another model as needed. Free plan uses Auto.',
       side: 'top',
       align: 'center',
     },
@@ -47,8 +47,8 @@ const quickStartSteps: DriveStep[] = [
   {
     element: '[data-tour="chat-mode"]',
     popover: {
-      title: 'Mode Chat',
-      description: 'Agent mode: full pentest dengan tools. Ask mode: tanya jawab cepat tanpa tools.',
+      title: 'Chat Mode',
+      description: 'Agent mode: full pentest with tools. Ask mode: quick Q&A without tools.',
       side: 'top',
       align: 'center',
     },
@@ -56,8 +56,8 @@ const quickStartSteps: DriveStep[] = [
   {
     element: '[data-tour="progress-area"]',
     popover: {
-      title: 'Area Progress',
-      description: 'Di sini kamu bisa liat AI lagi ngapain — scanning, testing vulnerabilities, semua step-nya real-time.',
+      title: 'Progress Area',
+      description: 'Here you can see what the AI is doing — scanning, testing vulnerabilities, all steps in real-time.',
       side: 'top',
       align: 'center',
     },
@@ -65,16 +65,16 @@ const quickStartSteps: DriveStep[] = [
   {
     element: '[data-tour="report-button"]',
     popover: {
-      title: 'Tab Report',
-      description: 'Hasil scan lengkap ada di sini. Findings, severity, detail vulnerability — semua terdokumentasi.',
+      title: 'Report Tab',
+      description: 'Full scan results are here. Findings, severity, vulnerability details — everything documented.',
       side: 'right',
       align: 'start',
     },
   },
   {
     popover: {
-      title: 'Kamu Siap! 🎉',
-      description: 'Itu aja! Sekarang kamu udah tau cara pakai GwehAI. Masukkan URL, klik scan, dan liat AI bekerja. Selamat mencoba!',
+      title: "You're All Set! 🎉",
+      description: "That's it! Now you know how to use GwehAI. Enter a URL, click scan, and watch the AI work. Give it a try!",
     },
   },
 ]
@@ -84,7 +84,7 @@ const advancedSteps: DriveStep[] = [
     element: '[data-tour="chat-mode"]',
     popover: {
       title: 'Agent vs Ask Mode',
-      description: 'Agent mode: full pentest pipeline dengan multi-agent. Ask mode: quick Q&A tanpa tools.',
+      description: 'Agent mode: full pentest pipeline with multi-agent. Ask mode: quick Q&A without tools.',
       side: 'top',
       align: 'center',
     },
@@ -93,7 +93,7 @@ const advancedSteps: DriveStep[] = [
     element: '[data-tour="model-picker"]',
     popover: {
       title: 'Multi-Model Selection',
-      description: 'Pilih model yang berbeda untuk task berbeda. GPT-5 buat reasoning, Claude buat code analysis, Gemini buat speed.',
+      description: 'Pick different models for different tasks. GPT-5 for reasoning, Claude for code analysis, Gemini for speed.',
       side: 'top',
       align: 'center',
     },
@@ -102,7 +102,7 @@ const advancedSteps: DriveStep[] = [
     element: '[data-tour="pentest-runner"]',
     popover: {
       title: 'Pentest Runner',
-      description: 'Advanced pentest runner buat custom payloads, multi-agent setup, dan OOB detection.',
+      description: 'Advanced pentest runner for custom payloads, multi-agent setup, and OOB detection.',
       side: 'right',
       align: 'start',
     },
@@ -111,7 +111,7 @@ const advancedSteps: DriveStep[] = [
     element: '[data-tour="hacktivity-button"]',
     popover: {
       title: 'Hacktivity',
-      description: 'Lihat semua scan history kamu. Filter by conversation, review findings dari scan sebelumnya.',
+      description: 'View all your scan history. Filter by conversation, review findings from previous scans.',
       side: 'right',
       align: 'start',
     },
@@ -119,7 +119,7 @@ const advancedSteps: DriveStep[] = [
   {
     popover: {
       title: 'Advanced Features Ready! 🚀',
-      description: 'Kamu udah tau fitur advanced GwehAI. Cobain multi-agent, custom model, dan explore Hacktivity!',
+      description: "You've unlocked GwehAI's advanced features. Try multi-agent, custom models, and explore Hacktivity!",
     },
   },
 ]
