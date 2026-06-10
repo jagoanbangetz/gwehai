@@ -144,12 +144,24 @@ const Dashboard = () => {
   }
 
   const handleNewChat = () => {
+    // Set intentional close BEFORE closing EventSource so onerror handler skips reconnect
+    intentionalCloseRef.current = true
+    stopRequestedRef.current = true
     if (eventSourceRef.current) { eventSourceRef.current.close(); eventSourceRef.current = null }
     pentestJobStreamAbortRef.current?.abort(); pentestJobStreamAbortRef.current = null
     setSearchParams({}); setMessages([]); setCurrentChatId(null); setCurrentConversationId(null); setCurrentJobId(null)
     try { localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY) } catch (_) {}
     setPentestChecklistProgress(null); setTools({}); setMessageTools({}); setMessageToolState({})
     setCurrentAssistantMessageId(null); streamingMessageRef.current = null; setIsLoading(false)
+    // Reset agent mode context — prevent leaking state into new chat
+    setIsSimpleConversation(false); setCurrentStep(null); setActivityLog([]); setLogEvents([])
+    sendInProgressRef.current = false
+    currentAssistantMessageIdRef.current = null
+    lastCompletedAssistantMessageIdRef.current = null
+    pendingAssistantMessageIdRef.current = null
+    lastReasoningFromBackendRef.current = null
+    streamMessageMapRef.current = {}
+    messagesRef.current = []
     inputRef.current?.focus(); if (isMobile) setSidebarOpen(false)
   }
 
@@ -205,17 +217,21 @@ const Dashboard = () => {
 
   // ─── Send/Stop ───
   const handleStopJob = async () => {
-    if (!currentJobId) return
+    // Always set stop flag + close SSE first — even if no job ID yet
+    // (user might click Stop while startScan API is still in-flight)
     stopRequestedRef.current = true
     if (eventSourceRef.current) { eventSourceRef.current.close(); eventSourceRef.current = null }
     pentestJobStreamAbortRef.current?.abort(); pentestJobStreamAbortRef.current = null
-    try {
-      await gwehaiClient.stopJob(currentJobId)
-      // Also call conversation stop to trigger backend AbortController
-      if (currentConversationId) {
-        apiClient.post(`/chat/conversations/${currentConversationId}/stop`).catch(() => {})
-      }
-    } catch (_e) { showToast('Failed to stop job.', 'error') }
+
+    if (currentJobId) {
+      try {
+        await gwehaiClient.stopJob(currentJobId)
+        // Also call conversation stop to trigger backend AbortController
+        if (currentConversationId) {
+          apiClient.post(`/chat/conversations/${currentConversationId}/stop`).catch(() => {})
+        }
+      } catch (_e) { showToast('Failed to stop job.', 'error') }
+    }
     setCurrentJobId(null); try { localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY) } catch (_) {}
     setIsLoading(false); sendInProgressRef.current = false; setCurrentStep(null)
     streamingMessageRef.current = null; currentAssistantMessageIdRef.current = null
