@@ -41,51 +41,34 @@ jobs:
       - name: Deploy to staging server
         run: |
           rsync -avz --delete -e 'ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no' \
-            --exclude 'node_modules' \
             --exclude '.git' \
             --exclude '.env*' \
-            --exclude '*.local' \
             --exclude 'src/' \
-            --exclude 'tests/' \
-            --exclude 'test/' \
-            --exclude '__tests__/' \
-            --exclude 'docs/' \
+            --exclude '.trigger-test' \
             ./ root@45.77.250.83:/home/www/gwehai/
 
-      - name: Install deps & restart services
+      - name: Restart PM2
         run: |
-          ssh -i ~/.ssh/deploy_key root@45.77.250.83 "
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no root@45.77.250.83 "
             set -e
             cd /home/www/gwehai
 
-            # Clean git state (jaga-jaga kalo ada manual edit)
-            git stash --include-untracked 2>/dev/null || true
-            git checkout main 2>/dev/null || true
-
-            # Restore .env jika belum ada
             test -f backend/.env || cp /home/www/gwehai_bak/backend/.env backend/.env 2>/dev/null || echo 'WARNING: no .env found'
 
-            # Backend deps (include dev — needed for @nestjs/* build tools)
-            cd backend && npm ci && cd ..
-
-            # Frontend deps (dist udah di-rsync dari runner)
-            cd frontend && npm ci && cd ..
-
-            # Restart PM2
-            pm2 restart gwehai-api --update-env
+            pm2 restart gwehai-api --update-env || pm2 start backend/dist/src/main.js --name gwehai-api
+            pm2 save --force
 
             echo '=== DEPLOY COMPLETE ==='
           "
 
       - name: Health check
         run: |
+          sleep 8
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no root@45.77.250.83 "
-            sleep 3
             curl -sSf http://127.0.0.1:3100/api/health | jq -e '.status == \"ok\"'
-            echo '✅ Health check passed — backend OK'
+            echo '✅ Health check passed'
           "
 
       - name: Verify frontend
         run: |
-          sleep 2
           curl -sSf -o /dev/null -w "Frontend HTTP %{http_code}\n" https://dev.gweh.sh/
