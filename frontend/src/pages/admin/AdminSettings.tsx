@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import apiClient from '../../utils/api'
 import './Admin.css'
 
@@ -21,6 +21,57 @@ interface SettingsResponse {
   groups: Record<string, GroupMeta>
 }
 
+/* ── Group visual config ── */
+const GROUP_CONFIG: Record<string, { icon: string; color: string; description: string }> = {
+  ai:       { icon: 'fa-brain',           color: 'oklch(0.55 0.15 280)',  description: 'AI model keys & inference settings' },
+  payment:  { icon: 'fa-credit-card',     color: 'oklch(0.55 0.15 160)',  description: 'Payment gateway & billing config' },
+  email:    { icon: 'fa-envelope',        color: 'oklch(0.6 0.14 220)',   description: 'SMTP & email delivery settings' },
+  security: { icon: 'fa-shield-halved',   color: 'oklch(0.55 0.14 25)',   description: 'Encryption, secrets & access control' },
+  auth:     { icon: 'fa-key',             color: 'oklch(0.6 0.14 60)',    description: 'Authentication & OAuth providers' },
+  general:  { icon: 'fa-sliders',         color: 'oklch(0.6 0.04 60)',    description: 'General application settings' },
+}
+
+/* ── Field descriptions ── */
+const FIELD_DESCRIPTIONS: Record<string, string> = {
+  OPENAI_API_KEY:           'Your OpenAI API key (sk-...). Used for GPT-4o and GPT-4 inference.',
+  OPENAI_MODEL:             'Default model for chat completions.',
+  DEEPSEEK_API_KEY:         'DeepSeek API key for code-focused models.',
+  DEEPSEEK_BASE_URL:        'Custom base URL for DeepSeek API.',
+  DEEPSEEK_MODEL:           'DeepSeek model identifier.',
+  XAI_API_KEY:              'xAI (Grok) API key.',
+  XAI_MODEL:                'Grok model identifier.',
+  GEMINI_API_KEY:           'Google Gemini API key.',
+  GEMINI_MODEL:             'Gemini model identifier.',
+  STRIPE_SECRET_KEY:        'Stripe secret key (sk_live_... or sk_test_...).',
+  STRIPE_PUBLISHABLE_KEY:   'Stripe publishable key for client-side.',
+  STRIPE_WEBHOOK_SECRET:    'Webhook signing secret from Stripe dashboard.',
+  MAIL_MAILER:              'Mail driver: smtp, ses, log, etc.',
+  MAIL_HOST:                'SMTP server hostname.',
+  MAIL_PORT:                'SMTP server port (587 for TLS, 465 for SSL).',
+  MAIL_USERNAME:            'SMTP auth username.',
+  MAIL_PASSWORD:            'SMTP auth password.',
+  MAIL_FROM_ADDRESS:        'Sender email address.',
+  MAIL_ENCRYPTION:          'Encryption protocol: tls or ssl.',
+  APP_KEY:                  'Laravel application encryption key.',
+  APP_ENV:                  'Application environment: production, staging, local.',
+  APP_DEBUG:                'Enable/disable debug mode.',
+  APP_URL:                  'Public-facing application URL.',
+  APP_NAME:                 'Application display name.',
+  SESSION_DRIVER:           'Session storage driver: file, redis, database.',
+  CACHE_DRIVER:             'Cache backend: file, redis, memcached.',
+}
+
+/* ── Boolean field detection ── */
+const BOOLEAN_FIELDS = new Set([
+  'APP_DEBUG', 'MAIL_ENCRYPTION',
+])
+
+function isBooleanField(key: string, meta: SettingMeta): boolean {
+  if (BOOLEAN_FIELDS.has(key)) return true
+  const v = (meta.value ?? '').toLowerCase()
+  return v === 'true' || v === 'false'
+}
+
 /* ── Toast ── */
 type ToastKind = 'success' | 'error'
 
@@ -31,6 +82,30 @@ function useToast() {
     setTimeout(() => setToast(null), 3500)
   }, [])
   return { toast, show }
+}
+
+/* ── Toggle Switch ── */
+function ToggleSwitch({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean
+  onChange: (val: string) => void
+  disabled?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      className={`settings-toggle ${checked ? 'on' : 'off'}${disabled ? ' disabled' : ''}`}
+      onClick={() => onChange(checked ? 'false' : 'true')}
+      disabled={disabled}
+    >
+      <span className="settings-toggle-knob" />
+    </button>
+  )
 }
 
 /* ── Component ── */
@@ -44,6 +119,7 @@ export default function AdminSettings() {
   const [visible, setVisible] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
   const [savingGroup, setSavingGroup] = useState<string | null>(null)
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
 
   const { toast, show: showToast } = useToast()
 
@@ -77,6 +153,15 @@ export default function AdminSettings() {
     })
   }
 
+  const toggleCollapse = (key: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
   const getDisplayValue = (key: string, meta: SettingMeta) => {
     if (key in drafts) return drafts[key]
     return meta.value ?? ''
@@ -88,6 +173,12 @@ export default function AdminSettings() {
     if (!data) return false
     const fields = data.groups[groupKey]?.fields ?? []
     return fields.some((f) => isDirty(f))
+  }
+
+  const dirtyCountInGroup = (groupKey: string) => {
+    if (!data) return 0
+    const fields = data.groups[groupKey]?.fields ?? []
+    return fields.filter((f) => isDirty(f)).length
   }
 
   /* Save a single group */
@@ -103,7 +194,6 @@ export default function AdminSettings() {
     setSavingGroup(groupKey)
     try {
       await apiClient.put('/admin/settings', payload)
-      /* update local state so fields are no longer dirty */
       setData((prev) => {
         if (!prev) return prev
         const next = { ...prev, settings: { ...prev.settings } }
@@ -157,8 +247,29 @@ export default function AdminSettings() {
   /* ── Group order ── */
   const GROUP_ORDER = ['ai', 'payment', 'email', 'security', 'auth', 'general']
 
+  /* Stats */
+  const stats = useMemo(() => {
+    if (!data) return { total: 0, configured: 0, fromDb: 0, fromEnv: 0 }
+    const vals = Object.values(data.settings)
+    return {
+      total: vals.length,
+      configured: vals.filter((s) => s.hasValue).length,
+      fromDb: vals.filter((s) => s.source === 'db').length,
+      fromEnv: vals.filter((s) => s.source === 'env').length,
+    }
+  }, [data])
+
   /* ── Render ── */
-  if (loading) return <div className="admin-settings-loading">Loading settings…</div>
+  if (loading) {
+    return (
+      <div className="settings-loading">
+        <div className="settings-loading-spinner">
+          <i className="fa-solid fa-gear fa-spin" />
+        </div>
+        <span>Loading settings…</span>
+      </div>
+    )
+  }
   if (error) return <div className="admin-error">{error}</div>
   if (!data) return null
 
@@ -168,81 +279,222 @@ export default function AdminSettings() {
     <>
       {/* Toast */}
       {toast && (
-        <div className={`admin-toast admin-toast-${toast.kind}`}>{toast.msg}</div>
+        <div className={`admin-toast admin-toast-${toast.kind}`}>
+          <i className={`fa-solid ${toast.kind === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'}`} />
+          {toast.msg}
+        </div>
       )}
 
-      <div className="admin-settings-header">
-        <h2 className="admin-page-title">Settings</h2>
-        <button
-          type="button"
-          className="admin-btn admin-btn-primary"
-          disabled={saving || totalDirty === 0}
-          onClick={saveAll}
-        >
-          {saving ? 'Saving…' : `Save all${totalDirty > 0 ? ` (${totalDirty})` : ''}`}
-        </button>
+      {/* Header */}
+      <div className="settings-page-header">
+        <div className="settings-header-left">
+          <h2 className="admin-page-title">
+            <i className="fa-solid fa-gear" />
+            Settings
+          </h2>
+          <p className="settings-subtitle">Manage your application configuration</p>
+        </div>
+        <div className="settings-header-actions">
+          {totalDirty > 0 && (
+            <span className="settings-dirty-badge">
+              <i className="fa-solid fa-circle" />
+              {totalDirty} unsaved change{totalDirty > 1 ? 's' : ''}
+            </span>
+          )}
+          <button
+            type="button"
+            className="admin-btn admin-btn-primary settings-save-all-btn"
+            disabled={saving || totalDirty === 0}
+            onClick={saveAll}
+          >
+            {saving ? (
+              <>
+                <i className="fa-solid fa-spinner fa-spin" />
+                Saving…
+              </>
+            ) : (
+              <>
+                <i className="fa-solid fa-floppy-disk" />
+                Save all{totalDirty > 0 ? ` (${totalDirty})` : ''}
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
-      {GROUP_ORDER.filter((gk) => data.groups[gk]).map((groupKey) => {
-        const group = data.groups[groupKey]
-        const dirty = hasDirtyInGroup(groupKey)
-        return (
-          <div key={groupKey} className="admin-card admin-settings-group">
-            <div className="admin-settings-group-header">
-              <h3 className="admin-settings-group-title">{group.label}</h3>
-              <button
-                type="button"
-                className="admin-btn admin-btn-sm"
-                disabled={savingGroup === groupKey || !dirty}
-                onClick={() => saveGroup(groupKey)}
-              >
-                {savingGroup === groupKey ? 'Saving…' : 'Save'}
-              </button>
-            </div>
+      {/* Stats bar */}
+      <div className="settings-stats">
+        <div className="settings-stat">
+          <span className="settings-stat-value">{stats.total}</span>
+          <span className="settings-stat-label">Total</span>
+        </div>
+        <div className="settings-stat">
+          <span className="settings-stat-value stat-ok">{stats.configured}</span>
+          <span className="settings-stat-label">Configured</span>
+        </div>
+        <div className="settings-stat">
+          <span className="settings-stat-value stat-db">{stats.fromDb}</span>
+          <span className="settings-stat-label">From DB</span>
+        </div>
+        <div className="settings-stat">
+          <span className="settings-stat-value stat-env">{stats.fromEnv}</span>
+          <span className="settings-stat-label">From Env</span>
+        </div>
+      </div>
 
-            <div className="admin-settings-fields">
-              {group.fields.map((fieldKey) => {
-                const meta = data.settings[fieldKey]
-                if (!meta) return null
-                const val = getDisplayValue(fieldKey, meta)
-                const fieldVisible = visible.has(fieldKey)
-                const dirtyField = isDirty(fieldKey)
+      {/* Settings groups */}
+      <div className="settings-groups">
+        {GROUP_ORDER.filter((gk) => data.groups[gk]).map((groupKey) => {
+          const group = data.groups[groupKey]
+          const config = GROUP_CONFIG[groupKey] ?? { icon: 'fa-cube', color: 'oklch(0.6 0.04 60)', description: '' }
+          const dirty = hasDirtyInGroup(groupKey)
+          const dirtyCount = dirtyCountInGroup(groupKey)
+          const isCollapsed = collapsed.has(groupKey)
 
-                return (
-                  <div key={fieldKey} className={`admin-settings-field${dirtyField ? ' dirty' : ''}`}>
-                    <label className="admin-settings-label">
-                      <span className="admin-settings-label-text">{meta.label || fieldKey}</span>
-                      <span className={`admin-settings-source source-${meta.source}`}>
-                        {meta.source.toUpperCase()}
-                      </span>
-                    </label>
-                    <div className="admin-settings-input-wrap">
-                      <input
-                        type={fieldVisible ? 'text' : 'password'}
-                        className="admin-settings-input"
-                        value={val}
-                        placeholder={meta.hasValue ? meta.value : 'Not set'}
-                        onChange={(e) => handleChange(fieldKey, e.target.value)}
-                        autoComplete="off"
-                        spellCheck={false}
-                      />
-                      <button
-                        type="button"
-                        className="admin-settings-eye"
-                        onClick={() => toggleVisible(fieldKey)}
-                        title={fieldVisible ? 'Hide' : 'Show'}
-                        aria-label={fieldVisible ? 'Hide value' : 'Show value'}
-                      >
-                        {fieldVisible ? '🙈' : '👁'}
-                      </button>
-                    </div>
+          return (
+            <div
+              key={groupKey}
+              className={`settings-group-card${dirty ? ' has-dirty' : ''}`}
+              style={{ '--group-accent': config.color } as React.CSSProperties}
+            >
+              {/* Card header */}
+              <div className="settings-group-header" onClick={() => toggleCollapse(groupKey)}>
+                <div className="settings-group-header-left">
+                  <div className="settings-group-icon">
+                    <i className={`fa-solid ${config.icon}`} />
                   </div>
-                )
-              })}
+                  <div className="settings-group-title-wrap">
+                    <h3 className="settings-group-title">{group.label}</h3>
+                    {config.description && (
+                      <span className="settings-group-desc">{config.description}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="settings-group-header-right">
+                  {dirtyCount > 0 && (
+                    <span className="settings-group-dirty-pill">
+                      {dirtyCount} modified
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="admin-btn admin-btn-sm settings-group-save-btn"
+                    disabled={savingGroup === groupKey || !dirty}
+                    onClick={(e) => { e.stopPropagation(); saveGroup(groupKey) }}
+                  >
+                    {savingGroup === groupKey ? (
+                      <><i className="fa-solid fa-spinner fa-spin" /> Saving…</>
+                    ) : (
+                      <><i className="fa-solid fa-check" /> Save</>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="settings-collapse-btn"
+                    onClick={(e) => { e.stopPropagation(); toggleCollapse(groupKey) }}
+                    aria-label={isCollapsed ? 'Expand' : 'Collapse'}
+                  >
+                    <i className={`fa-solid fa-chevron-${isCollapsed ? 'down' : 'up'}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Card body */}
+              {!isCollapsed && (
+                <div className="settings-group-body">
+                  {group.fields.map((fieldKey) => {
+                    const meta = data.settings[fieldKey]
+                    if (!meta) return null
+                    const val = getDisplayValue(fieldKey, meta)
+                    const fieldVisible = visible.has(fieldKey)
+                    const dirtyField = isDirty(fieldKey)
+                    const boolField = isBooleanField(fieldKey, meta)
+                    const description = FIELD_DESCRIPTIONS[fieldKey]
+
+                    return (
+                      <div
+                        key={fieldKey}
+                        className={`settings-field${dirtyField ? ' dirty' : ''}${boolField ? ' boolean-field' : ''}`}
+                      >
+                        {/* Field label row */}
+                        <div className="settings-field-header">
+                          <div className="settings-field-label-group">
+                            <label className="settings-field-label" htmlFor={`setting-${fieldKey}`}>
+                              {meta.label || fieldKey}
+                            </label>
+                            <span className={`settings-source-badge source-${meta.source}`}>
+                              {meta.source === 'db' ? (
+                                <><i className="fa-solid fa-database" /> DB</>
+                              ) : (
+                                <><i className="fa-solid fa-terminal" /> ENV</>
+                              )}
+                            </span>
+                          </div>
+                          <div className="settings-field-status">
+                            {dirtyField ? (
+                              <span className="settings-status-modified">
+                                <i className="fa-solid fa-pen" /> Modified
+                              </span>
+                            ) : meta.hasValue ? (
+                              <span className="settings-status-saved">
+                                <i className="fa-solid fa-check" /> Saved
+                              </span>
+                            ) : (
+                              <span className="settings-status-empty">
+                                <i className="fa-solid fa-minus" /> Not set
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Description */}
+                        {description && (
+                          <p className="settings-field-description">{description}</p>
+                        )}
+
+                        {/* Input area */}
+                        {boolField ? (
+                          <div className="settings-bool-row">
+                            <ToggleSwitch
+                              checked={val.toLowerCase() === 'true'}
+                              onChange={(v) => handleChange(fieldKey, v)}
+                            />
+                            <span className="settings-bool-label">
+                              {val.toLowerCase() === 'true' ? 'Enabled' : 'Disabled'}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="settings-input-wrap">
+                            <input
+                              id={`setting-${fieldKey}`}
+                              type={fieldVisible ? 'text' : 'password'}
+                              className="settings-input"
+                              value={val}
+                              placeholder={meta.hasValue ? meta.value : 'Not set — enter value…'}
+                              onChange={(e) => handleChange(fieldKey, e.target.value)}
+                              autoComplete="off"
+                              spellCheck={false}
+                            />
+                            <button
+                              type="button"
+                              className="settings-eye-btn"
+                              onClick={() => toggleVisible(fieldKey)}
+                              title={fieldVisible ? 'Hide value' : 'Show value'}
+                              aria-label={fieldVisible ? 'Hide value' : 'Show value'}
+                            >
+                              <i className={`fa-solid ${fieldVisible ? 'fa-eye-slash' : 'fa-eye'}`} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
     </>
   )
 }
