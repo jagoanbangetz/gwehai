@@ -275,7 +275,7 @@ export class AgentOrchestratorService {
       : null;
     if (!model || !model.isActive) {
       if (useModelPicker) {
-        model = (await this.conversationService.getDefaultModelForUsage(null as any)) as any;
+        model = await this.conversationService.getDefaultModelForUsage(this.dataSource.manager);
       } else {
         throw new Error(
           'Model not found or inactive. Use Auto (DeepSeek) in the model picker and ensure DEEPSEEK_API_KEY is set.',
