@@ -29,12 +29,15 @@ import { PentestJobsModule } from '../pentest-jobs/pentest-jobs.module';
 import { PlansModule } from '../plans/plans.module';
 import { BillingModule } from '../billing/billing.module';
 import { AdminService } from './admin.service';
+import { AdminSettingsService } from './admin-settings.service';
 import { HacktivityModule } from '../hacktivity/hacktivity.module';
 import { AuthModule } from '../auth/auth.module';
 import { MailModule } from '../mail/mail.module';
 import { PaypalModule } from '../paypal/paypal.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { GwehAISSEGuard } from '../gwehai/gwehai-sse.guard';
+import { CveFeedModule } from '../cve-feed/cve-feed.module';
+import { AdminOpsController } from './admin-ops.controller';
 
 @Module({
   imports: [
@@ -74,9 +77,10 @@ import { GwehAISSEGuard } from '../gwehai/gwehai-sse.guard';
     BillingModule,
     PaypalModule,
     SubscriptionsModule,
+    CveFeedModule,
   ],
-  controllers: [AdminController, AdminBillingController, AdminBillingConfigController, AdminModelsController],
-  providers: [AdminService, GwehAISSEGuard],
+  controllers: [AdminController, AdminBillingController, AdminBillingConfigController, AdminModelsController, AdminOpsController],
+  providers: [AdminService, AdminSettingsService, GwehAISSEGuard],
 })
 export class AdminModule {}
 

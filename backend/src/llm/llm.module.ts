@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { AdminSetting } from '../entities/admin-setting.entity';
+import { AdminSettingsService } from '../admin/admin-settings.service';
 import { LlmService } from './llm.service';
 import { OpenAICompatibleProvider } from './providers/openai-compatible.provider';
 import { CostManagerService } from './cost-manager.service';
@@ -13,10 +16,12 @@ import { ProviderRouterService } from './provider-router.service';
       timeout: 60000,
       maxRedirects: 5,
     }),
+    TypeOrmModule.forFeature([AdminSetting]),
   ],
   providers: [
     OpenAICompatibleProvider,
     CostManagerService,
+    AdminSettingsService,
     ProviderRouterService,
     {
       provide: 'LLM_PROVIDERS',
@@ -25,6 +30,6 @@ import { ProviderRouterService } from './provider-router.service';
     },
     LlmService,
   ],
-  exports: [LlmService, CostManagerService, ProviderRouterService],
+  exports: [LlmService, CostManagerService, ProviderRouterService, AdminSettingsService],
 })
 export class LlmModule {}

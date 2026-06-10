@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { generateText } from 'ai';
 import { getOptionByKey, getModelOptions, type ModelOptionKey } from '../config/model-options.config';
 import { CostManagerService, type CostMode } from './cost-manager.service';
+import { AdminSettingsService } from '../admin/admin-settings.service';
 import type { LlmMessage, LlmResponse, LlmToolDef } from './llm.types';
 
 export interface ChatCompletionMeta {
@@ -111,6 +112,7 @@ export class ProviderRouterService {
   constructor(
     private readonly config: ConfigService,
     private readonly costManager: CostManagerService,
+    private readonly adminSettings: AdminSettingsService,
   ) {}
 
   /**
@@ -291,7 +293,7 @@ export class ProviderRouterService {
     messages: LlmMessage[],
     caps: { maxOutputTokens: number },
   ): Promise<{ text: string; provider: string; model: string; inputTokens: number; outputTokens: number }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
     if (!apiKey) {
       throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
     }
@@ -339,7 +341,7 @@ export class ProviderRouterService {
     inputTokens: number;
     outputTokens: number;
   }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
     if (!apiKey) {
       throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
     }
@@ -400,11 +402,11 @@ export class ProviderRouterService {
     messages: LlmMessage[],
     caps: { maxOutputTokens: number },
   ): Promise<{ text: string; provider: string; model: string; inputTokens: number; outputTokens: number }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
     if (!apiKey) {
       throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
     }
-    const baseUrl = this.config.get<string>('OPENAI_BASE_URL') || 'https://api.openai.com/v1';
+    const baseUrl = await this.adminSettings.getApiKey('OPENAI_BASE_URL') || 'https://api.openai.com/v1';
     const url = baseUrl.replace(/\/?$/, '') + '/chat/completions';
     const headers = {
       'Content-Type': 'application/json',
@@ -456,11 +458,11 @@ export class ProviderRouterService {
     inputTokens: number;
     outputTokens: number;
   }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
     if (!apiKey) {
       throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
     }
-    const baseUrl = this.config.get<string>('OPENAI_BASE_URL') || 'https://api.openai.com/v1';
+    const baseUrl = await this.adminSettings.getApiKey('OPENAI_BASE_URL') || 'https://api.openai.com/v1';
     const url = baseUrl.replace(/\/?$/, '') + '/chat/completions';
     const headers = {
       'Content-Type': 'application/json',
@@ -516,7 +518,7 @@ export class ProviderRouterService {
     messages: LlmMessage[],
     caps: { maxOutputTokens: number },
   ): Promise<{ text: string; provider: string; model: string; inputTokens: number; outputTokens: number }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
     if (!apiKey) {
       throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
     }
@@ -568,7 +570,7 @@ export class ProviderRouterService {
     inputTokens: number;
     outputTokens: number;
   }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
     if (!apiKey) {
       throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
     }
@@ -694,7 +696,7 @@ export class ProviderRouterService {
     messages: LlmMessage[],
     caps: { maxOutputTokens: number },
   ): Promise<{ text: string; provider: string; model: string; inputTokens: number; outputTokens: number }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
     if (!apiKey) {
       throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
     }
@@ -748,7 +750,7 @@ export class ProviderRouterService {
     inputTokens: number;
     outputTokens: number;
   }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
     if (!apiKey) {
       throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
     }
@@ -811,11 +813,11 @@ export class ProviderRouterService {
     messages: LlmMessage[],
     caps: { maxOutputTokens: number },
   ): Promise<{ text: string; provider: string; model: string; inputTokens: number; outputTokens: number }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
     if (!apiKey) {
       throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
     }
-    const baseUrl = this.config.get<string>('XAI_BASE_URL') || 'https://api.x.ai/v1';
+    const baseUrl = await this.adminSettings.getApiKey('XAI_BASE_URL') || 'https://api.x.ai/v1';
     const url = baseUrl.replace(/\/?$/, '') + '/chat/completions';
     const body = {
       model: option.defaultModel,
@@ -858,11 +860,11 @@ export class ProviderRouterService {
     inputTokens: number;
     outputTokens: number;
   }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
     if (!apiKey) {
       throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
     }
-    const baseUrl = this.config.get<string>('XAI_BASE_URL') || 'https://api.x.ai/v1';
+    const baseUrl = await this.adminSettings.getApiKey('XAI_BASE_URL') || 'https://api.x.ai/v1';
     const url = baseUrl.replace(/\/?$/, '') + '/chat/completions';
     const apiTools = tools.map((t) => ({
       type: 'function' as const,
@@ -910,11 +912,11 @@ export class ProviderRouterService {
     messages: LlmMessage[],
     caps: { maxOutputTokens: number },
   ): Promise<{ text: string; provider: string; model: string; inputTokens: number; outputTokens: number }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
     if (!apiKey) {
       throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
     }
-    const baseUrl = this.config.get<string>('META_BASE_URL');
+    const baseUrl = await this.adminSettings.getApiKey('META_BASE_URL');
     if (!baseUrl) {
       throw new HttpException('META_BASE_URL not configured. Set it to your Llama provider (e.g. https://api.groq.com/openai/v1)', HttpStatus.BAD_REQUEST);
     }
@@ -960,7 +962,7 @@ export class ProviderRouterService {
     inputTokens: number;
     outputTokens: number;
   }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
     if (!apiKey) {
       throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
     }

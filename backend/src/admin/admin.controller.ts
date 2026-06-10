@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Query, Param, UseGuards, Req, HttpException, HttpStatus, Sse } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Body, Query, Param, UseGuards, Req, HttpException, HttpStatus, Sse } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, MoreThanOrEqual } from 'typeorm';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -19,6 +19,7 @@ import { AdminSetting } from '../entities/admin-setting.entity';
 import { AbuseEvent } from '../entities/abuse-event.entity';
 import { Request } from 'express';
 import { AdminService } from './admin.service';
+import { AdminSettingsService } from './admin-settings.service';
 import { GwehAIService } from '../gwehai/gwehai.service';
 import { HacktivityService } from '../hacktivity/hacktivity.service';
 import { GwehAISSEGuard } from '../gwehai/gwehai-sse.guard';
@@ -70,6 +71,7 @@ export class AdminController {
     @InjectRepository(AbuseEvent)
     private readonly abuseRepo: Repository<AbuseEvent>,
     private readonly adminService: AdminService,
+    private readonly adminSettingsService: AdminSettingsService,
     private readonly gwehaiService: GwehAIService,
     private readonly hacktivityService: HacktivityService,
     private readonly planUsageService: PlanUsageService,
@@ -662,12 +664,150 @@ export class AdminController {
     return rows;
   }
 
+  /**
+   * GET /admin/settings — return all settings in the format the frontend expects:
+   * { settings: Record<string, SettingMeta>, groups: Record<string, GroupMeta> }
+   *
+   * Each setting merges DB values (admin_settings table) with env fallbacks.
+   */
   @Get('settings')
   async getSettings(@Req() req: Request) {
-    return {
-      environment: process.env.NODE_ENV || 'development',
-      apiBaseUrl: process.env.API_BASE_URL || '/api',
+    // Setting registry: key → { group, label, envVar }
+    const REGISTRY: Record<string, { group: string; label: string; envVar?: string }> = {
+      // AI
+      OPENAI_API_KEY:        { group: 'ai', label: 'OpenAI API Key', envVar: 'OPENAI_API_KEY' },
+      GEMINI_API_KEY:        { group: 'ai', label: 'Gemini API Key', envVar: 'GEMINI_API_KEY' },
+      GROQ_API_KEY:          { group: 'ai', label: 'Groq API Key', envVar: 'GROQ_API_KEY' },
+      ANTHROPIC_API_KEY:     { group: 'ai', label: 'Anthropic API Key', envVar: 'ANTHROPIC_API_KEY' },
+      DEEPSEEK_API_KEY:      { group: 'ai', label: 'DeepSeek API Key', envVar: 'DEEPSEEK_API_KEY' },
+      OPENAI_BASE_URL:       { group: 'ai', label: 'OpenAI Base URL', envVar: 'OPENAI_BASE_URL' },
+      // Payment
+      TRIPAY_API_KEY:        { group: 'payment', label: 'Tripay API Key', envVar: 'TRIPAY_API_KEY' },
+      TRIPAY_MERCHANT_ID:    { group: 'payment', label: 'Tripay Merchant ID', envVar: 'TRIPAY_MERCHANT_ID' },
+      TRIPAY_PRIVATE_KEY:    { group: 'payment', label: 'Tripay Private Key', envVar: 'TRIPAY_PRIVATE_KEY' },
+      TRIPAY_CALLBACK_URL:   { group: 'payment', label: 'Tripay Callback URL', envVar: 'TRIPAY_CALLBACK_URL' },
+      // Email
+      SMTP_HOST:             { group: 'email', label: 'SMTP Host', envVar: 'SMTP_HOST' },
+      SMTP_PORT:             { group: 'email', label: 'SMTP Port', envVar: 'SMTP_PORT' },
+      SMTP_USER:             { group: 'email', label: 'SMTP User', envVar: 'SMTP_USER' },
+      SMTP_PASS:             { group: 'email', label: 'SMTP Password', envVar: 'SMTP_PASS' },
+      SMTP_FROM:             { group: 'email', label: 'SMTP From Address', envVar: 'SMTP_FROM' },
+      // Security
+      CORS_ORIGINS:          { group: 'security', label: 'CORS Origins', envVar: 'CORS_ORIGINS' },
+      RATE_LIMIT_WINDOW:     { group: 'security', label: 'Rate Limit Window (sec)', envVar: 'RATE_LIMIT_WINDOW' },
+      RATE_LIMIT_MAX:        { group: 'security', label: 'Rate Limit Max Requests', envVar: 'RATE_LIMIT_MAX' },
+      // Auth
+      GOOGLE_CLIENT_ID:      { group: 'auth', label: 'Google Client ID', envVar: 'GOOGLE_CLIENT_ID' },
+      GOOGLE_CLIENT_SECRET:  { group: 'auth', label: 'Google Client Secret', envVar: 'GOOGLE_CLIENT_SECRET' },
+      GOOGLE_CALLBACK_URL:   { group: 'auth', label: 'Google Callback URL', envVar: 'GOOGLE_CALLBACK_URL' },
+      JWT_SECRET:            { group: 'auth', label: 'JWT Secret', envVar: 'JWT_SECRET' },
+      JWT_EXPIRES_IN:        { group: 'auth', label: 'JWT Expires In', envVar: 'JWT_EXPIRES_IN' },
+      // General
+      NODE_ENV:              { group: 'general', label: 'Environment', envVar: 'NODE_ENV' },
+      PORT:                  { group: 'general', label: 'Server Port', envVar: 'PORT' },
+      FRONTEND_URL:          { group: 'general', label: 'Frontend URL', envVar: 'FRONTEND_URL' },
+      API_BASE_URL:          { group: 'general', label: 'API Base URL', envVar: 'API_BASE_URL' },
     };
+
+    // Query all DB rows
+    const dbRows = await this.settingsRepo.find();
+    const dbMap = new Map(dbRows.map((r) => [r.key, r.value]));
+
+    // Build settings map
+    const settings: Record<string, { value: string; hasValue: boolean; source: 'db' | 'env'; label: string; group: string }> = {};
+    const groupFields: Record<string, string[]> = {};
+
+    for (const [key, meta] of Object.entries(REGISTRY)) {
+      const dbVal = dbMap.get(key);
+      const envVal = meta.envVar ? (process.env[meta.envVar] ?? '') : '';
+      const hasDb = dbVal != null && dbVal !== '';
+      const hasEnv = envVal !== '';
+
+      settings[key] = {
+        value: hasDb ? dbVal! : envVal,
+        hasValue: hasDb || hasEnv,
+        source: hasDb ? 'db' : 'env',
+        label: meta.label,
+        group: meta.group,
+      };
+
+      if (!groupFields[meta.group]) groupFields[meta.group] = [];
+      groupFields[meta.group].push(key);
+    }
+
+    // Also include any extra DB keys not in the registry (custom settings)
+    for (const [key, value] of dbMap.entries()) {
+      if (!settings[key]) {
+        settings[key] = {
+          value: value ?? '',
+          hasValue: value != null && value !== '',
+          source: 'db',
+          label: key,
+          group: 'general',
+        };
+        if (!groupFields['general']) groupFields['general'] = [];
+        groupFields['general'].push(key);
+      }
+    }
+
+    // Build groups meta
+    const GROUP_LABELS: Record<string, string> = {
+      ai: 'AI',
+      payment: 'Payment',
+      email: 'Email',
+      security: 'Security',
+      auth: 'Authentication',
+      general: 'General',
+    };
+
+    const groups: Record<string, { label: string; fields: string[] }> = {};
+    for (const [groupKey, fields] of Object.entries(groupFields)) {
+      groups[groupKey] = {
+        label: GROUP_LABELS[groupKey] ?? groupKey,
+        fields,
+      };
+    }
+
+    return { settings, groups };
+  }
+
+  /**
+   * PUT /admin/settings — upsert settings from the admin UI.
+   * Body: Record<string, string> (key → value).
+   */
+  @Put('settings')
+  async updateSettings(@Body() body: Record<string, string>, @Req() req: Request) {
+    const adminUser = req.user as { id: string };
+    const ip = this.adminService.getClientIp(req);
+
+    const entries = Object.entries(body);
+    if (entries.length === 0) {
+      throw new HttpException('No settings provided', HttpStatus.BAD_REQUEST);
+    }
+
+    for (const [key, value] of entries) {
+      if (typeof key !== 'string' || typeof value !== 'string') continue;
+      await this.settingsRepo.upsert(
+        { key, value, updatedAt: new Date() },
+        { conflictPaths: ['key'] },
+      );
+
+      // Sync API keys to process.env so services that still read env directly keep working
+      if (key.endsWith('_API_KEY') || key.endsWith('_BASE_URL')) {
+        process.env[key] = value;
+      }
+
+      // Invalidate cache so ProviderRouter picks up the new value immediately
+      this.adminSettingsService.invalidate(key);
+    }
+
+    await this.adminService.log(adminUser.id, 'settings_update', {
+      resource: 'admin/settings',
+      details: JSON.stringify({ keys: entries.map(([k]) => k) }),
+      ipAddress: ip,
+    });
+
+    return { ok: true, updated: entries.length };
   }
 
   @Get('cost/summary')
