@@ -21,13 +21,13 @@ const STATE_LABELS: Record<ProgressState, string> = {
 }
 
 const STATE_ICONS: Record<ProgressState, string> = {
-  idle: '◉',
-  thinking: '◎',
-  generating: '◈',
-  done: '✓',
-  stopping: '◌',
-  stopped: '■',
-  error: '✕',
+  idle: 'fa-solid fa-circle',
+  thinking: 'fa-solid fa-brain',
+  generating: 'fa-solid fa-wand-magic-sparkles',
+  done: 'fa-solid fa-circle-check',
+  stopping: 'fa-solid fa-circle-notch fa-spin',
+  stopped: 'fa-solid fa-stop',
+  error: 'fa-solid fa-circle-xmark',
 }
 
 const ProgressIndicator: React.FC<ProgressIndicatorProps> = ({
@@ -45,9 +45,7 @@ const ProgressIndicator: React.FC<ProgressIndicatorProps> = ({
     <div className={`progress-indicator progress-indicator--${state}`}>
       <div className="progress-indicator__header">
         <div className="progress-indicator__status">
-          <span className={`progress-indicator__icon ${isActive ? 'progress-indicator__icon--pulse' : ''}`}>
-            {STATE_ICONS[state]}
-          </span>
+          <i className={`progress-indicator__fa ${STATE_ICONS[state]} ${isActive ? 'progress-indicator__fa--pulse' : ''}`} />
           <span className="progress-indicator__label">{label}</span>
         </div>
         {isActive && onStop && (
@@ -57,7 +55,7 @@ const ProgressIndicator: React.FC<ProgressIndicatorProps> = ({
             onClick={onStop}
             title="Stop generation"
           >
-            <span className="progress-indicator__stop-icon">■</span>
+            <i className="fa-solid fa-stop" />
             <span>Stop</span>
           </button>
         )}

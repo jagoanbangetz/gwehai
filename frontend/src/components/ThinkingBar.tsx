@@ -92,7 +92,7 @@ const ThinkingBar: React.FC<ThinkingBarProps> = ({
                         className={`thinking-bar-terminal__checklist-item ${done ? 'thinking-bar-terminal__checklist-item--done' : 'thinking-bar-terminal__checklist-item--pending'}`}
                         title={done ? 'Done' : 'Pending'}
                       >
-                        {done ? '✓' : '○'} {CHECKLIST_LABELS[key] ?? key}
+                        {done ? <i className="fa-solid fa-circle-check" style={{ color: '#3fb950', marginRight: 4 }} /> : <i className="fa-regular fa-circle" style={{ color: '#555', marginRight: 4 }} />} {CHECKLIST_LABELS[key] ?? key}
                       </span>
                     ))}
                   </div>

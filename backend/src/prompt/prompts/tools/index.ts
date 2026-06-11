@@ -9,6 +9,7 @@ import { NIKTO_TOOL_PROMPT } from './nikto.prompt';
 import { CURL_TOOL_PROMPT } from './curl.prompt';
 import { BROWSER_TOOL_PROMPT } from './browser.prompt';
 import { SESSIONS_TOOL_PROMPT } from './sessions.prompt';
+import { REPORT_FINDING_TOOL_PROMPT } from './report-finding.prompt';
 
 /** Maps tool name → prompt snippet. Injected only when the tool is called. */
 export const TOOL_PROMPTS: Record<string, string> = {
@@ -22,6 +23,7 @@ export const TOOL_PROMPTS: Record<string, string> = {
   sessions_send: SESSIONS_TOOL_PROMPT,
   sessions_history: SESSIONS_TOOL_PROMPT,
   sessions_list: SESSIONS_TOOL_PROMPT,
+  report_finding: REPORT_FINDING_TOOL_PROMPT,
 };
 
 /** Tool names that trigger tool-specific prompt injection. */
@@ -57,4 +59,5 @@ export {
   CURL_TOOL_PROMPT,
   BROWSER_TOOL_PROMPT,
   SESSIONS_TOOL_PROMPT,
+  REPORT_FINDING_TOOL_PROMPT,
 };

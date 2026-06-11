@@ -115,8 +115,8 @@ export default function ChatComposer({
                   <span>{voiceTranscript || 'Listening...'}</span>
                 </div>
                 <div className="voice-actions">
-                  <button type="button" className="voice-action-btn cancel" onClick={onCancelVoice} title="Cancel">✕</button>
-                  <button type="button" className="voice-action-btn confirm" onClick={onConfirmVoice} disabled={!voiceTranscript} title="Use transcript">✓</button>
+                  <button type="button" className="voice-action-btn cancel" onClick={onCancelVoice} title="Cancel"><i className="fa-solid fa-xmark" /></button>
+                  <button type="button" className="voice-action-btn confirm" onClick={onConfirmVoice} disabled={!voiceTranscript} title="Use transcript"><i className="fa-solid fa-check" /></button>
                 </div>
               </div>
             </div>
@@ -124,7 +124,7 @@ export default function ChatComposer({
         ) : (
           <div className="input-container">
             <button type="button" className="input-attach" title="Attach file (coming soon)" disabled>
-              +
+              <i className="fa-solid fa-paperclip" />
             </button>
             <textarea
               ref={inputRef}

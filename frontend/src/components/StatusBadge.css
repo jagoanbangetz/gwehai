@@ -1,4 +1,4 @@
-/* StatusBadge: compact status indicator on assistant messages */
+/* StatusBadge: compact status indicator on assistant messages — V3 */
 
 .status-badge {
   display: inline-flex;
@@ -13,7 +13,7 @@
   margin-bottom: 8px;
 }
 
-.status-badge__icon {
+.status-badge__fa {
   font-size: 10px;
   line-height: 1;
 }
@@ -25,56 +25,43 @@
 .status-badge__model {
   padding: 1px 5px;
   border-radius: 3px;
-  background: oklch(0.19 0.006 60);
+  background: #1a1a1a;
   font-size: 10px;
-  color: oklch(0.72 0.005 60);
+  color: #666;
   margin-left: 2px;
 }
 
 /* Streaming */
 .status-badge--streaming {
-  background: oklch(0.12 0.06 250 / 0.2);
-  border: 1px solid oklch(0.3 0.08 250 / 0.3);
-  color: oklch(0.75 0.12 250);
-}
-
-.status-badge--streaming .status-badge__icon {
-  animation: badgePulse 1.5s ease-in-out infinite;
+  background: #0d1b2d;
+  border: 1px solid #1a2d4a;
+  color: #58a6ff;
 }
 
 /* Thinking */
 .status-badge--thinking {
-  background: oklch(0.12 0.06 270 / 0.2);
-  border: 1px solid oklch(0.3 0.08 270 / 0.3);
-  color: oklch(0.75 0.12 270);
-}
-
-.status-badge--thinking .status-badge__icon {
-  animation: badgePulse 1.2s ease-in-out infinite;
+  background: #0d1525;
+  border: 1px solid #1a2540;
+  color: #79c0ff;
 }
 
 /* Done */
 .status-badge--done {
-  background: oklch(0.12 0.06 145 / 0.15);
-  border: 1px solid oklch(0.3 0.08 145 / 0.25);
-  color: oklch(0.7 0.12 145);
+  background: #0d2818;
+  border: 1px solid #1a4a28;
+  color: #3fb950;
 }
 
 /* Error */
 .status-badge--error {
-  background: oklch(0.12 0.06 25 / 0.2);
-  border: 1px solid oklch(0.3 0.08 25 / 0.3);
-  color: oklch(0.75 0.12 25);
+  background: #2d0f0f;
+  border: 1px solid #4a1a1a;
+  color: #f85149;
 }
 
 /* Stopped */
 .status-badge--stopped {
-  background: oklch(0.1 0 0 / 0.3);
-  border: 1px solid oklch(0.25 0 0 / 0.3);
-  color: oklch(0.67 0.005 60);
-}
-
-@keyframes badgePulse {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 1; }
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  color: #666;
 }

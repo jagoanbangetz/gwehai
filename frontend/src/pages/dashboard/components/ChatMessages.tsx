@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import MarkdownMessage from '../../../components/MarkdownMessage'
 import FollowUpChips from '../../../components/FollowUpChips'
 import ThinkingBar from '../../../components/ThinkingBar'
@@ -6,6 +7,7 @@ import ProgressIndicator from '../../../components/ProgressIndicator'
 import type { ProgressState } from '../../../components/ProgressIndicator'
 import { GwehLogRenderer } from '../../../components/GwehLog'
 import { getModelLabel } from '../../../components/ModelPicker'
+import AnsiText from '../../../components/AnsiText'
 import type { Message } from '../types'
 import type { LogEvent } from '../../../components/GwehLog'
 
@@ -24,11 +26,30 @@ interface ChatMessagesProps {
   disabled?: boolean
 }
 
-/** Remove unused warning */
+/** Tool status icon using Font Awesome */
+function toolStatusIcon(status: string) {
+  if (status === 'running') return <i className="fa-solid fa-spinner fa-spin" />
+  if (status === 'ok') return <i className="fa-solid fa-circle-check" />
+  return <i className="fa-solid fa-circle-xmark" />
+}
+
+/** Tool status label */
+function toolStatusLabel(status: string) {
+  if (status === 'running') return 'running'
+  if (status === 'ok') return 'success'
+  return 'failed'
+}
+
+/** Tool status CSS modifier */
+function toolStatusMod(status: string) {
+  if (status === 'running') return 'running'
+  if (status === 'ok') return 'success'
+  return 'failed'
+}
 
 /**
- * Renders the chat messages list: user bubbles, assistant responses,
- * thinking bars, tool states, loading indicators, and checklist progress.
+ * V3 Hybrid Chat UI — Chat Bubble + Terminal Tool Output
+ * Chat bubbles for conversation, terminal blocks for tool results.
  */
 export default function ChatMessages({
   messages,
@@ -44,6 +65,13 @@ export default function ChatMessages({
   onStop,
   disabled,
 }: ChatMessagesProps) {
+  // Track which terminal blocks are collapsed
+  const [collapsedTerminals, setCollapsedTerminals] = useState<Record<string, boolean>>({})
+
+  const toggleTerminal = (toolId: string) => {
+    setCollapsedTerminals((prev) => ({ ...prev, [toolId]: !prev[toolId] }))
+  }
+
   // Derive progress state for ProgressIndicator
   const lastMsg = messages[messages.length - 1]
   const isStreaming = lastMsg?.role === 'assistant' && lastMsg.isStreaming && !lastMsg.done
@@ -69,7 +97,7 @@ export default function ChatMessages({
 
   return (
     <div className="chat-messages">
-      {/* Progress indicator — AI builder style status bar */}
+      {/* Progress indicator */}
       <ProgressIndicator
         state={progressState}
         currentStep={currentStep}
@@ -115,12 +143,14 @@ export default function ChatMessages({
               key={message.id}
               className={`chat-message ${isUser ? 'chat-message--user' : 'chat-message--assistant'} ${message.isStreaming ? 'chat-message--streaming' : ''}`}
             >
-              {/* Assistant avatar */}
-              {isAssistant && (
-                <div className="chat-message__avatar">
-                  <span className="chat-message__avatar-icon">G</span>
-                </div>
-              )}
+              {/* Avatar */}
+              <div className="chat-message__avatar">
+                {isUser ? (
+                  <i className="fa-solid fa-user chat-message__avatar-fa" />
+                ) : (
+                  <i className="fa-solid fa-robot chat-message__avatar-fa" />
+                )}
+              </div>
 
               <div className="chat-message__content">
                 {/* Status badge for assistant messages */}
@@ -139,7 +169,7 @@ export default function ChatMessages({
                 {isAssistant && message.thinking && (message.thinkingDisplay || message.thinking) && (
                   <div className="assistant-thinking">
                     <div className="assistant-thinking__header">
-                      <span className="assistant-thinking__icon">◎</span>
+                      <i className="fa-solid fa-brain assistant-thinking__icon" />
                       <span className="assistant-thinking__title">Reasoning</span>
                     </div>
                     <div className="assistant-thinking__text">
@@ -176,26 +206,54 @@ export default function ChatMessages({
                   <GwehLogRenderer events={logEvents} />
                 )}
 
-                {/* Tool terminals */}
+                {/* ── Terminal Output Blocks (V3: separate from chat bubble) ── */}
                 {isAssistant && hasTools && toolIds.map((toolId: string) => {
                   const tool = (window as any).__gwehai_tools?.[toolId]
                   if (!tool) return null
                   const isRunning = tool.status === 'running'
+                  const isCollapsed = collapsedTerminals[toolId]
+
                   return (
-                    <div key={toolId} className="tool-terminal">
-                      <div className="tool-terminal__header">
-                        <span className={`tool-terminal__status ${isRunning ? 'tool-terminal__status--running' : ''}`}>
-                          {isRunning ? '◉' : tool.status === 'ok' ? '✓' : '✕'}
+                    <div
+                      key={toolId}
+                      className={`terminal-block terminal-block--${toolStatusMod(tool.status)}`}
+                    >
+                      <button
+                        type="button"
+                        className="terminal-block__header"
+                        onClick={() => toggleTerminal(toolId)}
+                        aria-expanded={!isCollapsed}
+                      >
+                        <span className="terminal-block__status-icon">
+                          {toolStatusIcon(tool.status)}
                         </span>
-                        <span className="tool-terminal__name">{tool.name}</span>
+                        <span className="terminal-block__tool-name">{tool.name}</span>
+                        <span className={`terminal-block__status-label terminal-block__status-label--${toolStatusMod(tool.status)}`}>
+                          {toolStatusLabel(tool.status)}
+                        </span>
                         {tool.reasoning && (
-                          <span className="tool-terminal__reasoning">{tool.reasoning}</span>
+                          <span className="terminal-block__reasoning">{tool.reasoning}</span>
                         )}
-                      </div>
-                      {tool.logs.length > 0 && (
-                        <pre className="tool-terminal__logs">
-                          {tool.logs.join('\n')}
-                        </pre>
+                        <span className="terminal-block__chevron">
+                          <i className={`fa-solid fa-chevron-${isCollapsed ? 'down' : 'up'}`} />
+                        </span>
+                      </button>
+                      {!isCollapsed && tool.logs.length > 0 && (
+                        <div className="terminal-block__body">
+                          <pre className="terminal-block__output">
+                            {tool.logs.map((line: string, idx: number) => (
+                              <div key={idx} className="terminal-block__line">
+                                <AnsiText text={line} />
+                              </div>
+                            ))}
+                          </pre>
+                          {isRunning && <span className="terminal-block__cursor" />}
+                        </div>
+                      )}
+                      {!isCollapsed && isRunning && tool.logs.length === 0 && (
+                        <div className="terminal-block__body">
+                          <span className="terminal-block__cursor" />
+                        </div>
                       )}
                     </div>
                   )
@@ -218,7 +276,7 @@ export default function ChatMessages({
                 {/* Error styling */}
                 {message.eventType === 'error' && (
                   <div className="assistant-error">
-                    <span className="assistant-error__icon">✕</span>
+                    <i className="fa-solid fa-circle-exclamation assistant-error__icon" />
                     <span>{message.content}</span>
                   </div>
                 )}
@@ -235,7 +293,9 @@ export default function ChatMessages({
                 {/* Details expander */}
                 {isAssistant && message.done && message.details && (
                   <details className="assistant-details">
-                    <summary className="assistant-details__summary">More details</summary>
+                    <summary className="assistant-details__summary">
+                      <i className="fa-solid fa-angles-right" /> More details
+                    </summary>
                     <div className="assistant-details__content">
                       <MarkdownMessage content={message.details} />
                     </div>
