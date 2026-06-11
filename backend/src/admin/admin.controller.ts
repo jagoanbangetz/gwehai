@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Put, Patch, Body, Query, Param, UseGuards, Req, HttpException, HttpStatus, Sse } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Body, Query, Param, UseGuards, Req, HttpException, HttpStatus, Sse, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, MoreThanOrEqual } from 'typeorm';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -20,6 +21,7 @@ import { AbuseEvent } from '../entities/abuse-event.entity';
 import { Request } from 'express';
 import { AdminService } from './admin.service';
 import { AdminSettingsService } from './admin-settings.service';
+import { ObjectStorageService } from '../storage/object-storage.service';
 import { GwehAIService } from '../gwehai/gwehai.service';
 import { HacktivityService } from '../hacktivity/hacktivity.service';
 import { GwehAISSEGuard } from '../gwehai/gwehai-sse.guard';
@@ -72,6 +74,7 @@ export class AdminController {
     private readonly abuseRepo: Repository<AbuseEvent>,
     private readonly adminService: AdminService,
     private readonly adminSettingsService: AdminSettingsService,
+    private readonly objectStorageService: ObjectStorageService,
     private readonly gwehaiService: GwehAIService,
     private readonly hacktivityService: HacktivityService,
     private readonly planUsageService: PlanUsageService,
@@ -681,11 +684,7 @@ export class AdminController {
       ANTHROPIC_API_KEY:     { group: 'ai', label: 'Anthropic API Key', envVar: 'ANTHROPIC_API_KEY' },
       DEEPSEEK_API_KEY:      { group: 'ai', label: 'DeepSeek API Key', envVar: 'DEEPSEEK_API_KEY' },
       OPENAI_BASE_URL:       { group: 'ai', label: 'OpenAI Base URL', envVar: 'OPENAI_BASE_URL' },
-      // Payment
-      TRIPAY_API_KEY:        { group: 'payment', label: 'Tripay API Key', envVar: 'TRIPAY_API_KEY' },
-      TRIPAY_MERCHANT_ID:    { group: 'payment', label: 'Tripay Merchant ID', envVar: 'TRIPAY_MERCHANT_ID' },
-      TRIPAY_PRIVATE_KEY:    { group: 'payment', label: 'Tripay Private Key', envVar: 'TRIPAY_PRIVATE_KEY' },
-      TRIPAY_CALLBACK_URL:   { group: 'payment', label: 'Tripay Callback URL', envVar: 'TRIPAY_CALLBACK_URL' },
+
       // Email
       SMTP_HOST:             { group: 'email', label: 'SMTP Host', envVar: 'SMTP_HOST' },
       SMTP_PORT:             { group: 'email', label: 'SMTP Port', envVar: 'SMTP_PORT' },
@@ -707,6 +706,9 @@ export class AdminController {
       PORT:                  { group: 'general', label: 'Server Port', envVar: 'PORT' },
       FRONTEND_URL:          { group: 'general', label: 'Frontend URL', envVar: 'FRONTEND_URL' },
       API_BASE_URL:          { group: 'general', label: 'API Base URL', envVar: 'API_BASE_URL' },
+      // Branding
+      site_logo_url:         { group: 'branding', label: 'Site Logo URL' },
+      site_favicon_url:      { group: 'branding', label: 'Site Favicon URL' },
     };
 
     // Query all DB rows
@@ -758,6 +760,7 @@ export class AdminController {
       security: 'Security',
       auth: 'Authentication',
       general: 'General',
+      branding: 'Branding',
     };
 
     const groups: Record<string, { label: string; fields: string[] }> = {};
@@ -808,6 +811,96 @@ export class AdminController {
     });
 
     return { ok: true, updated: entries.length };
+  }
+
+  /**
+   * POST /admin/settings/upload — upload logo or favicon image.
+   * Accepts multipart form with field "file" and "type" (logo | favicon).
+   * Validates: max 2MB, allowed formats (png, jpg, jpeg, ico, svg).
+   * Uploads to S3-compatible storage (Vultr) or local fallback.
+   * Saves the URL in admin_settings (site_logo_url / site_favicon_url).
+   */
+  @Post('settings/upload')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadSettingImage(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('type') type: string,
+    @Req() req: Request,
+  ) {
+    const adminUser = req.user as { id: string };
+    const ip = this.adminService.getClientIp(req);
+
+    // Validate type
+    if (!type || !['logo', 'favicon'].includes(type)) {
+      throw new HttpException(
+        'type must be "logo" or "favicon"',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Validate file exists
+    if (!file || !file.buffer || file.buffer.length === 0) {
+      throw new HttpException(
+        'No file uploaded. Use multipart form with field "file".',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Validate file size (max 2MB)
+    const MAX_SIZE = 2 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      throw new HttpException(
+        `File too large. Max size: 2MB, got: ${(file.size / 1024 / 1024).toFixed(2)}MB`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Validate file format
+    const ALLOWED_MIMES = [
+      'image/png',
+      'image/jpeg',
+      'image/jpg',
+      'image/x-icon',
+      'image/vnd.microsoft.icon',
+      'image/svg+xml',
+    ];
+    const ALLOWED_EXTS = ['.png', '.jpg', '.jpeg', '.ico', '.svg'];
+    const ext = file.originalname
+      ? require('path').extname(file.originalname).toLowerCase()
+      : '';
+
+    if (!ALLOWED_MIMES.includes(file.mimetype) && !ALLOWED_EXTS.includes(ext)) {
+      throw new HttpException(
+        `Invalid file format. Allowed: PNG, JPG, ICO, SVG. Got: ${file.mimetype}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Upload to storage
+    const folder = type === 'logo' ? 'branding/logo' : 'branding/favicon';
+    const { url } = await this.objectStorageService.upload(
+      file.buffer,
+      file.originalname || `${type}${ext || '.png'}`,
+      file.mimetype,
+      folder,
+    );
+
+    // Save URL in admin_settings
+    const settingKey = type === 'logo' ? 'site_logo_url' : 'site_favicon_url';
+    await this.settingsRepo.upsert(
+      { key: settingKey, value: url, updatedAt: new Date() },
+      { conflictPaths: ['key'] },
+    );
+    this.adminSettingsService.invalidate(settingKey);
+
+    // Audit log
+    await this.adminService.log(adminUser.id, 'settings_upload', {
+      resource: `admin/settings/${type}`,
+      details: JSON.stringify({ type, url, filename: file.originalname, size: file.size }),
+      ipAddress: ip,
+    });
+
+    return { ok: true, type, url, settingKey };
   }
 
   @Get('cost/summary')

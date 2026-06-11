@@ -47,6 +47,7 @@ describe('AdminController', () => {
   const mailService = { isConfigured: jest.fn().mockReturnValue(false), sendPromotionEmail: jest.fn().mockResolvedValue(true) } as any;
   const pentestJobsService = { listRecentForAdmin: jest.fn().mockResolvedValue([]) } as any;
   const adminSettingsService = { getApiKey: jest.fn(), invalidate: jest.fn(), invalidateAll: jest.fn() } as any;
+  const objectStorageService = { upload: jest.fn().mockResolvedValue({ url: 'https://example.com/test.png', key: 'branding/logo/test.png' }), delete: jest.fn() } as any;
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -66,6 +67,7 @@ describe('AdminController', () => {
       abuseRepo,
       adminService as any,
       adminSettingsService,
+      objectStorageService,
       gwehaiService as any,
       hacktivityService as any,
       planUsageService,

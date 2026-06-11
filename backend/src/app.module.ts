@@ -39,6 +39,7 @@ import { PentestJobsModule } from './pentest-jobs/pentest-jobs.module';
 import { MailModule } from './mail/mail.module';
 import { CveFeedModule } from './cve-feed/cve-feed.module';
 import { HealthModule } from './health/health.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -88,6 +89,7 @@ import { HealthModule } from './health/health.module';
     PentestJobsModule,
     HacktivityModule,
     HealthModule,
+    StorageModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -38,6 +38,7 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { GwehAISSEGuard } from '../gwehai/gwehai-sse.guard';
 import { CveFeedModule } from '../cve-feed/cve-feed.module';
 import { AdminOpsController } from './admin-ops.controller';
+import { StorageModule } from '../storage/storage.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { AdminOpsController } from './admin-ops.controller';
     PaypalModule,
     SubscriptionsModule,
     CveFeedModule,
+    StorageModule,
   ],
   controllers: [AdminController, AdminBillingController, AdminBillingConfigController, AdminModelsController, AdminOpsController],
   providers: [AdminService, AdminSettingsService, GwehAISSEGuard],
