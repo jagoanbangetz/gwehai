@@ -33,13 +33,6 @@ function toolStatusIcon(status: string) {
   return <i className="fa-solid fa-circle-xmark" />
 }
 
-/** Tool status label */
-function toolStatusLabel(status: string) {
-  if (status === 'running') return 'running'
-  if (status === 'ok') return 'success'
-  return 'failed'
-}
-
 /** Tool status CSS modifier */
 function toolStatusMod(status: string) {
   if (status === 'running') return 'running'
@@ -48,8 +41,9 @@ function toolStatusMod(status: string) {
 }
 
 /**
- * V3 Hybrid Chat UI — Chat Bubble + Terminal Tool Output
- * Chat bubbles for conversation, terminal blocks for tool results.
+ * V4 Chat UI — ChatGPT/DeepSeek Style
+ * Clean chat bubbles for everything. Thinking is expandable accordion.
+ * Tool output rendered as light chat bubbles — NO terminal blocks.
  */
 export default function ChatMessages({
   messages,
@@ -65,11 +59,17 @@ export default function ChatMessages({
   onStop,
   disabled,
 }: ChatMessagesProps) {
-  // Track which terminal blocks are collapsed
-  const [collapsedTerminals, setCollapsedTerminals] = useState<Record<string, boolean>>({})
+  // Track which tool bubbles are collapsed
+  const [collapsedTools, setCollapsedTools] = useState<Record<string, boolean>>({})
+  // Track which thinking sections are expanded
+  const [expandedThinking, setExpandedThinking] = useState<Record<string, boolean>>({})
 
-  const toggleTerminal = (toolId: string) => {
-    setCollapsedTerminals((prev) => ({ ...prev, [toolId]: !prev[toolId] }))
+  const toggleTool = (toolId: string) => {
+    setCollapsedTools((prev) => ({ ...prev, [toolId]: !prev[toolId] }))
+  }
+
+  const toggleThinking = (msgId: string) => {
+    setExpandedThinking((prev) => ({ ...prev, [msgId]: !prev[msgId] }))
   }
 
   // Derive progress state for ProgressIndicator
@@ -165,21 +165,38 @@ export default function ChatMessages({
                   </div>
                 )}
 
-                {/* Thinking block */}
-                {isAssistant && message.thinking && (message.thinkingDisplay || message.thinking) && (
-                  <div className="assistant-thinking">
-                    <div className="assistant-thinking__header">
-                      <i className="fa-solid fa-brain assistant-thinking__icon" />
-                      <span className="assistant-thinking__title">Reasoning</span>
-                    </div>
-                    <div className="assistant-thinking__text">
-                      {message.thinkingDisplay || message.thinking}
-                      {message.isStreaming && (!message.thinkingDisplay || message.thinkingDisplay.length < message.thinking.length) && (
-                        <span className="thinking-cursor" />
+                {/* Thinking block — expandable accordion (ChatGPT/DeepSeek style) */}
+                {isAssistant && message.thinking && (message.thinkingDisplay || message.thinking) && (() => {
+                  const isThinkingExpanded = expandedThinking[message.id]
+                  return (
+                    <div className={`thinking-accordion ${isThinkingExpanded ? 'thinking-accordion--expanded' : ''}`}>
+                      <button
+                        type="button"
+                        className="thinking-accordion__trigger"
+                        onClick={() => toggleThinking(message.id)}
+                        aria-expanded={isThinkingExpanded}
+                      >
+                        <i className="fa-solid fa-brain thinking-accordion__icon" />
+                        <span className="thinking-accordion__label">
+                          {message.isStreaming ? 'Thinking...' : 'Thinking'}
+                        </span>
+                        <span className="thinking-accordion__chevron">
+                          <i className={`fa-solid fa-chevron-${isThinkingExpanded ? 'up' : 'down'}`} />
+                        </span>
+                      </button>
+                      {isThinkingExpanded && (
+                        <div className="thinking-accordion__body">
+                          <div className="thinking-accordion__text">
+                            {message.thinkingDisplay || message.thinking}
+                            {message.isStreaming && (!message.thinkingDisplay || message.thinkingDisplay.length < message.thinking.length) && (
+                              <span className="thinking-cursor" />
+                            )}
+                          </div>
+                        </div>
                       )}
                     </div>
-                  </div>
-                )}
+                  )
+                })()}
 
                 {/* Simple conversation indicator */}
                 {isAssistant && isSimpleConversation && message.isStreaming && !message.done && !message.content && (
@@ -206,53 +223,48 @@ export default function ChatMessages({
                   <GwehLogRenderer events={logEvents} />
                 )}
 
-                {/* ── Terminal Output Blocks (V3: separate from chat bubble) ── */}
+                {/* ── Tool Output Bubbles (V4: clean chat style, NO terminal blocks) ── */}
                 {isAssistant && hasTools && toolIds.map((toolId: string) => {
                   const tool = (window as any).__gwehai_tools?.[toolId]
                   if (!tool) return null
                   const isRunning = tool.status === 'running'
-                  const isCollapsed = collapsedTerminals[toolId]
+                  const isCollapsed = collapsedTools[toolId]
 
                   return (
                     <div
                       key={toolId}
-                      className={`terminal-block terminal-block--${toolStatusMod(tool.status)}`}
+                      className={`tool-bubble tool-bubble--${toolStatusMod(tool.status)}`}
                     >
                       <button
                         type="button"
-                        className="terminal-block__header"
-                        onClick={() => toggleTerminal(toolId)}
+                        className="tool-bubble__header"
+                        onClick={() => toggleTool(toolId)}
                         aria-expanded={!isCollapsed}
                       >
-                        <span className="terminal-block__status-icon">
+                        <span className="tool-bubble__status-icon">
                           {toolStatusIcon(tool.status)}
                         </span>
-                        <span className="terminal-block__tool-name">{tool.name}</span>
-                        <span className={`terminal-block__status-label terminal-block__status-label--${toolStatusMod(tool.status)}`}>
-                          {toolStatusLabel(tool.status)}
-                        </span>
+                        <span className="tool-bubble__tool-name">{tool.name}</span>
                         {tool.reasoning && (
-                          <span className="terminal-block__reasoning">{tool.reasoning}</span>
+                          <span className="tool-bubble__reasoning">{tool.reasoning}</span>
                         )}
-                        <span className="terminal-block__chevron">
+                        <span className="tool-bubble__chevron">
                           <i className={`fa-solid fa-chevron-${isCollapsed ? 'down' : 'up'}`} />
                         </span>
                       </button>
                       {!isCollapsed && tool.logs.length > 0 && (
-                        <div className="terminal-block__body">
-                          <pre className="terminal-block__output">
-                            {tool.logs.map((line: string, idx: number) => (
-                              <div key={idx} className="terminal-block__line">
-                                <AnsiText text={line} />
-                              </div>
-                            ))}
-                          </pre>
-                          {isRunning && <span className="terminal-block__cursor" />}
+                        <div className="tool-bubble__body">
+                          {tool.logs.map((line: string, idx: number) => (
+                            <div key={idx} className="tool-bubble__line">
+                              <AnsiText text={line} />
+                            </div>
+                          ))}
+                          {isRunning && <span className="tool-bubble__cursor" />}
                         </div>
                       )}
                       {!isCollapsed && isRunning && tool.logs.length === 0 && (
-                        <div className="terminal-block__body">
-                          <span className="terminal-block__cursor" />
+                        <div className="tool-bubble__body">
+                          <span className="tool-bubble__cursor" />
                         </div>
                       )}
                     </div>

@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════
-   V3 HYBRID — Chat Bubble + Terminal Tool Output
-   Clean, monochrome dark theme. No glassmorphism,
-   no gradient, no shadow berlebihan. POLOS.
+   V4 CHAT UI — ChatGPT/DeepSeek Style
+   Clean chat bubbles for everything. Thinking is
+   expandable accordion. NO terminal blocks.
    ═══════════════════════════════════════════════ */
 
 /* ─── Chat message row ─── */
@@ -142,43 +142,79 @@
   animation: cursorBlink 0.6s ease-in-out infinite;
 }
 
-/* ─── Thinking block ─── */
-.assistant-thinking {
-  background: #141414;
-  border: 1px solid #2a2a2a;
-  border-radius: 10px;
-  padding: 10px 14px;
+/* ─── Thinking accordion (ChatGPT/DeepSeek style) ─── */
+.thinking-accordion {
   margin-bottom: 4px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.03);
+  transition: border-color 0.2s, background 0.2s;
 }
 
-.assistant-thinking__header {
+.thinking-accordion--expanded {
+  border-color: rgba(88, 166, 255, 0.25);
+  background: rgba(88, 166, 255, 0.04);
+}
+
+.thinking-accordion__trigger {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
-}
-
-.assistant-thinking__icon {
-  font-size: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
   color: #58a6ff;
-}
-
-.assistant-thinking__title {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #58a6ff;
-  font-family: var(--font-mono);
-}
-
-.assistant-thinking__text {
   font-size: 13px;
-  color: #888;
-  line-height: 1.5;
-  font-family: var(--font-mono);
+  font-weight: 500;
+  transition: background 0.15s;
+}
+
+.thinking-accordion__trigger:hover {
+  background: rgba(88, 166, 255, 0.06);
+}
+
+.thinking-accordion__icon {
+  font-size: 13px;
+  color: #58a6ff;
+}
+
+.thinking-accordion__label {
+  flex: 1;
+  text-align: left;
+}
+
+.thinking-accordion__chevron {
+  font-size: 11px;
+  color: #58a6ff;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+.thinking-accordion__trigger:hover .thinking-accordion__chevron {
+  opacity: 1;
+}
+
+.thinking-accordion__body {
+  padding: 0 14px 12px;
+  animation: accordionFadeIn 0.2s ease-out;
+}
+
+@keyframes accordionFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.thinking-accordion__text {
+  font-size: 13px;
+  color: #8b949e;
+  line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding-top: 10px;
 }
 
 /* ─── Model label ─── */
@@ -222,96 +258,79 @@
 }
 
 /* ═══════════════════════════════════════════════
-   TERMINAL BLOCK — V3 Tool Output
-   Separate from chat bubble. Dark terminal style.
+   TOOL BUBBLE — V4 Clean Chat Style
+   Light bubble for tool output. NO terminal blocks.
    ═══════════════════════════════════════════════ */
 
-.terminal-block {
-  background: #0a0a0a;
-  border: 1px solid #1a1a1a;
-  border-radius: 8px;
+.tool-bubble {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
   overflow: hidden;
-  margin: 6px 0;
+  margin: 4px 0;
   max-width: 100%;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.tool-bubble--success {
+  border-color: rgba(63,185,80,0.2);
+}
+
+.tool-bubble--failed {
+  border-color: rgba(248,81,73,0.2);
+}
+
+.tool-bubble--running {
+  border-color: rgba(88,166,255,0.2);
 }
 
 /* Header bar */
-.terminal-block__header {
+.tool-bubble__header {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  background: #111;
-  border-bottom: 1px solid #1a1a1a;
-  font-family: 'Fira Code', 'JetBrains Mono', 'SF Mono', monospace;
-  font-size: 12px;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  font-size: 13px;
   cursor: pointer;
   transition: background 0.15s;
   width: 100%;
   text-align: left;
-  border: none;
   color: inherit;
 }
 
-.terminal-block__header:hover {
-  background: #161616;
+.tool-bubble__header:hover {
+  background: rgba(255,255,255,0.03);
 }
 
-.terminal-block__status-icon {
-  font-size: 11px;
+.tool-bubble__status-icon {
+  font-size: 12px;
   display: flex;
   align-items: center;
 }
 
-.terminal-block--success .terminal-block__status-icon {
+.tool-bubble--success .tool-bubble__status-icon {
   color: #3fb950;
 }
 
-.terminal-block--failed .terminal-block__status-icon {
+.tool-bubble--failed .tool-bubble__status-icon {
   color: #f85149;
 }
 
-.terminal-block--running .terminal-block__status-icon {
+.tool-bubble--running .tool-bubble__status-icon {
   color: #58a6ff;
 }
 
-.terminal-block__tool-name {
+.tool-bubble__tool-name {
   font-weight: 600;
-  color: #e6edf3;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  color: #c9d1d9;
+  font-size: 13px;
 }
 
-.terminal-block__status-label {
-  font-size: 10px;
-  font-weight: 500;
-  padding: 1px 6px;
-  border-radius: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.terminal-block__status-label--success {
-  background: #0d2818;
-  color: #3fb950;
-  border: 1px solid #1a4a28;
-}
-
-.terminal-block__status-label--failed {
-  background: #2d0f0f;
-  color: #f85149;
-  border: 1px solid #4a1a1a;
-}
-
-.terminal-block__status-label--running {
-  background: #0d1b2d;
-  color: #58a6ff;
-  border: 1px solid #1a2d4a;
-}
-
-.terminal-block__reasoning {
-  color: #666;
-  font-size: 11px;
+.tool-bubble__reasoning {
+  color: #8b949e;
+  font-size: 12px;
   margin-left: auto;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -319,69 +338,44 @@
   max-width: 200px;
 }
 
-.terminal-block__chevron {
+.tool-bubble__chevron {
   margin-left: auto;
-  color: #555;
-  font-size: 10px;
+  color: #8b949e;
+  font-size: 11px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
 }
 
-.terminal-block__reasoning ~ .terminal-block__chevron {
+.tool-bubble__reasoning ~ .tool-bubble__chevron {
   margin-left: 8px;
 }
 
-/* Terminal body */
-.terminal-block__body {
-  position: relative;
-  overflow: hidden;
+/* Tool body — clean, no monospace block */
+.tool-bubble__body {
+  padding: 0 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: accordionFadeIn 0.2s ease-out;
 }
 
-.terminal-block__output {
-  margin: 0;
-  padding: 10px 12px;
-  font-family: 'Fira Code', 'JetBrains Mono', 'SF Mono', monospace;
-  font-size: 12px;
-  line-height: 1.65;
-  color: #3fb950;
-  background: #0a0a0a;
-  overflow-x: auto;
-  overflow-y: auto;
-  max-height: 300px;
-  white-space: pre;
-  word-break: normal;
-  scrollbar-width: thin;
-  scrollbar-color: #2a2a2a transparent;
+.tool-bubble__line {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #c9d1d9;
+  word-break: break-word;
+  padding: 1px 0;
 }
 
-.terminal-block__output::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.terminal-block__output::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.terminal-block__output::-webkit-scrollbar-thumb {
-  background: #2a2a2a;
-  border-radius: 3px;
-}
-
-.terminal-block__line {
-  display: block;
-  min-height: 1.65em;
-}
-
-/* Blinking cursor for running terminal */
-.terminal-block__cursor {
+/* Blinking cursor for running tool */
+.tool-bubble__cursor {
   display: inline-block;
-  width: 8px;
-  height: 14px;
-  background: #3fb950;
-  margin-left: 2px;
-  vertical-align: text-bottom;
+  width: 6px;
+  height: 12px;
+  background: #58a6ff;
+  border-radius: 1px;
+  margin-top: 4px;
   animation: cursorBlink 0.7s step-end infinite;
 }
 
@@ -606,29 +600,26 @@
     border-radius: 14px 14px 4px 14px;
   }
 
-  .terminal-block__output {
-    font-size: 11px;
-    padding: 8px;
-    max-height: 200px;
+  .tool-bubble__line {
+    font-size: 12px;
   }
 
-  .terminal-block__header {
-    padding: 6px 10px;
-    font-size: 11px;
+  .tool-bubble__header {
+    padding: 8px 12px;
+    font-size: 12px;
   }
 
-  .terminal-block__reasoning {
+  .tool-bubble__reasoning {
     display: none;
   }
 }
 
 @media (max-width: 480px) {
-  .terminal-block {
-    border-radius: 6px;
+  .tool-bubble {
+    border-radius: 8px;
   }
 
-  .terminal-block__output {
-    font-size: 10px;
-    max-height: 160px;
+  .tool-bubble__line {
+    font-size: 11px;
   }
 }
