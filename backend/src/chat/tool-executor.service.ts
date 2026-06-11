@@ -249,6 +249,28 @@ export class ToolExecutorService {
       confidence_label: confidenceLabel,
     });
 
+    // Bridge: also save to pentest_findings table when running inside a pentest job
+    // This ensures the pentest job's findingCount in getSummary() reflects actual findings
+    if (context.jobId) {
+      try {
+        await this.pentestJobs.createPentestFinding(context.jobId, {
+          title: args.title ? String(args.title) : (detail.substring(0, 200) || undefined),
+          severity: args.severity ? String(args.severity) : undefined,
+          poc: args.poc ? String(args.poc) : undefined,
+          evidenceJson: {
+            detail,
+            target: args.target ? String(args.target) : undefined,
+            finding_key: args.finding_key ? String(args.finding_key) : undefined,
+            confidence_label: confidenceLabel,
+          },
+          confidence,
+          confidenceReason,
+        });
+      } catch {
+        // Non-blocking: pentest_findings bridge is best-effort
+      }
+    }
+
     // Auto-learning: save successful payload to GlobalMemory when confidence >= 80
     if (confidence >= 80) {
       try {
