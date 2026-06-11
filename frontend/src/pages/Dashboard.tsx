@@ -86,9 +86,9 @@ const Dashboard = () => {
   const [showHacktivityModal, setShowHacktivityModal] = useState(false)
   const [showPlanModal, setShowPlanModal] = useState(false)
   const [showCurrentPentestModal, setShowCurrentPentestModal] = useState(false)
-  const [currentPentestJobs, _setCurrentPentestJobs] = useState<Array<{ job_id: string; status: string; user_message?: string; conversation_id?: string; phase_display?: string; current_section_display?: string | null; checklist?: Record<string, boolean>; last_action_summary?: string | null; createdAt?: number }>>([])
-  const [currentPentestLoading, _setCurrentPentestLoading] = useState(false)
-  const [currentPentestError, _setCurrentPentestError] = useState<string | null>(null)
+  const [currentPentestJobs, setCurrentPentestJobs] = useState<Array<{ job_id: string; status: string; user_message?: string; conversation_id?: string; phase_display?: string; current_section_display?: string | null; checklist?: Record<string, boolean>; last_action_summary?: string | null; createdAt?: number }>>([])
+  const [currentPentestLoading, setCurrentPentestLoading] = useState(false)
+  const [currentPentestError, setCurrentPentestError] = useState<string | null>(null)
   const [helpMessages, setHelpMessages] = useState<Message[]>([])
   const [helpInput, setHelpInput] = useState('')
   const [isHelpLoading, setIsHelpLoading] = useState(false)
@@ -379,6 +379,111 @@ const Dashboard = () => {
     setActivityLog([])
     setLogEvents([])
   }, [selectedModelKey, chatMode])
+
+  // ─── Current Pentest: fetch jobs when modal opens ───
+  useEffect(() => {
+    if (!showCurrentPentestModal) return
+    let cancelled = false
+
+    const fetchJobs = async () => {
+      setCurrentPentestLoading(true)
+      setCurrentPentestError(null)
+      try {
+        // Fetch from both sources in parallel:
+        // 1. /api/gwehai/jobs — in-memory chat jobs (running AI sessions)
+        // 2. /api/pentest-jobs — DB-backed pentest runner jobs (rich phase/checklist data)
+        const [gwehaiJobs, pentestJobsRes] = await Promise.allSettled([
+          gwehaiClient.getJobs(),
+          apiClient.get('/pentest-jobs'),
+        ])
+
+        if (cancelled) return
+
+        type PentestJobEntry = {
+          job_id: string
+          status: string
+          user_message?: string
+          conversation_id?: string
+          phase_display?: string
+          current_section_display?: string | null
+          checklist?: Record<string, boolean>
+          last_action_summary?: string | null
+          createdAt?: number
+        }
+
+        const merged = new Map<string, PentestJobEntry>()
+
+        // Add DB-backed pentest jobs (rich data: phase, checklist, etc.)
+        if (pentestJobsRes.status === 'fulfilled') {
+          const pjList = pentestJobsRes.value?.data
+          if (Array.isArray(pjList)) {
+            for (const pj of pjList) {
+              // Map DB status to display status
+              const mappedStatus = pj.status === 'done' ? 'completed' : pj.status === 'running' ? 'running' : pj.status
+              merged.set(pj.id, {
+                job_id: pj.id,
+                status: mappedStatus,
+                user_message: pj.targetBaseUrl || undefined,
+                conversation_id: pj.conversationId || undefined,
+                phase_display: pj.phase_display || undefined,
+                current_section_display: pj.current_section_display ?? null,
+                checklist: pj.checklist || undefined,
+                last_action_summary: pj.last_action_summary ?? null,
+                createdAt: pj.createdAt ? new Date(pj.createdAt).getTime() : undefined,
+              })
+            }
+          }
+        }
+
+        // Add in-memory gwehai chat jobs (may overlap with pentest jobs)
+        if (gwehaiJobs.status === 'fulfilled') {
+          const gjList = gwehaiJobs.value
+          if (Array.isArray(gjList)) {
+            for (const gj of gjList) {
+              if (!merged.has(gj.job_id)) {
+                merged.set(gj.job_id, {
+                  job_id: gj.job_id,
+                  status: gj.status,
+                  user_message: gj.user_message || undefined,
+                  conversation_id: gj.conversation_id || undefined,
+                  createdAt: gj.createdAt,
+                })
+              }
+            }
+          }
+        }
+
+        // Enrich the active/current job with live frontend-tracked data
+        if (currentJobId && pentestChecklistProgress) {
+          const existing = merged.get(currentJobId)
+          if (existing) {
+            existing.checklist = pentestChecklistProgress.checklist
+            existing.phase_display = pentestChecklistProgress.phase_display || existing.phase_display
+            existing.current_section_display = pentestChecklistProgress.current_section_display ?? existing.current_section_display
+          }
+        }
+
+        // Sort: running first, then by createdAt desc
+        const sorted = Array.from(merged.values()).sort((a, b) => {
+          const rA = a.status === 'running' ? 1 : 0
+          const rB = b.status === 'running' ? 1 : 0
+          if (rA !== rB) return rB - rA
+          return (b.createdAt ?? 0) - (a.createdAt ?? 0)
+        })
+
+        setCurrentPentestJobs(sorted)
+      } catch (err: any) {
+        if (!cancelled) {
+          setCurrentPentestError(err?.message || 'Failed to load jobs')
+        }
+      } finally {
+        if (!cancelled) setCurrentPentestLoading(false)
+      }
+    }
+
+    fetchJobs()
+    return () => { cancelled = true }
+  }, [showCurrentPentestModal, currentJobId, pentestChecklistProgress])
 
   // ─── Render ───
   return (
