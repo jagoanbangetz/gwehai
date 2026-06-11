@@ -136,7 +136,7 @@ export function useDashboardData(showToast: (msg: string, type?: 'success' | 'er
 
   const loadUserProfile = useCallback(async () => {
     try {
-      const res = await apiClient.get('/auth/profile')
+      const res = await apiClient.get('/auth/me')
       const profile = res.data
       setSettingsData({ email: profile.email || '', password: '' })
       if (profile.planId) setSubscriptionForSettings({ planId: profile.planId, providerSubscriptionId: profile.providerSubscriptionId || null })
@@ -146,7 +146,7 @@ export function useDashboardData(showToast: (msg: string, type?: 'success' | 'er
   }, [])
 
   const handleSaveSettings = useCallback(async (refreshUser: () => void) => {
-    try { setIsSavingSettings(true); await apiClient.put('/auth/profile', settingsData); showToast('Settings saved!', 'success'); refreshUser() }
+    try { setIsSavingSettings(true); await apiClient.post('/auth/settings', settingsData); showToast('Settings saved!', 'success'); refreshUser() }
     catch (e: any) { showToast(e.response?.data?.message || 'Failed to save settings.', 'error') }
     finally { setIsSavingSettings(false) }
   }, [settingsData, showToast])
