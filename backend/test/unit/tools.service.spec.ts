@@ -203,17 +203,32 @@ describe('ToolsService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('rejects exec when target is required but missing', async () => {
+  it('extracts target from args when not explicitly provided', async () => {
+    // nmap -sV example.com — target extractable from positional arg, should NOT throw
+    (execFile as unknown as jest.Mock).mockImplementation(
+      (_cmd: string, _args: string[], _opts: any, cb: any) =>
+        cb(null, 'mock output', ''),
+    );
+    const result = await service.execCommand({
+      command: 'nmap',
+      args: ['-sV', 'example.com'],
+    });
+    expect(result).toBeDefined();
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('rejects exec when target is truly missing and not extractable', async () => {
+    // nmap with no positional target arg — should still throw
     await expect(
       service.execCommand({
         command: 'nmap',
-        args: ['-sV', 'example.com'],
+        args: ['-sV'],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
     await expect(
       service.execCommand({
         command: 'nmap',
-        args: ['-sV', 'example.com'],
+        args: ['-sV'],
       }),
     ).rejects.toThrow(/target is required/);
   });

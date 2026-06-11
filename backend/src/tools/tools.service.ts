@@ -217,6 +217,50 @@ export class ToolsService {
   }
 
   /** Normalize sqlmap args: ensure -u/--url has a fully-qualified URL (prepend http:// if missing). */
+  /**
+   * Extract a target host/URL from command args when args.target was not explicitly provided.
+   * Checks tool-specific flags first (-u, -h, -d, -t), then falls back to positional args.
+   * Returns undefined if no plausible target is found.
+   */
+  private extractTargetFromArgs(command: string, args?: string[]): string | undefined {
+    if (!args || args.length === 0) return undefined;
+
+    // Tool-specific flags that carry a target value
+    const targetFlags: Record<string, string[]> = {
+      curl: ['-u', '--url'],
+      sqlmap: ['-u', '--url'],
+      nikto: ['-h', '-Host'],
+      subfinder: ['-d', '-domain'],
+      httpx: ['-u', '-target'],
+      naabu: ['-host', '-target'],
+      nuclei: ['-target', '-u'],
+      gobuster: ['-u', '-url'],
+      wfuzz: ['-u', '--url'],
+      dirsearch: ['-u', '--url'],
+      ffuf: ['-u', '-url'],
+    };
+
+    const flags = targetFlags[command];
+    if (flags) {
+      for (let i = 0; i < args.length; i++) {
+        if (flags.includes(args[i]) && i + 1 < args.length) {
+          const val = args[i + 1];
+          if (val && !val.startsWith('-')) return val;
+        }
+      }
+    }
+
+    // Fallback: find first positional arg that looks like a host/IP/URL
+    for (const arg of args) {
+      if (arg.startsWith('-')) continue;
+      if (/^https?:\/\//i.test(arg)) return arg;
+      if (/^[a-zA-Z0-9._-]+\.[a-zA-Z]{2,}/.test(arg)) return arg;
+      if (/^\d{1,3}(\.\d{1,3}){3}(\/\d+)?$/.test(arg)) return arg;
+    }
+
+    return undefined;
+  }
+
   private normalizeSqlmapArgs(options: {
     args?: string[];
     commandLine?: string;
@@ -272,7 +316,14 @@ export class ToolsService {
 
     if (allow.get(command)?.requiresTarget) {
       if (!options.target) {
-        throw new BadRequestException('target is required for this command');
+        // Fallback: try to extract target from args, then commandLine
+        const extracted = this.extractTargetFromArgs(command, options.args)
+          ?? this.extractTargetFromArgs(command, options.commandLine?.split(/\s+/).slice(1));
+        if (extracted) {
+          options.target = extracted;
+        } else {
+          throw new BadRequestException('target is required for this command');
+        }
       }
       // Scope check removed: AI can run allowlisted commands against any target for testing.
     }
