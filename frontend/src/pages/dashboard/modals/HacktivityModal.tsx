@@ -98,7 +98,7 @@ export default function HacktivityModal({
         <div className="hacktivity-header">
           <div className="hacktivity-header-left">
             <h2 className="hacktivity-title">
-              <i className="fa-solid fa-bolt-lightning" style={{ color: '#f59e0b', marginRight: 8 }} />
+              <i className="fa-solid fa-bolt-lightning" style={{ color: '#f59e0b', marginRight: 8, fontSize: '1.2rem' }} />
               {selectedHacktivity ? 'Action Detail' : 'Hacktivity'}
             </h2>
             {!selectedHacktivity && (
@@ -249,7 +249,7 @@ export default function HacktivityModal({
                         className="hacktivity-card"
                         onClick={() => { onSelectHacktivityId(row.id); onSelectHacktivity(row) }}
                       >
-                        <div className="hacktivity-card-icon" style={{ background: color + '18', color }}>
+                        <div className="hacktivity-card-icon" style={{ background: color + '30', color: 'white', fontSize: '1.1rem' }}>
                           <i className={icon} />
                         </div>
                         <div className="hacktivity-card-body">
