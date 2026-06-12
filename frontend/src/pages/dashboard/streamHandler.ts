@@ -205,7 +205,7 @@ export function handleStreamEvent(
   const appendActivityStep = (step: string, agentLabel?: string) => {
     const raw = String(step || '').trim()
     if (!raw) return
-    const displayBase = agentLabel && !raw.startsWith('[') ? `[${agentLabel}] ${raw}` : raw
+    const displayBase = agentLabel ? `${agentLabel}: ${raw}` : raw
     const prefixedMatch = displayBase.match(/^\[([^\]]+)\]\s*(.*)$/)
     const prefix = prefixedMatch ? `[${prefixedMatch[1]}] ` : ''
     const body = (prefixedMatch ? prefixedMatch[2] : displayBase).trim()
