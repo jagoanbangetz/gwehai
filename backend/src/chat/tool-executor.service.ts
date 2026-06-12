@@ -17,8 +17,10 @@ import { ConversationService } from './conversation.service';
 import { AttackChainService } from '../attack-chain/attack-chain.service';
 import { JwtAnalyzerService } from '../tools/jwt-analyzer.service';
 import { BrowserAgentService, BrowserLaunchError } from '../browser-agent/browser-agent.service';
+import { ResearchBrowserService } from '../research-browser/research-browser.service';
 import { GlobalMemoryService } from '../tools/global-memory.service';
 import { OobDetectorService } from '../tools/oob-detector.service';
+import { WebSearchService } from '../tools/web-search.service';
 import { stripAnsi } from '../utils/ansi.util';
 import { OobPayloadType } from '../entities/oob-log.entity';
 import { getAgentLabel } from './agent-names';
@@ -52,8 +54,10 @@ export class ToolExecutorService {
     private conversationService: ConversationService,
     private attackChainService: AttackChainService,
     private browserAgentService: BrowserAgentService,
+    private researchBrowserService: ResearchBrowserService,
     private globalMemoryService: GlobalMemoryService,
     private oobDetectorService: OobDetectorService,
+    private webSearchService: WebSearchService,
   ) {}
 
   /**
@@ -120,6 +124,12 @@ export class ToolExecutorService {
         return this.handleGlobalMemory(safeArgs);
       case 'oob_test':
         return this.handleOobTest(safeArgs);
+      case 'research_browse':
+        return this.handleResearchBrowse(safeArgs, context);
+      case 'research_search':
+        return this.handleResearchSearch(safeArgs, context);
+      case 'web_search':
+        return this.handleWebSearch(safeArgs, context);
       default:
         return JSON.stringify({ error: `Unknown tool: ${name}` });
     }
@@ -636,8 +646,81 @@ export class ToolExecutorService {
     }
   }
 
+  // ─── Research Browser Handlers ──────────────────────────────────────
+
+  private async handleResearchBrowse(args: Record<string, any>, context: ToolExecutionContext): Promise<string> {
+    const url = String(args.url ?? '').trim();
+    if (!url) {
+      return JSON.stringify({ error: 'research_browse requires url (must be from an allowed research domain: CVE databases, exploit-db, OWASP, HackTricks, GitHub advisories, security blogs)' });
+    }
+
+    const conversationId = context.conversationId || context.jobId;
+    if (!conversationId) {
+      return JSON.stringify({ error: 'research_browse requires an active conversation' });
+    }
+
+    try {
+      const result = await this.researchBrowserService.researchBrowse(conversationId, url);
+      return JSON.stringify(result, null, 2);
+    } catch (err: any) {
+      return JSON.stringify({ success: false, url, error: `research_browse failed: ${err?.message || String(err)}` });
+    }
+  }
+
+  private async handleResearchSearch(args: Record<string, any>, context: ToolExecutionContext): Promise<string> {
+    const query = String(args.query ?? '').trim();
+    if (!query) {
+      return JSON.stringify({ error: 'research_search requires query (e.g. "PHP 5.6 known vulnerabilities", "CVE-2024-1234 exploit")' });
+    }
+
+    const conversationId = context.conversationId || context.jobId;
+    if (!conversationId) {
+      return JSON.stringify({ error: 'research_search requires an active conversation' });
+    }
+
+    try {
+      const result = await this.researchBrowserService.researchSearch(conversationId, query);
+      return JSON.stringify(result, null, 2);
+    } catch (err: any) {
+      return JSON.stringify({ success: false, query, results: [], totalResults: 0, error: `research_search failed: ${err?.message || String(err)}` });
+    }
+  }
+
+  private async handleWebSearch(args: Record<string, any>, context: ToolExecutionContext): Promise<string> {
+    const query = String(args.query ?? '').trim();
+    const type = String(args.type ?? 'exploit').trim() as 'exploit' | 'technique' | 'reference';
+    const url = args.url ? String(args.url).trim() : undefined;
+    const sessionId = context.conversationId || context.jobId || 'global';
+
+    if (!query) {
+      return JSON.stringify({ error: 'web_search requires a query. For exploit: product name or CVE ID. For technique: attack technique name. For reference: descriptive label.' });
+    }
+
+    if (!['exploit', 'technique', 'reference'].includes(type)) {
+      return JSON.stringify({ error: 'web_search type must be one of: exploit, technique, reference' });
+    }
+
+    if (type === 'reference' && !url) {
+      return JSON.stringify({ error: 'web_search with type="reference" requires a url parameter (must be from a trusted security domain)' });
+    }
+
+    try {
+      const result = await this.webSearchService.search(query, type, url, sessionId);
+      return JSON.stringify(result, null, 2);
+    } catch (err: any) {
+      return JSON.stringify({
+        type,
+        query,
+        results: [],
+        count: 0,
+        cached: false,
+        search_time_ms: 0,
+        error: err?.message || String(err),
+      });
+    }
+  }
+
   /**
-   * Extract domain/target from tool args for Hacktivity logging.
    */
   extractDomainFromArgs(args: Record<string, any>): string | null {
     const a = args ?? {};
@@ -731,6 +814,14 @@ export class ToolExecutorService {
           : safeArgs.action === 'save'
             ? `Saving to global memory: ${String(safeArgs.key || '').slice(0, maxLen)}`
             : `Updating global memory: ${String(safeArgs.key || '').slice(0, maxLen)}`;
+      case 'research_browse':
+        return (safeArgs.url as string)?.trim()
+          ? `Research browsing: ${String(safeArgs.url).slice(0, maxLen)}${String(safeArgs.url).length > maxLen ? '...' : ''}`
+          : 'Browsing research page...';
+      case 'research_search':
+        return (safeArgs.query as string)?.trim()
+          ? `Research searching: ${String(safeArgs.query).slice(0, maxLen)}${String(safeArgs.query).length > maxLen ? '...' : ''}`
+          : 'Searching for research...';
       default:
         return `Running: ${name}`;
     }
