@@ -168,6 +168,99 @@ describe('HacktivityService', () => {
     });
   });
 
+  describe('listConversations', () => {
+    let mockConvQueryBuilder: any;
+
+    beforeEach(() => {
+      mockConvQueryBuilder = {
+        select: jest.fn().mockReturnThis(),
+        addSelect: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        groupBy: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        getRawMany: jest.fn(),
+      };
+      mockHacktivityRepo.createQueryBuilder.mockReturnValue(mockConvQueryBuilder);
+    });
+
+    it('returns conversations ordered by last activity with LIMIT 50', async () => {
+      const rawRows = [
+        { conversationId: 'c1', count: '10', lastActivity: new Date().toISOString() },
+        { conversationId: 'c2', count: '5', lastActivity: new Date().toISOString() },
+      ];
+      mockConvQueryBuilder.getRawMany.mockResolvedValue(rawRows);
+      mockConversationRepo.find.mockResolvedValue([
+        { id: 'c1', title: 'Pentest A' },
+        { id: 'c2', title: null },
+      ]);
+
+      const result = await service.listConversations('u1');
+
+      expect(mockConvQueryBuilder.andWhere).toHaveBeenCalledWith(
+        "h.createdAt > NOW() - INTERVAL '30 days'",
+      );
+      expect(mockConvQueryBuilder.limit).toHaveBeenCalledWith(50);
+      expect(mockConvQueryBuilder.orderBy).toHaveBeenCalledWith('lastActivity', 'DESC');
+      expect(result).toHaveLength(2);
+      expect(result[0]).toMatchObject({ conversationId: 'c1', title: 'Pentest A', count: 10 });
+      expect(result[1]).toMatchObject({ conversationId: 'c2', title: null, count: 5 });
+    });
+
+    it('returns cached result on second call within TTL', async () => {
+      const rawRows = [{ conversationId: 'c1', count: '3', lastActivity: new Date().toISOString() }];
+      mockConvQueryBuilder.getRawMany.mockResolvedValue(rawRows);
+      mockConversationRepo.find.mockResolvedValue([{ id: 'c1', title: 'Cached' }]);
+
+      // First call — hits DB
+      const first = await service.listConversations('u1');
+      expect(mockHacktivityRepo.createQueryBuilder).toHaveBeenCalledTimes(1);
+
+      // Second call — should use cache, no extra DB call
+      const second = await service.listConversations('u1');
+      expect(mockHacktivityRepo.createQueryBuilder).toHaveBeenCalledTimes(1);
+      expect(second).toEqual(first);
+    });
+
+    it('invalidates cache when create() is called', async () => {
+      const rawRows = [{ conversationId: 'c1', count: '3', lastActivity: new Date().toISOString() }];
+      mockConvQueryBuilder.getRawMany.mockResolvedValue(rawRows);
+      mockConversationRepo.find.mockResolvedValue([{ id: 'c1', title: 'Old' }]);
+
+      // Populate cache
+      await service.listConversations('u1');
+      expect(mockHacktivityRepo.createQueryBuilder).toHaveBeenCalledTimes(1);
+
+      // create() should invalidate cache
+      const created = { id: 'h-new', userId: 'u1', conversationId: 'c1', result: 'ok', createdAt: new Date() };
+      mockHacktivityRepo.create.mockReturnValue(created);
+      mockHacktivityRepo.save.mockResolvedValue(created);
+      await service.create('u1', { result: 'ok', conversationId: 'c1' });
+
+      // Next listConversations should hit DB again
+      mockConvQueryBuilder.getRawMany.mockResolvedValue([
+        ...rawRows,
+        { conversationId: 'c2', count: '1', lastActivity: new Date().toISOString() },
+      ]);
+      mockConversationRepo.find.mockResolvedValue([
+        { id: 'c1', title: 'Old' },
+        { id: 'c2', title: 'New' },
+      ]);
+      const afterCreate = await service.listConversations('u1');
+      expect(mockHacktivityRepo.createQueryBuilder).toHaveBeenCalledTimes(2);
+      expect(afterCreate).toHaveLength(2);
+    });
+
+    it('returns empty array when no conversations exist', async () => {
+      mockConvQueryBuilder.getRawMany.mockResolvedValue([]);
+
+      const result = await service.listConversations('u1');
+
+      expect(result).toEqual([]);
+    });
+  });
+
   describe('getOne', () => {
     it('returns activity when found', async () => {
       const row = { id: 'h1', userId: 'u1', result: 'ok', createdAt: new Date() };
