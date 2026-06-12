@@ -1,7 +1,7 @@
 /**
  * Seed chat models for the picker: Auto, DeepSeek V3, DeepSeek Reasoner (R1), GPT-5, GPT-4.1, o3-mini, o4-mini,
  * Claude Sonnet 4.5, Claude 3.5 Haiku, Gemini 2.5 Pro, Gemini 2.5 Flash, Grok 3, Llama 4 Maverick.
- * - DeepSeek: Auto = deepseek-v3, plus deepseek-reasoner (R1). All use DEEPSEEK_API_KEY.
+ * - DeepSeek: Auto = deepseek-v4-pro, plus deepseek-v4-flash and deepseek-reasoner. All use DEEPSEEK_API_KEY.
  * - OpenAI: GPT-5, GPT-4.1, o3-mini, o4-mini. All use OPENAI_API_KEY.
  * - Anthropic: Claude Sonnet 4.5, Claude 3.5 Haiku. All use ANTHROPIC_API_KEY.
  * - Google: Gemini 2.5 Pro, Gemini 2.5 Flash. All use GEMINI_API_KEY.
@@ -36,11 +36,11 @@ function getEnv(key: string, fallback: string): string {
 // Picker models. DeepSeek options use key 'auto' (same API, different model id). All OpenAI models use key 'openai' (same API key).
 const MODELS: ModelSeedRow[] = [
   // --- Auto (default) ---
-  { name: 'auto/deepseek', displayName: 'Auto', provider: ModelProvider.CUSTOM, key: 'auto', apiModelId: getEnv('DEFAULT_AUTO_MODEL', getEnv('DEEPSEEK_MODEL_ID', 'deepseek-v3')), pointsPer1kInput: 3, pointsPer1kOutput: 6 },
+  { name: 'auto/deepseek', displayName: 'Auto', provider: ModelProvider.CUSTOM, key: 'auto', apiModelId: getEnv('DEFAULT_AUTO_MODEL', getEnv('DEEPSEEK_V4_PRO_MODEL_ID', 'deepseek-v4-pro')), pointsPer1kInput: 3, pointsPer1kOutput: 6 },
 
   // --- DeepSeek ---
-  { name: 'deepseek/v3', displayName: 'DeepSeek V3', provider: ModelProvider.CUSTOM, key: 'deepseek', apiModelId: getEnv('DEEPSEEK_MODEL_ID', 'deepseek-v3'), pointsPer1kInput: 3, pointsPer1kOutput: 6 },
-  { name: 'deepseek/reasoner', displayName: 'DeepSeek Reasoner (R1)', provider: ModelProvider.CUSTOM, key: 'auto', apiModelId: 'deepseek-reasoner', pointsPer1kInput: 6, pointsPer1kOutput: 44 },
+  { name: 'deepseek/v3', displayName: 'DeepSeek V3', provider: ModelProvider.CUSTOM, key: 'deepseek', apiModelId: getEnv('DEEPSEEK_V3_MODEL_ID', 'deepseek-v4-flash'), pointsPer1kInput: 3, pointsPer1kOutput: 6 },
+  { name: 'deepseek/reasoner', displayName: 'DeepSeek Reasoner (R1)', provider: ModelProvider.CUSTOM, key: 'deepseek_reasoner', apiModelId: getEnv('DEEPSEEK_REASONER_MODEL_ID', 'deepseek-v4-pro'), pointsPer1kInput: 6, pointsPer1kOutput: 44 },
 
   // --- OpenAI ---
   { name: 'openai/gpt-5', displayName: 'GPT-5', provider: ModelProvider.OPENAI, key: 'openai_gpt5', apiModelId: getEnv('OPENAI_GPT5_MODEL_ID', 'gpt-5'), pointsPer1kInput: 50, pointsPer1kOutput: 200 },
