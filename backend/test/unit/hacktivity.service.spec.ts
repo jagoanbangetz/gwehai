@@ -89,6 +89,81 @@ describe('HacktivityService', () => {
       expect(result).toEqual(created);
     });
 
+    it('skips noise entry: empty stdout with stderr', async () => {
+      const data = {
+        result: JSON.stringify({ stdout: '', stderr: 'bash: command not found', exitCode: 127 }),
+      };
+      const result = await service.create('u1', data);
+      expect(result).toBeNull();
+      expect(mockHacktivityRepo.create).not.toHaveBeenCalled();
+      expect(mockHacktivityRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('skips noise entry: empty command error', async () => {
+      const data = {
+        result: JSON.stringify({ error: 'exec requires a non-empty command.', exitCode: 1 }),
+      };
+      const result = await service.create('u1', data);
+      expect(result).toBeNull();
+      expect(mockHacktivityRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('skips noise entry: browser crash (success: false + error)', async () => {
+      const data = {
+        result: JSON.stringify({ success: false, action: 'navigate', error: 'Browser crashed' }),
+      };
+      const result = await service.create('u1', data);
+      expect(result).toBeNull();
+      expect(mockHacktivityRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('skips noise entry: tool error with no stdout', async () => {
+      const data = {
+        result: JSON.stringify({ error: 'Unknown tool: foo' }),
+      };
+      const result = await service.create('u1', data);
+      expect(result).toBeNull();
+      expect(mockHacktivityRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('keeps entry: stdout has content even with stderr', async () => {
+      const data = {
+        result: JSON.stringify({ stdout: 'some output', stderr: 'warning: deprecated', exitCode: 0 }),
+        domain: 'https://example.com',
+      };
+      const created = { id: 'h-keep', userId: 'u1', result: '{"stdout":"some output","stderr":"warning: deprecated","exitCode":0}', createdAt: new Date() };
+      mockHacktivityRepo.create.mockReturnValue(created);
+      mockHacktivityRepo.save.mockResolvedValue(created);
+
+      const result = await service.create('u1', data);
+      expect(result).not.toBeNull();
+      expect(mockHacktivityRepo.save).toHaveBeenCalled();
+    });
+
+    it('keeps entry: plain text result (not JSON)', async () => {
+      const data = { result: 'some plain text output' };
+      const created = { id: 'h-text', userId: 'u1', result: 'some plain text output', createdAt: new Date() };
+      mockHacktivityRepo.create.mockReturnValue(created);
+      mockHacktivityRepo.save.mockResolvedValue(created);
+
+      const result = await service.create('u1', data);
+      expect(result).not.toBeNull();
+      expect(mockHacktivityRepo.save).toHaveBeenCalled();
+    });
+
+    it('keeps entry: successful browser action', async () => {
+      const data = {
+        result: JSON.stringify({ success: true, action: 'navigate', url: 'https://example.com', title: 'Example' }),
+      };
+      const created = { id: 'h-browse', userId: 'u1', result: data.result, createdAt: new Date() };
+      mockHacktivityRepo.create.mockReturnValue(created);
+      mockHacktivityRepo.save.mockResolvedValue(created);
+
+      const result = await service.create('u1', data);
+      expect(result).not.toBeNull();
+      expect(mockHacktivityRepo.save).toHaveBeenCalled();
+    });
+
     it('creates with null optional fields when not provided', async () => {
       const data = { result: '[]' };
       const created = { id: 'h2', userId: 'u1', ...data, conversationId: null, domain: null, toolArgs: null, createdAt: new Date() };

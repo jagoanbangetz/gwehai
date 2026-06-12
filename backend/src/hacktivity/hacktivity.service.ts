@@ -47,7 +47,50 @@ export class HacktivityService {
   ) {}
 
   /**
+   * Detect noise entries (empty-command, browser crash, tool error with no stdout).
+   * Returns true if the entry should be SKIPPED (not saved).
+   *
+   * Rule: if stdout is EMPTY AND there's error/stderr → SKIP.
+   * If stdout has content → save (even if there's also an error).
+   */
+  private isNoiseEntry(result: string): boolean {
+    // Only filter JSON-shaped results
+    const trimmed = result.trim();
+    if (!trimmed.startsWith('{')) return false;
+
+    try {
+      const parsed = JSON.parse(trimmed);
+
+      // Case 1: has stdout field — skip if stdout empty AND (stderr or error present)
+      if ('stdout' in parsed) {
+        const stdout = String(parsed.stdout ?? '').trim();
+        if (!stdout) {
+          const hasStderr = !!(parsed.stderr && String(parsed.stderr).trim());
+          const hasError = !!(parsed.error && String(parsed.error).trim());
+          if (hasStderr || hasError) return true;
+        }
+        return false; // stdout has content → keep
+      }
+
+      // Case 2: no stdout but has error field → noise (empty-command, browser crash, tool error)
+      if (parsed.error && typeof parsed.error === 'string') {
+        // Check if there's any other meaningful content besides error
+        const keys = Object.keys(parsed).filter((k) => k !== 'error' && k !== 'exitCode' && k !== 'success' && k !== 'action');
+        if (keys.length === 0) return true;
+        // success: false + error → browser crash
+        if (parsed.success === false) return true;
+      }
+
+      return false;
+    } catch {
+      // Not valid JSON — not noise, keep it
+      return false;
+    }
+  }
+
+  /**
    * Record one AI tool action. Called from ChatService after each tool run.
+   * Returns null if the entry was filtered as noise.
    */
   async create(
     userId: string,
@@ -57,9 +100,14 @@ export class HacktivityService {
       result: string;
       toolArgs?: Record<string, any> | null;
     },
-  ): Promise<Hacktivity> {
+  ): Promise<Hacktivity | null> {
     // Strip ANSI escape codes from terminal output before saving to DB
     const cleanResult = stripAnsi(data.result ?? '');
+
+    // Filter noise: empty-command, browser crash, tool error with no stdout
+    if (this.isNoiseEntry(cleanResult)) {
+      return null;
+    }
     const result =
       cleanResult.length > MAX_RESULT_LENGTH
         ? cleanResult.slice(0, MAX_RESULT_LENGTH) + '\n...[truncated]'
