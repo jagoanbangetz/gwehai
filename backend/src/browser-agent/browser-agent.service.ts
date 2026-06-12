@@ -11,6 +11,19 @@ import { ConfigService } from '@nestjs/config';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 
+/** Max retries for browser launch before giving up. */
+const BROWSER_LAUNCH_MAX_RETRIES = 3;
+/** Delay between browser launch retries (ms). */
+const BROWSER_LAUNCH_RETRY_DELAY_MS = 2000;
+
+/** Thrown when Playwright browser fails to launch after all retries. */
+export class BrowserLaunchError extends Error {
+  constructor(message: string, public readonly attempts: number) {
+    super(message);
+    this.name = 'BrowserLaunchError';
+  }
+}
+
 // Dynamic import for playwright (may not be installed in all envs)
 let playwright: typeof import('playwright') | null = null;
 
@@ -136,18 +149,41 @@ export class BrowserAgentService implements OnModuleDestroy {
 
     if (!session) {
       const pw = await getPlaywright();
-      const browser = await pw.chromium.launch({
-        channel: 'chrome',
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-gpu',
-          '--disable-web-security',
-          '--disable-features=VizDisplayCompositor',
-        ],
-      });
+      let browser: any;
+      let lastError: Error | null = null;
+
+      for (let attempt = 1; attempt <= BROWSER_LAUNCH_MAX_RETRIES; attempt++) {
+        try {
+          browser = await pw.chromium.launch({
+            executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH || '/usr/bin/chromium',
+            headless: true,
+            args: [
+              '--no-sandbox',
+              '--disable-setuid-sandbox',
+              '--disable-dev-shm-usage',
+              '--disable-gpu',
+              '--disable-web-security',
+              '--disable-features=VizDisplayCompositor',
+            ],
+          });
+          lastError = null;
+          break; // success
+        } catch (err) {
+          lastError = err as Error;
+          this.logger.warn(
+            `Browser launch attempt ${attempt}/${BROWSER_LAUNCH_MAX_RETRIES} failed: ${lastError.message}`,
+          );
+          if (attempt < BROWSER_LAUNCH_MAX_RETRIES) {
+            await new Promise((r) => setTimeout(r, BROWSER_LAUNCH_RETRY_DELAY_MS));
+          }
+        }
+      }
+
+      if (!browser) {
+        const errMsg = `Browser launch failed after ${BROWSER_LAUNCH_MAX_RETRIES} attempts: ${lastError?.message || 'unknown error'}`;
+        this.logger.warn(errMsg);
+        throw new BrowserLaunchError(errMsg, BROWSER_LAUNCH_MAX_RETRIES);
+      }
 
       const context = await browser.newContext({
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -753,11 +789,34 @@ export class BrowserAgentService implements OnModuleDestroy {
       // Close old context and create new one with loaded state
       await session.context.close().catch(() => {});
       const pw = await getPlaywright();
-      const browser = await pw.chromium.launch({
-        channel: 'chrome',
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-      });
+      let browser: any;
+      let lastError: Error | null = null;
+
+      for (let attempt = 1; attempt <= BROWSER_LAUNCH_MAX_RETRIES; attempt++) {
+        try {
+          browser = await pw.chromium.launch({
+            executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH || '/usr/bin/chromium',
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+          });
+          lastError = null;
+          break;
+        } catch (err) {
+          lastError = err as Error;
+          this.logger.warn(
+            `Browser launch (loadStorageState) attempt ${attempt}/${BROWSER_LAUNCH_MAX_RETRIES} failed: ${lastError.message}`,
+          );
+          if (attempt < BROWSER_LAUNCH_MAX_RETRIES) {
+            await new Promise((r) => setTimeout(r, BROWSER_LAUNCH_RETRY_DELAY_MS));
+          }
+        }
+      }
+
+      if (!browser) {
+        const errMsg = `Browser launch failed after ${BROWSER_LAUNCH_MAX_RETRIES} attempts: ${lastError?.message || 'unknown error'}`;
+        this.logger.warn(errMsg);
+        throw new BrowserLaunchError(errMsg, BROWSER_LAUNCH_MAX_RETRIES);
+      }
       const context = await browser.newContext({
         storageState,
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',

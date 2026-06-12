@@ -15,7 +15,7 @@ import { PentestJobsService } from '../pentest-jobs/pentest-jobs.service';
 import { ConversationService } from './conversation.service';
 import { AttackChainService } from '../attack-chain/attack-chain.service';
 import { JwtAnalyzerService } from '../tools/jwt-analyzer.service';
-import { BrowserAgentService } from '../browser-agent/browser-agent.service';
+import { BrowserAgentService, BrowserLaunchError } from '../browser-agent/browser-agent.service';
 import { GlobalMemoryService } from '../tools/global-memory.service';
 import { OobDetectorService } from '../tools/oob-detector.service';
 import { stripAnsi } from '../utils/ansi.util';
@@ -599,6 +599,10 @@ export class ToolExecutorService {
       }
       return JSON.stringify(result);
     } catch (e) {
+      // BrowserLaunchError = all retries exhausted — return minimal error, DON'T push to Hacktivity
+      if (e instanceof BrowserLaunchError) {
+        return JSON.stringify({ success: false, action, error: (e as Error).message, _skipHacktivity: true });
+      }
       return JSON.stringify({ success: false, action, error: (e as Error).message });
     }
   }
@@ -849,6 +853,7 @@ export class ToolExecutorService {
 
   /**
    * Log tool execution to Hacktivity.
+   * Skips browser launch failures (_skipHacktivity flag) — those are internal errors only.
    */
   async logToolExecution(
     userId: string,
@@ -857,6 +862,15 @@ export class ToolExecutorService {
     toolResult: string,
   ): Promise<void> {
     if (!userId) return;
+
+    // Skip browser launch failures — only log WARNING internally, not to Hacktivity
+    try {
+      const parsed = JSON.parse(toolResult);
+      if (parsed._skipHacktivity === true) return;
+    } catch {
+      // Not JSON or parse error — continue with normal logging
+    }
+
     const domain = this.extractDomainFromArgs(args);
     try {
       await this.hacktivityService.create(userId, {
