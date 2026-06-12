@@ -2,7 +2,6 @@ import { useState } from 'react'
 import MarkdownMessage from '../../../components/MarkdownMessage'
 import FollowUpChips from '../../../components/FollowUpChips'
 import { getModelLabel } from '../../../components/ModelPicker'
-import AnsiText from '../../../components/AnsiText'
 import type { Message } from '../types'
 import type { LogEvent } from '../../../components/GwehLog'
 
@@ -22,22 +21,7 @@ interface ChatMessagesProps {
   disabled?: boolean
 }
 
-/** Tool status icon using Font Awesome */
-function toolStatusIcon(status: string) {
-  if (status === 'running') return <i className="fa-solid fa-spinner fa-spin" />
-  if (status === 'ok') return <i className="fa-solid fa-circle-check" />
-  return <i className="fa-solid fa-circle-xmark" />
-}
-
-/** Tool status CSS modifier */
-function toolStatusMod(status: string) {
-  if (status === 'running') return 'running'
-  if (status === 'ok') return 'success'
-  return 'failed'
-}
-
-/**
- * V4 Chat UI — ChatGPT/DeepSeek Style
+/** V4 Chat UI — ChatGPT/DeepSeek Style
  * Clean chat bubbles for everything. Thinking is expandable accordion.
  * Tool output rendered as light chat bubbles — NO terminal blocks.
  */
@@ -56,14 +40,8 @@ export default function ChatMessages({
   isResuming,
   disabled,
 }: ChatMessagesProps) {
-  // Track which tool bubbles are collapsed
-  const [collapsedTools, setCollapsedTools] = useState<Record<string, boolean>>({})
   // Track which thinking sections are expanded
   const [expandedThinking, setExpandedThinking] = useState<Record<string, boolean>>({})
-
-  const toggleTool = (toolId: string) => {
-    setCollapsedTools((prev) => ({ ...prev, [toolId]: !prev[toolId] }))
-  }
 
   const toggleThinking = (msgId: string) => {
     setExpandedThinking((prev) => ({ ...prev, [msgId]: !prev[msgId] }))
