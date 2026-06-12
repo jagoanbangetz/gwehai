@@ -29,6 +29,7 @@ const GROUP_CONFIG: Record<string, { icon: string; color: string; description: s
   security: { icon: 'fa-shield-halved',   color: 'oklch(0.55 0.14 25)',   description: 'Encryption, secrets & access control' },
   auth:     { icon: 'fa-key',             color: 'oklch(0.6 0.14 60)',    description: 'Authentication & OAuth providers' },
   general:  { icon: 'fa-sliders',         color: 'oklch(0.6 0.04 60)',    description: 'General application settings' },
+  branding: { icon: 'fa-palette',          color: 'oklch(0.55 0.15 40)',   description: 'Logo, favicon and visual identity' },
 }
 
 /* ── Field descriptions ── */
@@ -59,6 +60,8 @@ const FIELD_DESCRIPTIONS: Record<string, string> = {
   APP_NAME:                 'Application display name.',
   SESSION_DRIVER:           'Session storage driver: file, redis, database.',
   CACHE_DRIVER:             'Cache backend: file, redis, memcached.',
+  site_logo_url:            'Site logo image URL. Upload a PNG/JPG/SVG. Displayed in header and login page.',
+  site_favicon_url:         'Browser favicon. Upload an ICO/PNG. Displayed in browser tab.',
 }
 
 /* ── Boolean field detection ── */
@@ -245,7 +248,34 @@ export default function AdminSettings() {
   }
 
   /* ── Group order ── */
-  const GROUP_ORDER = ['ai', 'payment', 'email', 'security', 'auth', 'general']
+
+  const [uploading, setUploading] = useState<string | null>(null) // fieldKey being uploaded
+  const [uploadPreview, setUploadPreview] = useState<Record<string, string>>({})
+
+  const handleUpload = async (fieldKey: string, file: File) => {
+    const type = fieldKey === 'site_logo_url' ? 'logo' : 'favicon'
+    setUploading(fieldKey)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('type', type)
+      const res = await apiClient.post('/admin/settings/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      const url = res.data?.url
+      if (url) {
+        setUploadPreview(prev => ({ ...prev, [fieldKey]: url }))
+        handleChange(fieldKey, url)
+        showToast('success', type === 'logo' ? 'Logo updated!' : 'Favicon updated!')
+      }
+    } catch (e: any) {
+      showToast('error', e?.response?.data?.message || e?.message || 'Upload failed')
+    } finally {
+      setUploading(null)
+    }
+  }
+
+  const GROUP_ORDER = ['ai', 'payment', 'email', 'security', 'auth', 'general', 'branding']
 
   /* Stats */
   const stats = useMemo(() => {
@@ -453,7 +483,48 @@ export default function AdminSettings() {
                         )}
 
                         {/* Input area */}
-                        {boolField ? (
+                        {fieldKey === 'site_logo_url' || fieldKey === 'site_favicon_url' ? (
+                          <div className="settings-branding-upload">
+                            {(uploadPreview[fieldKey] || val) ? (
+                              <div className="branding-preview">
+                                <img
+                                  src={uploadPreview[fieldKey] || val}
+                                  alt={fieldKey === 'site_logo_url' ? 'Logo' : 'Favicon'}
+                                  className={fieldKey === 'site_logo_url' ? 'branding-preview-logo' : 'branding-preview-favicon'}
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                                />
+                              </div>
+                            ) : (
+                              <div className="branding-preview branding-preview-empty">
+                                <i className={`fa-solid ${fieldKey === 'site_logo_url' ? 'fa-image' : 'fa-star'}`} />
+                                <span>No {fieldKey === 'site_logo_url' ? 'logo' : 'favicon'} uploaded</span>
+                              </div>
+                            )}
+                            <label className="branding-upload-btn">
+                              <i className={`fa-solid ${uploading === fieldKey ? 'fa-spinner fa-spin' : 'fa-upload'}`} />
+                              {uploading === fieldKey ? ' Uploading…' : ` Upload ${fieldKey === 'site_logo_url' ? 'Logo' : 'Favicon'}`}
+                              <input
+                                type="file"
+                                accept={fieldKey === 'site_favicon_url' ? '.ico,.png,.jpg' : '.png,.jpg,.svg'}
+                                hidden
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0]
+                                  if (file) handleUpload(fieldKey, file)
+                                }}
+                              />
+                            </label>
+                            {val && (
+                              <input
+                                className="settings-input branding-url-input"
+                                value={val}
+                                placeholder="https://…"
+                                onChange={(e) => handleChange(fieldKey, e.target.value)}
+                                autoComplete="off"
+                                spellCheck={false}
+                              />
+                            )}
+                          </div>
+                        ) : boolField ? (
                           <div className="settings-bool-row">
                             <ToggleSwitch
                               checked={val.toLowerCase() === 'true'}

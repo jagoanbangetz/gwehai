@@ -8,6 +8,8 @@ import { Message, MessageRole } from '../entities/message.entity';
 import { MessagePart } from '../entities/message-part.entity';
 import { Model } from '../entities/model.entity';
 import { UsageEvent } from '../entities/usage-event.entity';
+import { ConversationJob } from '../entities/conversation-job.entity';
+import { ConversationEvent } from '../entities/conversation-event.entity';
 import { PointsModule } from '../points/points.module';
 import { LlmModule } from '../llm/llm.module';
 import { ToolsModule } from '../tools/tools.module';
@@ -25,10 +27,12 @@ import { ConversationService } from './conversation.service';
 import { CostService } from './cost.service';
 import { ToolExecutorService } from './tool-executor.service';
 import { AgentOrchestratorService } from './agent-orchestrator.service';
+import { ConversationJobService } from './conversation-job.service';
+import { ConversationJobController, EventLogController } from './conversation-job.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Conversation, ConversationMemory, Message, MessagePart, Model, UsageEvent]),
+    TypeOrmModule.forFeature([Conversation, ConversationMemory, Message, MessagePart, Model, UsageEvent, ConversationJob, ConversationEvent]),
     PointsModule,
     BillingModule,
     LlmModule,
@@ -43,14 +47,15 @@ import { AgentOrchestratorService } from './agent-orchestrator.service';
     PromptModule,
     OobDetectorModule,
   ],
-  controllers: [ChatController],
+  controllers: [ChatController, ConversationJobController, EventLogController],
   providers: [
     ConversationService,
     CostService,
     ToolExecutorService,
     AgentOrchestratorService,
     ChatService,
+    ConversationJobService,
   ],
-  exports: [ChatService, ConversationService, AgentOrchestratorService],
+  exports: [ChatService, ConversationService, AgentOrchestratorService, ConversationJobService],
 })
 export class ChatModule {}

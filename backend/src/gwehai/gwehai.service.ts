@@ -13,6 +13,7 @@ import { JobsEventsService } from './jobs-events.service';
 import { ChatEventsService } from './chat-events.service';
 import { PentestJobsService } from '../pentest-jobs/pentest-jobs.service';
 import { normalizeLlmErrorMessage } from '../llm/provider-router.service';
+import { ConversationJobService } from '../chat/conversation-job.service';
 
 @Injectable()
 export class GwehAIService {
@@ -31,6 +32,7 @@ export class GwehAIService {
     @Inject(forwardRef(() => PentestJobsService))
     private readonly pentestJobs: PentestJobsService,
     private readonly chatEvents: ChatEventsService,
+    private readonly conversationJobService: ConversationJobService,
   ) {}
 
   /**
@@ -192,6 +194,8 @@ export class GwehAIService {
     if (!job || job.status === 'stopped') return;
     if (conversationId) {
       await this.chatService.setConversationRunStatus(conversationId, 'running');
+      // Create DB job record for event persistence
+      try { await this.conversationJobService.createJob(conversationId, jobId); } catch (e) { /* may already exist */ }
     }
 
     const pushEvent = (ev: JobStreamEvent) => {
@@ -199,6 +203,11 @@ export class GwehAIService {
       if (j) {
         j.events.push(ev);
         this.chatEvents.emit(userId, jobId, ev);
+      }
+      // Persist event to DB for replay
+      const cid = job.conversationId || conversationId;
+      if (cid) {
+        this.conversationJobService.appendEvent(jobId, ev.type, ev.data).catch(() => {});
       }
     };
 
@@ -239,6 +248,8 @@ export class GwehAIService {
       job.response = result.response || '';
       job.status = 'completed';
       job.updatedAt = Date.now();
+      // Persist job status to DB
+      try { await this.conversationJobService.updateJobStatus(jobId, 'finished'); } catch (e) { /* non-fatal */ }
       if (!useSimple && result.conversationId) {
         try {
           await this.pentestJobs.ensureJobForConversation(
@@ -281,6 +292,8 @@ export class GwehAIService {
       job.status = 'completed';
       job.response = friendlyMessage;
       job.updatedAt = Date.now();
+      // Persist error status to DB
+      try { await this.conversationJobService.updateJobStatus(jobId, 'error'); } catch (e) { /* non-fatal */ }
       await this.chatService.setConversationRunStatus(job.conversationId || conversationId, 'error');
       const cid = job.conversationId || conversationId;
       if (cid) {

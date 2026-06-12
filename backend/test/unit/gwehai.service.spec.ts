@@ -52,6 +52,14 @@ function createMocks() {
     onEvents: jest.fn().mockReturnValue({ subscribe: jest.fn().mockReturnValue({ unsubscribe: jest.fn() }) }),
   };
 
+  const conversationJobService = {
+    createJob: jest.fn().mockResolvedValue({}),
+    updateJobStatus: jest.fn().mockResolvedValue(undefined),
+    appendEvent: jest.fn().mockResolvedValue(undefined),
+    getConversationStatus: jest.fn().mockResolvedValue({ conversation_id: '', job_id: null, status: 'idle' }),
+    getEventsSince: jest.fn().mockResolvedValue([]),
+  };
+
   const makeService = () =>
     new GwehAIService(
       chatService as any,
@@ -61,9 +69,10 @@ function createMocks() {
       jobsEvents as any,
       pentestJobs as any,
       chatEvents as any,
+      conversationJobService as any,
     );
 
-  return { chatService, planResolution, planUsage, policyOverrides, jobsEvents, pentestJobs, chatEvents, makeService };
+  return { chatService, planResolution, planUsage, policyOverrides, jobsEvents, pentestJobs, chatEvents, conversationJobService, makeService };
 }
 
 describe('GwehAIService plan validation', () => {
