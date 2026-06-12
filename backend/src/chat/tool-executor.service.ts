@@ -8,6 +8,7 @@
 
 import { Injectable } from '@nestjs/common';
 import { ToolsService } from '../tools/tools.service';
+import { ToolAvailabilityService } from '../tools/tool-availability.service';
 import { ReportsService } from '../reports/reports.service';
 import { ReVerifyService } from '../reports/re-verify.service';
 import { HacktivityService } from '../hacktivity/hacktivity.service';
@@ -42,6 +43,7 @@ export interface ToolExecutionContext {
 export class ToolExecutorService {
   constructor(
     private toolsService: ToolsService,
+    private toolAvailability: ToolAvailabilityService,
     private jwtAnalyzer: JwtAnalyzerService,
     private reportsService: ReportsService,
     private reVerifyService: ReVerifyService,
@@ -185,6 +187,33 @@ export class ToolExecutorService {
         exitCode: 1,
       });
     }
+
+    // ── Tool availability pre-check ────────────────────────────────────
+    // Before executing, verify the tool is actually installed in the container.
+    // Prevents wasted exec calls and noisy "command not found" errors.
+    try {
+      const isAvailable = await this.toolAvailability.isToolAvailable(command);
+      if (!isAvailable) {
+        const available = await this.toolAvailability.getAvailableToolNames();
+        // Find similar tools for suggestions
+        const suggestions = available.filter((t) =>
+          t.startsWith(command[0]) || command.includes(t) || t.includes(command),
+        ).slice(0, 3);
+        const suggestMsg = suggestions.length > 0
+          ? ` Did you mean: ${suggestions.join(', ')}?`
+          : '';
+        return JSON.stringify({
+          error: `Tool '${command}' is not available in the pentest environment.${suggestMsg} Use GET /tools/available to see the full list.`,
+          exitCode: 1,
+          tool_available: false,
+          suggestions,
+        });
+      }
+    } catch {
+      // If availability check fails (e.g. container down), proceed with exec
+      // and let the normal error handling catch it.
+    }
+
     const cmdArgs = parts.slice(1);
     const target = args.target != null ? String(args.target) : undefined;
     const out = await this.toolsService.execCommand({

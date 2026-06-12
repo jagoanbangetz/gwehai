@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
 import { ToolsController } from './tools.controller';
 import { ToolsService } from './tools.service';
+import { ToolAvailabilityService } from './tool-availability.service';
 import { JwtAnalyzerService } from './jwt-analyzer.service';
 import { PayloadSandboxService } from './payload-sandbox.service';
 import { GlobalMemoryService } from './global-memory.service';
@@ -19,7 +20,7 @@ import { GlobalMemory } from '../entities/global-memory.entity';
     OobDetectorModule,
   ],
   controllers: [ToolsController],
-  providers: [ToolsService, JwtAnalyzerService, PayloadSandboxService, GlobalMemoryService],
-  exports: [ToolsService, JwtAnalyzerService, PayloadSandboxService, GlobalMemoryService, OobDetectorModule],
+  providers: [ToolsService, ToolAvailabilityService, JwtAnalyzerService, PayloadSandboxService, GlobalMemoryService],
+  exports: [ToolsService, ToolAvailabilityService, JwtAnalyzerService, PayloadSandboxService, GlobalMemoryService, OobDetectorModule],
 })
 export class ToolsModule {}

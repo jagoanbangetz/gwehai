@@ -360,7 +360,7 @@ export class AgentOrchestratorService {
     // Track prior tool call names for phase detection across turns.
     const priorToolCallNames: string[] = [];
     // Build initial dynamic prompt (turn 0, no tool calls yet)
-    const initialPromptResult = this.promptManager.buildSystemPrompt(messages, undefined, priorToolCallNames);
+    const initialPromptResult = await this.promptManager.buildSystemPrompt(messages, undefined, priorToolCallNames);
     messages[0] = { role: 'system', content: initialPromptResult.prompt };
     push({
       type: 'status',
@@ -605,7 +605,7 @@ export class AgentOrchestratorService {
           priorToolCallNames.push(tc.name);
         }
         // Rebuild system prompt with updated phase + tool context
-        const nextPromptResult = this.promptManager.buildSystemPrompt(
+        const nextPromptResult = await this.promptManager.buildSystemPrompt(
           messages,
           response.tool_calls,
           priorToolCallNames,

@@ -1,5 +1,6 @@
 import { ToolsController } from '../../src/tools/tools.controller';
 import { ToolsService } from '../../src/tools/tools.service';
+import { ToolAvailabilityService } from '../../src/tools/tool-availability.service';
 
 describe('ToolsController', () => {
   const toolsService = {
@@ -9,11 +10,25 @@ describe('ToolsController', () => {
     execCommand: jest.fn(),
   } as unknown as ToolsService;
 
+  const toolAvailability = {
+    getAvailableTools: jest.fn().mockResolvedValue({
+      available: ['curl', 'nmap'],
+      unavailable: [],
+      categories: [],
+      checkedAt: new Date().toISOString(),
+      source: 'host',
+    }),
+    getAvailableToolNames: jest.fn().mockResolvedValue(['curl', 'nmap']),
+    isToolAvailable: jest.fn().mockResolvedValue(true),
+    invalidateCache: jest.fn(),
+    refresh: jest.fn(),
+  } as unknown as ToolAvailabilityService;
+
   let controller: ToolsController;
 
   beforeEach(() => {
     jest.resetAllMocks();
-    controller = new ToolsController(toolsService);
+    controller = new ToolsController(toolsService, toolAvailability);
   });
 
   it('runs memory search', async () => {

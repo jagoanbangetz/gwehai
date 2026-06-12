@@ -25,6 +25,7 @@ import {
   type PentestPhase,
 } from './prompts/index';
 import { PENTEST_SYSTEM_PROMPT } from './pentest.system-prompt';
+import { ToolAvailabilityService } from '../tools/tool-availability.service';
 import type { LlmMessage, LlmToolCall } from '../llm/llm.types';
 
 /** Feature flag: set to false to use legacy monolithic prompt (rollback). */
@@ -57,6 +58,8 @@ export class PromptManagerService {
     totalCharsLegacy: 0,
   };
 
+  constructor(private readonly toolAvailability: ToolAvailabilityService) {}
+
   /**
    * Main entry point: build the system prompt for a given turn.
    *
@@ -64,11 +67,11 @@ export class PromptManagerService {
    * @param toolCalls - Tool calls from the current LLM response (for tool prompt injection)
    * @param priorToolCalls - Tool calls from previous turns (for phase detection)
    */
-  buildSystemPrompt(
+  async buildSystemPrompt(
     messages: LlmMessage[],
     toolCalls?: LlmToolCall[],
     priorToolCalls?: string[],
-  ): PromptAssemblyResult {
+  ): Promise<PromptAssemblyResult> {
     this.stats.totalCalls++;
 
     // Rollback: use legacy monolithic prompt
@@ -93,7 +96,7 @@ export class PromptManagerService {
     // 2. Detect tools being used in this turn
     const toolNames = this.detectTools(toolCalls);
 
-    // 3. Assemble prompt: core + phase + tools
+    // 3. Assemble prompt: core + phase + tools + available tools
     const parts: string[] = [CORE_PROMPT];
 
     if (phase && PHASE_PROMPTS[phase]) {
@@ -103,6 +106,17 @@ export class PromptManagerService {
     const toolPrompts = getToolPromptsForTools(toolNames);
     if (toolPrompts) {
       parts.push(toolPrompts);
+    }
+
+    // 4. Inject available tools list so agent knows what's installed before exec calls.
+    //    This prevents the agent from calling tools that don't exist in the container.
+    try {
+      const availableTools = await this.toolAvailability.getAvailableToolNames();
+      if (availableTools.length > 0) {
+        parts.push(`## Available Exec Tools\nThe following tools are verified as installed in the pentest environment. Only use these in exec calls:\n${availableTools.join(', ')}\nDo NOT attempt to run tools not listed above — they will fail with "not available" errors.`);
+      }
+    } catch {
+      // Non-blocking: if availability check fails, skip injection
     }
 
     const assembled = parts.join('\n\n');
