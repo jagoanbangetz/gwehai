@@ -51,6 +51,18 @@ function trunc(str: string, max: number): string {
   return str.length > max ? str.slice(0, max) + '…' : str
 }
 
+/* ── Result formatter ── */
+function formatResult(result: string): string {
+  // Try to pretty-print JSON
+  const trimmed = result.trim()
+  if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+    try {
+      return JSON.stringify(JSON.parse(trimmed), null, 2)
+    } catch { /* not valid JSON, return as-is */ }
+  }
+  return result
+}
+
 /* ── Props ── */
 interface Props {
   selectedHacktivity: HacktivityRow | null
@@ -165,14 +177,35 @@ export default function HacktivityModal({
                     <i className="fa-solid fa-gears" /> Arguments
                   </h3>
                   <div className="hacktivity-args-grid">
-                    {Object.entries(selectedHacktivity.toolArgs).map(([k, v]) => (
-                      <div key={k} className="hacktivity-arg-item">
-                        <code className="hacktivity-arg-key">{k}</code>
-                        <span className="hacktivity-arg-value">
-                          {typeof v === 'object' ? JSON.stringify(v, null, 1) : String(v)}
-                        </span>
-                      </div>
-                    ))}
+                    {Object.entries(selectedHacktivity.toolArgs).map(([k, v]) => {
+                      const isNested = v !== null && typeof v === 'object'
+                      const strVal = isNested ? JSON.stringify(v, null, 2) : String(v ?? '')
+                      const isLong = !isNested && strVal.length > 100
+
+                      return (
+                        <div key={k} className="hacktivity-arg-item">
+                          <code className="hacktivity-arg-key">{k}</code>
+                          <span className="hacktivity-arg-value">
+                            {isNested ? (
+                              <details className="hacktivity-arg-details">
+                                <summary>
+                                  <i className="fa-solid fa-braces" style={{ marginRight: 4, opacity: 0.5 }} />
+                                  {Array.isArray(v) ? `Array(${(v as unknown[]).length})` : `Object (${Object.keys(v as Record<string, unknown>).length} keys)`}
+                                </summary>
+                                <pre className="hacktivity-arg-pre">{strVal}</pre>
+                              </details>
+                            ) : isLong ? (
+                              <details className="hacktivity-arg-details">
+                                <summary>{strVal.slice(0, 100)}…</summary>
+                                <pre className="hacktivity-arg-pre">{strVal}</pre>
+                              </details>
+                            ) : (
+                              strVal
+                            )}
+                          </span>
+                        </div>
+                      )
+                    })}
                   </div>
                   <details className="hacktivity-raw-toggle">
                     <summary>View raw JSON</summary>
@@ -187,7 +220,7 @@ export default function HacktivityModal({
                   <h3 className="hacktivity-section-title">
                     <i className="fa-solid fa-clipboard-check" /> Result
                   </h3>
-                  <pre className="hacktivity-pre hacktivity-result">{selectedHacktivity.result}</pre>
+                  <pre className="hacktivity-pre hacktivity-result">{formatResult(String(selectedHacktivity.result))}</pre>
                 </section>
               )}
             </div>

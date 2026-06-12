@@ -5274,17 +5274,24 @@
 .hacktivity-args-grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 4px;
+  gap: 6px;
   padding: 10px 14px;
   background: oklch(0.09 0.005 260);
   border: 1px solid oklch(0.17 0.01 260);
   border-radius: 8px;
 }
 .hacktivity-arg-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr;
   gap: 10px;
-  align-items: flex-start;
+  align-items: start;
   font-size: 0.85rem;
+  padding: 4px 0;
+  border-bottom: 1px solid oklch(0.14 0.005 260);
+}
+.hacktivity-arg-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
 }
 .hacktivity-arg-key {
   flex-shrink: 0;
@@ -5300,6 +5307,52 @@
   word-break: break-all;
   white-space: pre-wrap;
   line-height: 1.4;
+  min-width: 0;
+}
+.hacktivity-arg-details {
+  width: 100%;
+}
+.hacktivity-arg-details > summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: oklch(0.65 0.06 260);
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: oklch(0.13 0.005 260);
+  border: 1px solid oklch(0.19 0.01 260);
+  transition: background 0.15s, border-color 0.15s;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.hacktivity-arg-details > summary::-webkit-details-marker { display: none; }
+.hacktivity-arg-details > summary::before {
+  content: '▸';
+  font-size: 0.7rem;
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+.hacktivity-arg-details[open] > summary::before {
+  transform: rotate(90deg);
+}
+.hacktivity-arg-details > summary:hover {
+  background: oklch(0.16 0.008 260);
+  border-color: oklch(0.25 0.02 260);
+}
+.hacktivity-arg-pre {
+  margin: 4px 0 0;
+  padding: 8px 12px;
+  background: oklch(0.07 0.005 260);
+  border: 1px solid oklch(0.16 0.01 260);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: oklch(0.8 0.003 60);
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 300px;
+  overflow-y: auto;
 }
 .hacktivity-raw-toggle {
   margin-top: 8px;
@@ -5315,13 +5368,18 @@
   border-radius: 8px;
   font-size: 0.8rem;
   color: oklch(0.8 0.003 60);
-  overflow-x: auto;
+  overflow-x: hidden;
   white-space: pre-wrap;
-  word-break: break-all;
+  word-break: break-word;
+  overflow-wrap: anywhere;
   line-height: 1.5;
-  max-height: 300px;
+  max-height: 400px;
   overflow-y: auto;
 }
+.hacktivity-pre::-webkit-scrollbar { width: 6px; }
+.hacktivity-pre::-webkit-scrollbar-track { background: oklch(0.1 0 0 / 0.4); border-radius: 3px; }
+.hacktivity-pre::-webkit-scrollbar-thumb { background: oklch(0.3 0.005 260); border-radius: 3px; }
+.hacktivity-pre::-webkit-scrollbar-thumb:hover { background: oklch(0.4 0.01 260); }
 .hacktivity-result {
   border-left: 3px solid oklch(0.6 0.15 160);
 }
