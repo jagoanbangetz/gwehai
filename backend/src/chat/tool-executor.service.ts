@@ -18,6 +18,7 @@ import { JwtAnalyzerService } from '../tools/jwt-analyzer.service';
 import { BrowserAgentService } from '../browser-agent/browser-agent.service';
 import { GlobalMemoryService } from '../tools/global-memory.service';
 import { OobDetectorService } from '../tools/oob-detector.service';
+import { stripAnsi } from '../utils/ansi.util';
 import { OobPayloadType } from '../entities/oob-log.entity';
 import { getAgentLabel } from './agent-names';
 import type { ModelOptionKey } from '../config/model-options.config';
@@ -170,8 +171,20 @@ export class ToolExecutorService {
 
   private async handleExec(args: Record<string, any>): Promise<string> {
     const cmdLine = String(args.command || '').trim();
+    if (!cmdLine) {
+      return JSON.stringify({
+        error: 'exec requires a non-empty command. Provide a valid command (e.g. "curl -I https://target.com", "nmap -sV target.com").',
+        exitCode: 1,
+      });
+    }
     const parts = cmdLine.split(/\s+/).filter(Boolean);
     const command = parts[0] || '';
+    if (!command) {
+      return JSON.stringify({
+        error: 'exec requires a non-empty command. Provide a valid command.',
+        exitCode: 1,
+      });
+    }
     const cmdArgs = parts.slice(1);
     const target = args.target != null ? String(args.target) : undefined;
     const out = await this.toolsService.execCommand({
@@ -849,7 +862,7 @@ export class ToolExecutorService {
       await this.hacktivityService.create(userId, {
         conversationId: conversationId ?? null,
         domain: domain ?? null,
-        result: toolResult,
+        result: stripAnsi(toolResult),
         toolArgs: args,
       });
     } catch (err: any) {
