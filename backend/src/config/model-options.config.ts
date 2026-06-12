@@ -5,10 +5,10 @@
  * IMPORTANT: Auto = DeepSeek. The "Auto" option uses the DeepSeek provider and DEEPSEEK_API_KEY.
  */
 
-export type ModelOptionKey = 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini' | 'xai' | 'meta' | 'openai_o' | 'deepseek_reasoner';
+export type ModelOptionKey = 'auto' | 'deepseek' | 'deepseek_v4' | 'deepseek_v4_pro' | 'openai_gpt5' | 'claude' | 'gemini' | 'xai' | 'meta' | 'openai_o' | 'deepseek_reasoner';
 
 /** Keys for models that support chat/completion (not image-generation or other specialty). Used to filter model picker list. */
-export const CHAT_CAPABLE_MODEL_KEYS: ModelOptionKey[] = ['auto', 'deepseek', 'openai_gpt5', 'claude', 'gemini', 'xai', 'meta', 'openai_o', 'deepseek_reasoner'];
+export const CHAT_CAPABLE_MODEL_KEYS: ModelOptionKey[] = ['auto', 'deepseek', 'deepseek_v4', 'deepseek_v4_pro', 'openai_gpt5', 'claude', 'gemini', 'xai', 'meta', 'openai_o', 'deepseek_reasoner'];
 
 export function isChatCapableModelKey(key: unknown): key is ModelOptionKey {
   return typeof key === 'string' && CHAT_CAPABLE_MODEL_KEYS.includes(key as ModelOptionKey);
@@ -33,20 +33,35 @@ function getEnv(key: string, fallback: string): string {
  * Auto uses DeepSeek (same provider and API key as DeepSeek).
  */
 export function getModelOptions(): ModelOption[] {
-  const deepseekModel = getEnv('DEEPSEEK_MODEL_ID', 'deepseek-v3');
+  const deepseekModel = getEnv('DEEPSEEK_V3_MODEL_ID', 'deepseek-v3');
+  const autoModel = getEnv('DEFAULT_AUTO_MODEL', getEnv('DEEPSEEK_V4_PRO_MODEL_ID', 'deepseek-v4-pro'));
   return [
     {
       key: 'auto',
       label: 'Auto',
       provider: 'deepseek', // Auto means DeepSeek: same API and model as DeepSeek
-      defaultModel: getEnv('DEFAULT_AUTO_MODEL', deepseekModel),
+      defaultModel: autoModel,
       apiKeyEnv: 'DEEPSEEK_API_KEY',
     },
     {
       key: 'deepseek',
-      label: 'DeepSeek',
+      label: 'DeepSeek V3',
       provider: 'deepseek',
-      defaultModel: deepseekModel,
+      defaultModel: getEnv('DEEPSEEK_V3_MODEL_ID', 'deepseek-v3'),
+      apiKeyEnv: 'DEEPSEEK_API_KEY',
+    },
+    {
+      key: 'deepseek_v4',
+      label: 'DeepSeek V4',
+      provider: 'deepseek',
+      defaultModel: getEnv('DEEPSEEK_V4_MODEL_ID', 'deepseek-v4'),
+      apiKeyEnv: 'DEEPSEEK_API_KEY',
+    },
+    {
+      key: 'deepseek_v4_pro',
+      label: 'DeepSeek V4 Pro',
+      provider: 'deepseek',
+      defaultModel: getEnv('DEEPSEEK_V4_PRO_MODEL_ID', 'deepseek-v4-pro'),
       apiKeyEnv: 'DEEPSEEK_API_KEY',
     },
     {

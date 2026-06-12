@@ -13,7 +13,7 @@ config({ path: path.join(__dirname, '../../.env') });
 import { Model, ModelProvider } from '../entities/model.entity';
 import { getModelOptions } from '../config/model-options.config';
 
-const MODEL_OPTION_NAMES = ['model-picker/auto', 'model-picker/deepseek', 'model-picker/openai_gpt5', 'model-picker/openai_o', 'model-picker/claude', 'model-picker/gemini', 'model-picker/xai', 'model-picker/meta', 'model-picker/deepseek_reasoner'] as const;
+const MODEL_OPTION_NAMES = ['model-picker/auto', 'model-picker/deepseek', 'model-picker/deepseek_v4', 'model-picker/deepseek_v4_pro', 'model-picker/openai_gpt5', 'model-picker/openai_o', 'model-picker/claude', 'model-picker/gemini', 'model-picker/xai', 'model-picker/meta', 'model-picker/deepseek_reasoner'] as const;
 
 async function seedModelOptions() {
   const dataSource = new DataSource({
