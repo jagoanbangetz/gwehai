@@ -191,7 +191,7 @@ describe('PromptManagerService', () => {
     it('should ignore unknown tool names', () => {
       const toolCalls: LlmToolCall[] = [
         { id: '1', name: 'memory_search', arguments: '{"query":"test"}' },
-        { id: '2', name: 'report_finding', arguments: '{"detail":"test"}' },
+        { id: '2', name: 'some_random_tool', arguments: '{"detail":"test"}' },
       ];
       const result = service.buildSystemPrompt([], toolCalls);
       expect(result.toolsInjected).toEqual([]);
