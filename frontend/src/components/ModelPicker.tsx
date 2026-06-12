@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react'
 import apiClient from '../utils/api'
 import './ModelPicker.css'
 
-export type ModelKey = 'auto' | 'deepseek' | 'deepseek_v4' | 'deepseek_v4_pro' | 'openai_gpt5' | 'openai_o' | 'claude' | 'gemini' | 'xai' | 'meta' | 'deepseek_reasoner'
+export type ModelKey = 'auto' | 'deepseek_v4' | 'deepseek_v4_pro' | 'openai_gpt5' | 'openai_o' | 'claude' | 'gemini' | 'xai' | 'meta' | 'deepseek_reasoner'
 
 /** Auto uses DeepSeek V4 Pro under the hood. */
 export const MODEL_OPTIONS: { key: ModelKey; label: string }[] = [
@@ -24,7 +24,6 @@ const STORAGE_MODEL_ID_KEY = 'gwehai_model_id'
 const GROUP_ORDER: ModelKey[] = ['auto', 'deepseek_v4', 'deepseek_v4_pro', 'deepseek_reasoner', 'openai_gpt5', 'openai_o', 'claude', 'gemini', 'xai', 'meta']
 const GROUP_LABELS: Record<ModelKey, string> = {
   auto: 'Auto',
-  deepseek: 'DeepSeek',
   deepseek_v4: 'DeepSeek V4',
   deepseek_v4_pro: 'DeepSeek V4 Pro',
   deepseek_reasoner: 'DeepSeek R1',
@@ -86,7 +85,7 @@ function getModelKeyForRow(row: BackendModelRow): ModelKey {
 }
 
 function isValidModelKey(k: string): k is ModelKey {
-  return ['auto', 'deepseek', 'deepseek_v4', 'deepseek_v4_pro', 'openai_gpt5', 'openai_o', 'claude', 'gemini', 'xai', 'meta', 'deepseek_reasoner'].includes(k)
+  return ['auto', 'deepseek_v4', 'deepseek_v4_pro', 'openai_gpt5', 'openai_o', 'claude', 'gemini', 'xai', 'meta', 'deepseek_reasoner'].includes(k)
 }
 
 /** Group models by provider key for Select2-style sections. */
