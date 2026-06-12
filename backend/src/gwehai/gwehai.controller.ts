@@ -211,7 +211,7 @@ export class GwehAIController {
       .map((m) => {
         const meta = (m.metadata || {}) as Record<string, any>;
         const key = (meta.key as string) || '';
-        if (!['auto', 'deepseek', 'openai_gpt5', 'claude', 'gemini'].includes(key)) return null;
+        if (!['auto', 'deepseek', 'deepseek_v4', 'deepseek_v4_pro', 'openai_gpt5', 'openai_o', 'claude', 'gemini', 'xai', 'meta', 'deepseek_reasoner'].includes(key)) return null;
         return {
           key,
           label: m.displayName || m.name || key,
