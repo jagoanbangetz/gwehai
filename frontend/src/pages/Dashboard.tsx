@@ -103,6 +103,7 @@ const Dashboard = () => {
   const [activityLog, setActivityLog] = useState<string[]>([])
   const [logEvents, setLogEvents] = useState<import('../components/GwehLog').LogEvent[]>([])
   const [isSimpleConversation, setIsSimpleConversation] = useState(false)
+  const [isResuming, setIsResuming] = useState(false)
   const [pentestChecklistProgress, setPentestChecklistProgress] = useState<{ phase: string; phase_display?: string; current_section_display?: string | null; checklist: Record<string, boolean> } | null>(null)
 
   // ─── Refs ───
@@ -144,7 +145,22 @@ const Dashboard = () => {
     } catch (e) { console.warn('Refetch chat history:', e) }
   }
 
+  const saveCurrentChat = () => {
+    if (!currentChatId || !user?.id) return
+    const latestMessages = messagesRef.current
+    if (!latestMessages || latestMessages.length === 0) return
+    setChatHistory((prev) => {
+      const idx = prev.findIndex((c) => c.id === currentChatId)
+      if (idx === -1) return prev
+      const updated = [...prev]
+      updated[idx] = { ...updated[idx], messages: latestMessages, updatedAt: new Date() }
+      try { localStorage.setItem(`gwehai_chat_history_${user.id}`, JSON.stringify(updated)) } catch (_) {}
+      return updated
+    })
+  }
+
   const handleNewChat = () => {
+    saveCurrentChat()  // Auto-save before switching
     // Set intentional close BEFORE closing EventSource so onerror handler skips reconnect
     intentionalCloseRef.current = true
     stopRequestedRef.current = true
@@ -168,18 +184,76 @@ const Dashboard = () => {
   }
 
   const handleLoadChat = async (chatId: string) => {
-    intentionalCloseRef.current = false
+    // 1. Auto-save current chat before switching
+    saveCurrentChat()
+
+    // 2. Close old SSE with intentional flag
+    intentionalCloseRef.current = true
     if (eventSourceRef.current) { eventSourceRef.current.close(); eventSourceRef.current = null }
+
     setSearchParams({ session_id: chatId }); setCurrentChatId(chatId); setCurrentConversationId(chatId); setCurrentJobId(null)
     try { localStorage.removeItem(ACTIVE_JOB_STORAGE_KEY) } catch (_) {}
     setMessageTools({}); setMessageToolState({}); setCurrentAssistantMessageId(null)
-    streamingMessageRef.current = null; setIsLoading(false)
+    streamingMessageRef.current = null; setIsLoading(false); setIsResuming(false)
+
+    // 3. Load messages + detect running pentest job
+    let pentestJobId: string | null = null
     if (isConversationUuid(chatId)) {
       try {
         const { data: conv } = await apiClient.get(`/chat/conversations/${chatId}`)
-        if (conv) { const chat = conversationToChatHistory(conv); const local = chatHistory.find((c) => c.id === chatId); setMessages(local && (local.messages.length > chat.messages.length) ? local.messages : chat.messages) }
-      } catch (e) { console.warn('Could not load conversation:', chatId, e); const chat = chatHistory.find((c) => c.id === chatId); if (chat) setMessages(chat.messages) }
-    } else { const chat = chatHistory.find((c) => c.id === chatId); if (chat) setMessages(chat.messages) }
+        if (conv) {
+          const chat = conversationToChatHistory(conv)
+          const local = chatHistory.find((c) => c.id === chatId)
+          setMessages(local && (local.messages.length > chat.messages.length) ? local.messages : chat.messages)
+          pentestJobId = (conv as any).pentestJobId || (conv as any).job_id || null
+        }
+      } catch (e) {
+        console.warn('Could not load conversation:', chatId, e)
+        const chat = chatHistory.find((c) => c.id === chatId)
+        if (chat) setMessages(chat.messages)
+      }
+    } else {
+      const chat = chatHistory.find((c) => c.id === chatId)
+      if (chat) setMessages(chat.messages)
+    }
+
+    // 4. SSE Reconnect: if this chat had a running pentest job, reconnect
+    if (pentestJobId) {
+      try {
+        const status = await gwehaiClient.getJobStatus(pentestJobId)
+        if (status?.status === 'running' || status?.status === 'pending') {
+          setIsResuming(true)
+          setCurrentJobId(pentestJobId)
+          try { localStorage.setItem(ACTIVE_JOB_STORAGE_KEY, pentestJobId) } catch (_) {}
+          intentionalCloseRef.current = false
+          stopRequestedRef.current = false
+          setIsLoading(true)
+          const es = gwehaiClient.connectToEvents(pentestJobId, (event: GwehAIEvent) => {
+            setIsResuming(false)
+            handleStreamEvent(event, streamCtx)
+          }, (_error) => {
+            if (intentionalCloseRef.current) return
+            setActivityLog((prev) => [...prev.slice(-49), 'Text: Connection interrupted, reconnecting...'])
+            showToast('Connection interrupted. Reconnecting...', 'warning')
+          }, () => {})
+          eventSourceRef.current = es
+          showToast('Resuming pentest...', 'info', 2000)
+        }
+      } catch (e) {
+        console.warn('Could not check job status for reconnect:', e)
+      }
+    }
+
+    // 5. Move this chat to top of sidebar
+    setChatHistory((prev) => {
+      const idx = prev.findIndex((c) => c.id === chatId)
+      if (idx <= 0) return prev
+      const item = prev[idx]
+      const updated = [item, ...prev.slice(0, idx), ...prev.slice(idx + 1)]
+      if (user?.id) { try { localStorage.setItem(`gwehai_chat_history_${user.id}`, JSON.stringify(updated)) } catch (_) {} }
+      return updated
+    })
+
     if (isMobile) setSidebarOpen(false)
   }
 
@@ -496,7 +570,7 @@ const Dashboard = () => {
         sidebarHeader={<SidebarHeader isMobile={isMobile} sidebarCollapsed={sidebarCollapsed} onToggleCollapse={() => setSidebarCollapsed((c) => !c)} onNewChat={handleNewChat} onToggleSearch={() => setShowSearch(!showSearch)} showSearch={showSearch} searchQuery={searchQuery} onSearchQueryChange={setSearchQuery} onShowReport={() => { tour.stopTour(); setShowReportModal(true) }} onShowHacktivity={() => { tour.stopTour(); setShowHacktivityModal(true) }} onShowPlan={() => { tour.stopTour(); setShowPlanModal(true) }} onShowCurrentPentest={() => { tour.stopTour(); setShowCurrentPentestModal(true) }} />}
         sidebarList={<ChatSidebar sidebarOpen={sidebarOpen} sidebarCollapsed={sidebarCollapsed} isMobile={isMobile} chatsSectionCollapsed={chatsSectionCollapsed} filteredChatHistory={filteredChatHistory} currentChatId={currentChatId} editingChatId={editingChatId} editTitle={editTitle} openMenuId={openMenuId} onToggleChatsSection={() => setChatsSectionCollapsed((c) => !c)} onLoadChat={handleLoadChat} onStartRename={handleRenameChat} onSaveRename={handleSaveRename} onCancelRename={handleCancelRename} onDeleteChat={handleDeleteChat} onEditTitleChange={setEditTitle} onToggleMenu={setOpenMenuId} />}
         sidebarFooter={<ProfileFooter name={user?.name || user?.email || 'User'} email={user?.email} planLabel={planLabel} collapsed={!isMobile && sidebarCollapsed} onUpgrade={() => setShowUpgradeModal(true)} onSettings={() => setShowSettingsModal(true)} onHelp={() => setShowHelpModal(true)} onLogout={handleLogout} onRestartTour={() => { tour.resetAllTours(); tour.startTour('quick-start') }} />}
-        mainContent={<main className="dashboard-chat" data-tour="progress-area"><ChatLayout topContent={messages.length === 0 ? (<><div className="chat-logo-section"><div className="chat-logo"><img src={logo} alt="GwehAI" className="chat-logo-image" /></div><h1 className="chat-logo-text">GwehAI</h1></div><div className="chat-empty-mobile"><h2 className="chat-empty-prompt">What would you like to test today?</h2><div className="chat-suggestions"><button type="button" className="chat-suggestion-btn" disabled={data.atScanLimit} onClick={() => handleSendWithText('Run a pentest on a target URL and report findings')} title={data.atScanLimit ? 'Daily scan limit reached' : undefined}><span className="chat-suggestion-icon chat-suggestion-icon-pentest">&#9876;</span><span>Run a pentest</span></button><button type="button" className="chat-suggestion-btn" disabled={data.atScanLimit} onClick={() => handleSendWithText('Explain SQL injection and how to test for it')}><span className="chat-suggestion-icon chat-suggestion-icon-learn">&#128214;</span><span>Explain a vulnerability</span></button><button type="button" className="chat-suggestion-btn" disabled={data.atScanLimit} onClick={() => handleSendWithText('Check this URL for security issues: https://example.com')}><span className="chat-suggestion-icon chat-suggestion-icon-check">&#128274;</span><span>Check a URL</span></button><button type="button" className="chat-suggestion-btn" disabled={data.atScanLimit} onClick={() => handleSendWithText('Give me step-by-step security testing tips for a web app')}><span className="chat-suggestion-icon chat-suggestion-icon-tips">&#128161;</span><span>Security tips</span></button></div></div></>) : undefined} composer={<ChatComposer chatMode={chatMode} onChatModeChange={setChatMode} selectedModelKey={selectedModelKey} onModelChange={(k, id) => { setSelectedModelKey(k); setStoredModelKey(k); setSelectedModelId(id ?? null) }} effectivePlanId={effectivePlanId} isLoading={isLoading} input={input} onInputChange={setInput} inputRef={inputRef} onSend={handleSend} onStop={handleStopJob} onKeyPress={handleKeyPress} isVoiceRecording={voice.isVoiceRecording} voiceTranscript={voice.voiceTranscript} onStartVoice={voice.startVoiceRecognition} onCancelVoice={voice.cancelVoiceInput} onConfirmVoice={voice.confirmVoiceInput} atScanLimit={data.atScanLimit} scanLimitInfo={data.myPlan?.scan_limit ? { sessions_started_today: data.myPlan.scan_limit.sessions_started_today, sessions_per_day: data.myPlan.scan_limit.sessions_per_day } : undefined} onViewPlans={() => setShowPlanModal(true)} />}><MessagesArea ref={messagesAreaRef} onNearBottomChange={(near) => { userNearBottomRef.current = near }}><ChatMessages messages={messages} isLoading={isLoading} isSimpleConversation={isSimpleConversation} messageToolsSnapshot={messageToolsSnapshot} currentStep={currentStep} activityLog={activityLog} logEvents={logEvents} pentestChecklistProgress={pentestChecklistProgress} onSendWithText={handleSendWithText} showToast={showToast} onStop={handleStopJob} disabled={isLoading} /></MessagesArea></ChatLayout></main>}
+        mainContent={<main className="dashboard-chat" data-tour="progress-area"><ChatLayout topContent={messages.length === 0 ? (<><div className="chat-logo-section"><div className="chat-logo"><img src={logo} alt="GwehAI" className="chat-logo-image" /></div><h1 className="chat-logo-text">GwehAI</h1></div><div className="chat-empty-mobile"><h2 className="chat-empty-prompt">What would you like to test today?</h2><div className="chat-suggestions"><button type="button" className="chat-suggestion-btn" disabled={data.atScanLimit} onClick={() => handleSendWithText('Run a pentest on a target URL and report findings')} title={data.atScanLimit ? 'Daily scan limit reached' : undefined}><span className="chat-suggestion-icon chat-suggestion-icon-pentest">&#9876;</span><span>Run a pentest</span></button><button type="button" className="chat-suggestion-btn" disabled={data.atScanLimit} onClick={() => handleSendWithText('Explain SQL injection and how to test for it')}><span className="chat-suggestion-icon chat-suggestion-icon-learn">&#128214;</span><span>Explain a vulnerability</span></button><button type="button" className="chat-suggestion-btn" disabled={data.atScanLimit} onClick={() => handleSendWithText('Check this URL for security issues: https://example.com')}><span className="chat-suggestion-icon chat-suggestion-icon-check">&#128274;</span><span>Check a URL</span></button><button type="button" className="chat-suggestion-btn" disabled={data.atScanLimit} onClick={() => handleSendWithText('Give me step-by-step security testing tips for a web app')}><span className="chat-suggestion-icon chat-suggestion-icon-tips">&#128161;</span><span>Security tips</span></button></div></div></>) : undefined} composer={<ChatComposer chatMode={chatMode} onChatModeChange={setChatMode} selectedModelKey={selectedModelKey} onModelChange={(k, id) => { setSelectedModelKey(k); setStoredModelKey(k); setSelectedModelId(id ?? null) }} effectivePlanId={effectivePlanId} isLoading={isLoading} input={input} onInputChange={setInput} inputRef={inputRef} onSend={handleSend} onStop={handleStopJob} onKeyPress={handleKeyPress} isVoiceRecording={voice.isVoiceRecording} voiceTranscript={voice.voiceTranscript} onStartVoice={voice.startVoiceRecognition} onCancelVoice={voice.cancelVoiceInput} onConfirmVoice={voice.confirmVoiceInput} atScanLimit={data.atScanLimit} scanLimitInfo={data.myPlan?.scan_limit ? { sessions_started_today: data.myPlan.scan_limit.sessions_started_today, sessions_per_day: data.myPlan.scan_limit.sessions_per_day } : undefined} onViewPlans={() => setShowPlanModal(true)} />}><MessagesArea ref={messagesAreaRef} onNearBottomChange={(near) => { userNearBottomRef.current = near }}><ChatMessages messages={messages} isLoading={isLoading} isSimpleConversation={isSimpleConversation} messageToolsSnapshot={messageToolsSnapshot} currentStep={currentStep} activityLog={activityLog} logEvents={logEvents} pentestChecklistProgress={pentestChecklistProgress} onSendWithText={handleSendWithText} showToast={showToast} onStop={handleStopJob} isResuming={isResuming} disabled={isLoading} /></MessagesArea></ChatLayout></main>}
       />
       {showUpgradeModal && <UpgradeModal onClose={() => setShowUpgradeModal(false)} showToast={showToast} />}
       <SettingsModal isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)} settingsData={data.settingsData} onSettingsDataChange={(d) => data.setSettingsData((prev) => ({ ...prev, ...d }))} onSave={() => data.handleSaveSettings(refreshUser)} isSaving={data.isSavingSettings} user={user} emailReadOnly={!!user?.googleId} planId={data.subscriptionForSettings?.planId ?? data.myPlan?.planId} providerSubscriptionId={data.subscriptionForSettings?.providerSubscriptionId} onCancelSubscription={async () => { try { await apiClient.post('/subscriptions/cancel'); showToast('Subscription cancelled.', 'success'); data.setSubscriptionForSettings((prev) => prev ? { ...prev, planId: 'FREE', providerSubscriptionId: null } : null); data.loadPlan() } catch (e: any) { showToast(e.response?.data?.message || 'Failed.', 'error'); throw e } }} />

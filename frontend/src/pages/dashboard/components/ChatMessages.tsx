@@ -16,6 +16,7 @@ interface ChatMessagesProps {
   onSendWithText: (text: string) => void
   showToast: (msg: string, type?: 'success' | 'error' | 'info' | 'warning') => void
   onStop?: () => void
+  isResuming?: boolean
   disabled?: boolean
 }
 
@@ -37,6 +38,7 @@ export default function ChatMessages({
   onSendWithText,
   showToast: _showToast,
   onStop: _onStop,
+  isResuming,
   disabled,
 }: ChatMessagesProps) {
   // Derive progress state for ProgressIndicator
@@ -52,6 +54,23 @@ export default function ChatMessages({
 
   return (
     <div className="chat-messages">
+      {/* Resume indicator when reconnecting to a running pentest */}
+      {isResuming && (
+        <div className="chat-message chat-message--assistant chat-message--streaming">
+          <div className="chat-message__avatar">
+            <span className="chat-message__avatar-icon">G</span>
+          </div>
+          <div className="chat-message__content">
+            <div className="chat-agent-indicator">
+              <span className="chat-agent-indicator-icon">&#9881;</span>
+              <span className="chat-agent-indicator-text">Resuming pentest</span>
+              <span className="chat-agent-indicator-dots">
+                <span /><span /><span />
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
       {messages
         .filter((message) => {
           if (message.role === 'user') return true
