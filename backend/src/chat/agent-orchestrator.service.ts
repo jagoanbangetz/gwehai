@@ -587,8 +587,30 @@ export class AgentOrchestratorService {
         const heavyTargets = new Set<string>();
         for (const [k, v] of targetCounts) { if (v > 3) heavyTargets.add(k); }
 
+        // ── LAYER 1: Empty exec command pre-check ────────────────────────
+        // Block empty/whitespace-only exec commands BEFORE hitting tool executor.
+        // Counter: 3 consecutive empty execs → force skip to break LLM loops.
+        let emptyExecCounter = 0;
+
         const executeOne = async (tc: LlmToolCall, args: Record<string, any>): Promise<string> => {
           if (abortSignal?.aborted) throw new Error('Request was cancelled');
+
+          // LAYER 1: Pre-check for empty exec commands
+          if (tc.name === 'exec' && (!args.command || String(args.command).trim() === '')) {
+            emptyExecCounter++;
+            if (emptyExecCounter >= 3) {
+              push({ type: 'status', data: { message: `Skipped empty exec (${emptyExecCounter} consecutive empty commands — breaking loop)` } });
+              return 'Error: exec requires a non-empty command. Tool call force-skipped after 3 consecutive empty commands. Provide a valid tool call or respond with text instead.';
+            }
+            push({ type: 'status', data: { message: `Blocked empty exec command (attempt ${emptyExecCounter}/3)` } });
+            return 'Error: exec requires a non-empty command. Provide a valid command (e.g. "curl -I https://target.com", "nmap -sV target.com").';
+          }
+
+          // Reset counter on valid exec or other tools
+          if (tc.name !== 'exec' || (args.command && String(args.command).trim())) {
+            emptyExecCounter = 0;
+          }
+
           const maxRetries = 1;
           for (let attempt = 0; attempt <= maxRetries; attempt++) {
             try {
@@ -808,6 +830,12 @@ export class AgentOrchestratorService {
       await manager.update(Message, { id: mid }, { content: contentToStore });
       await manager.update(MessagePart, { messageId: mid }, { content: contentToStore });
     });
+    // Persist thinking so it survives page refresh & chat switching
+    if (thinking) {
+      this.conversationService.saveMessageMeta(mid, { thinking }).catch((err) =>
+        console.warn('Failed to save message meta (thinking):', err?.message),
+      );
+    }
     await this.tryMarkMainDoneAndMaybeFinish(cid, !!emitDoneEvent, push, jobId);
     return { conversationId: cid, messageId: mid, response: contentToStore };
   }

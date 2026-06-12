@@ -488,6 +488,7 @@ export class GwehAIClient {
     // Register listeners for all SSE event types from GwehAI API spec
     [
       'connected',        // Stream connection established
+      'state_sync',       // State replay on fresh reconnect (current step, status)
       'message_delta',    // Assistant text streaming (one chunk at a time)
       'message_done',     // Assistant message finished
       'simple_response', // Structured reply/details/followUps for simple conversation

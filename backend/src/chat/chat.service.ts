@@ -377,6 +377,10 @@ export class ChatService {
     push({ type: 'message_done', data: { message_id: mid, content: reply } });
     if (details !== undefined || (followUps !== undefined && followUps.length > 0)) {
       push({ type: 'simple_response', data: { message_id: mid, reply, details, followUps: followUps ?? [] } });
+      // Persist details/followUps so they survive page refresh & chat switching
+      this.conversationService.saveMessageMeta(mid, { details, followUps }).catch((err) =>
+        console.warn('Failed to save message meta (details/followUps):', err?.message),
+      );
     }
 
     await this.conversationService.updateMessageContent(mid, reply);

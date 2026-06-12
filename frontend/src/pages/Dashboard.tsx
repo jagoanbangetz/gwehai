@@ -229,7 +229,11 @@ const Dashboard = () => {
           stopRequestedRef.current = false
           setIsLoading(true)
           const es = gwehaiClient.connectToEvents(pentestJobId, (event: GwehAIEvent) => {
-            setIsResuming(false)
+            // Only hide resume indicator when we get a real step (status/reasoning),
+            // not on connect/state_sync/background events
+            if (event.type === 'status' || event.type === 'reasoning' || event.type === 'tool_start') {
+              setIsResuming(false)
+            }
             handleStreamEvent(event, streamCtx)
           }, (_error) => {
             if (intentionalCloseRef.current) return

@@ -284,6 +284,29 @@ export class GwehAIController {
 
     // Resume from next event after Last-Event-ID when EventSource reconnects.
     let lastSentIndex = Math.max(0, Math.floor(lastEventId));
+
+    // ── State sync on fresh connect (Last-Event-ID=0) ──
+    // When user switches chats & reconnects, replay the last status/reasoning
+    // event so the frontend can show current agent step instead of a generic
+    // "Resuming pentest" placeholder.
+    if (lastSentIndex === 0) {
+      const events = job.events ?? [];
+      // Find the most recent status or reasoning event
+      let lastStatusOrReasoning: { type: string; data: any } | null = null;
+      for (let i = events.length - 1; i >= 0; i--) {
+        if (events[i].type === 'status' || events[i].type === 'reasoning') {
+          lastStatusOrReasoning = events[i];
+          break;
+        }
+      }
+      sendEvent('state_sync', {
+        stream_id: job.id,
+        current_step: lastStatusOrReasoning?.data?.message ?? 'Running...',
+        status: 'running',
+        event_count: events.length,
+      });
+    }
+
     const POLL_MS = 50;
 
     const pollInterval = setInterval(() => {

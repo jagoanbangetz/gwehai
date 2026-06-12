@@ -82,6 +82,8 @@ export class HacktivityService {
 
       // Case 2: no stdout but has error field → noise (empty-command, browser crash, tool error)
       if (parsed.error && typeof parsed.error === 'string') {
+        // LAYER 3: Explicit skipped flag — tool executor marks entries that should not be saved
+        if (parsed.skipped === true) return true;
         // Check if there's any other meaningful content besides error
         const keys = Object.keys(parsed).filter((k) => k !== 'error' && k !== 'exitCode' && k !== 'success' && k !== 'action');
         if (keys.length === 0) return true;

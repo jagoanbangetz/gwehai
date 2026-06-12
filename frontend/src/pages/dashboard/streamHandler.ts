@@ -252,6 +252,16 @@ export function handleStreamEvent(
     case 'connected':
       return
 
+    case 'state_sync': {
+      // State replay on fresh connect (after page reload / chat switch)
+      // Restore currentStep so the resume indicator shows the agent's actual state
+      const step = event.data?.current_step
+      if (step && typeof step === 'string') {
+        ctx.setCurrentStep(step)
+      }
+      return
+    }
+
     case 'message_id': {
       let messageId = ctx.currentAssistantMessageIdRef.current
       if (!messageId) {

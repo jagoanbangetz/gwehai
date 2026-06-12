@@ -184,18 +184,14 @@ export class ToolExecutorService {
   private async handleExec(args: Record<string, any>): Promise<string> {
     const cmdLine = String(args.command || '').trim();
     if (!cmdLine) {
-      return JSON.stringify({
-        error: 'exec requires a non-empty command. Provide a valid command (e.g. "curl -I https://target.com", "nmap -sV target.com").',
-        exitCode: 1,
-      });
+      // LAYER 2: Return plain-text error (NOT JSON) for consistent noise filtering.
+      // The '{ skipped: true }' flag in JSON form is also returned for programmatic consumers.
+      return JSON.stringify({ error: 'Error: exec requires a non-empty command. Provide a valid command (e.g. "curl -I https://target.com", "nmap -sV target.com").', skipped: true });
     }
     const parts = cmdLine.split(/\s+/).filter(Boolean);
     const command = parts[0] || '';
     if (!command) {
-      return JSON.stringify({
-        error: 'exec requires a non-empty command. Provide a valid command.',
-        exitCode: 1,
-      });
+      return JSON.stringify({ error: 'Error: exec requires a non-empty command. Provide a valid command.', skipped: true });
     }
 
     // ── Tool availability pre-check ────────────────────────────────────

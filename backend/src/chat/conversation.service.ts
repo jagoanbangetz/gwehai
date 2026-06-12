@@ -217,6 +217,51 @@ export class ConversationService {
   }
 
   /**
+   * Save message metadata — details, thinking, followUps — as MessageParts.
+   * These survive page refresh and chat switching, so resume displays agent details.
+   */
+  async saveMessageMeta(
+    messageId: string,
+    meta: { details?: string; thinking?: string; followUps?: string[] },
+  ): Promise<void> {
+    let order = 1; // part 0 is the main text content
+
+    if (meta.thinking != null && meta.thinking.trim()) {
+      await this.messagePartRepo.save(
+        this.messagePartRepo.create({
+          messageId,
+          type: 'thinking' as any,
+          content: meta.thinking,
+          order: order++,
+        }),
+      );
+    }
+
+    if (meta.details != null && meta.details.trim()) {
+      await this.messagePartRepo.save(
+        this.messagePartRepo.create({
+          messageId,
+          type: 'details' as any,
+          content: meta.details,
+          order: order++,
+        }),
+      );
+    }
+
+    if (meta.followUps != null && meta.followUps.length > 0) {
+      await this.messagePartRepo.save(
+        this.messagePartRepo.create({
+          messageId,
+          type: 'text' as any,
+          content: JSON.stringify(meta.followUps),
+          order: order++,
+          metadata: { followUps: true },
+        }),
+      );
+    }
+  }
+
+  /**
    * Load prior messages for a conversation (excluding the last N).
    */
   async getPriorMessages(conversationId: string, excludeLast: number = 2): Promise<Message[]> {

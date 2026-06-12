@@ -105,7 +105,13 @@ export function conversationToChatHistory(
   conv: {
     id: string
     title?: string | null
-    messages?: Array<{ id: string; role: string; content?: string | null; createdAt: string }>
+    messages?: Array<{
+      id: string
+      role: string
+      content?: string | null
+      createdAt: string
+      parts?: Array<{ type: string; content: string; metadata?: Record<string, any> }>
+    }>
     createdAt: string
     updatedAt: string
     pentestJobId?: string | null
@@ -115,13 +121,37 @@ export function conversationToChatHistory(
 ): ChatHistory {
   const messages: Message[] = (conv.messages || [])
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-    .map((m) => ({
-      id: m.id,
-      role: m.role as 'user' | 'assistant',
-      content: m.content || '',
-      timestamp: new Date(m.createdAt),
-      done: true,
-    }))
+    .map((m) => {
+      // Extract details, thinking, followUps from message parts
+      let details: string | undefined
+      let thinking: string | undefined
+      let followUps: string[] | undefined
+
+      if (m.parts && m.parts.length > 0) {
+        for (const part of m.parts) {
+          if (part.type === 'details' && part.content) {
+            details = part.content
+          } else if (part.type === 'thinking' && part.content) {
+            thinking = part.content
+          } else if (part.metadata?.followUps === true && part.content) {
+            try {
+              followUps = JSON.parse(part.content)
+            } catch { /* ignore malformed */ }
+          }
+        }
+      }
+
+      return {
+        id: m.id,
+        role: m.role as 'user' | 'assistant',
+        content: m.content || '',
+        timestamp: new Date(m.createdAt),
+        done: true,
+        ...(details && { details }),
+        ...(thinking && { thinking, thinkingDisplay: thinking }),
+        ...(followUps && { followUps }),
+      }
+    })
   const jobId = conv.pentestJobId ?? jobIdFromUrl
   return {
     id: conv.id,
