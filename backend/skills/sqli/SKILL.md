@@ -100,10 +100,36 @@ SQL injection — unsanitized user input in SQL queries (GET/POST/cookies/header
 - Only in-scope targets. No DROP TABLE, no destructive payloads, no mass extraction without user approval.
 - Proof-of-concept only; use sqlmap with `--level=1 --risk=1` and short time-based tests unless the user explicitly approves more aggressive settings.
 
+## Error Recovery & Fallback
+
+### Primary Tool
+**sqlmap** — automated SQLi detection and verification.
+
+### Fallback Tool
+**curl + manual payloads** — when sqlmap fails, test manually with crafted requests.
+
+### Error Patterns & Recovery
+
+| Error Pattern | Detection | Recovery Action |
+|---|---|---|
+| **Timeout** | sqlmap hangs >60s, no response | Kill sqlmap, retry with `--timeout=10 --retries=2`. If still timeout, switch to manual curl with single payload per request. |
+| **Connection refused** | `curl: (7) Couldn't connect` or sqlmap `connection refused` | Skip parameter, log "target unreachable", move to next parameter. If all params fail, escalate to user. |
+| **WAF block** | HTTP 403/406, "blocked" in response, sqlmap `WAF/IPS` | Pivot to **memory_get**(path: "skills/waf-bypass/SKILL.md"). Try: URL-encode payloads, use `--tamper=space2comment`, or manual curl with minimal payloads. |
+| **Rate limit (429)** | HTTP 429, `Too Many Requests` | Stop immediately, log remaining params, report partial results. Wait or skip to next target. |
+| **sqlmap crash** | Process exits unexpectedly | Retry once with `--fresh` flag. If crash again, switch to manual curl + craft_payload approach. |
+| **False positive doubt** | sqlmap says injectable but manual test inconclusive | Run manual verification: curl with true/false conditions, compare response length/body. Only report if manual test confirms. |
+
+### Manual Fallback Workflow (when sqlmap unavailable or failing)
+1. **exec**(curl -s "URL?param=1'" ) — check for SQL errors in response.
+2. **exec**(curl -s "URL?param=1 AND 1=1" vs "URL?param=1 AND 1=2") — boolean diff.
+3. **exec**(curl -s "URL?param=1 AND SLEEP(3)") — time-based check (timeout=10s).
+4. If any pattern matches, **craft_payload** for deeper verification or escalate to user.
+
 ## When to Escalate or Pivot
 
 - If WAF blocks sqlmap: pivot to **memory_get**(path: "skills/waf-bypass/SKILL.md") or try craft_payload with minimal curl probes; do not brute-force WAF.
 - If no injection found: log and move to next parameter or next checklist area; do not mark "SQLi confirmed" without report_finding.
+- If all tools fail (timeout, crash, WAF): log error details, mark parameter as "skipped — tool failure", and move on. Never leave parameter unlogged.
 
 ---
 

@@ -4,6 +4,7 @@ import { Repository, In } from 'typeorm';
 import { Report, ReportStatus } from '../entities/report.entity';
 import { Conversation } from '../entities/conversation.entity';
 import { PentestJob } from '../entities/pentest-job.entity';
+import { stripAnsi } from '../utils/ansi.util';
 
 @Injectable()
 export class ReportsService {
@@ -191,10 +192,10 @@ export class ReportsService {
   ) {
     const { randomUUID } = await import('crypto');
 
-    // Normalize fields so logically identical findings map to the same key.
-    const normalizedDetail = detail.replace(/\s+/g, ' ').trim();
+    // Strip ANSI escape codes from tool output, then normalize whitespace
+    const normalizedDetail = stripAnsi(detail).replace(/\s+/g, ' ').trim();
     const normalizedTarget = this.normalizeReportTarget(options?.target ?? null);
-    const normalizedPoc = options?.poc ? options.poc.replace(/\s+/g, ' ').trim() : null;
+    const normalizedPoc = options?.poc ? stripAnsi(options.poc).replace(/\s+/g, ' ').trim() : null;
     const findingKey = options?.finding_key ? String(options.finding_key).trim() : null;
 
     // Dedup 1: by finding_key (e.g. category|endpoint|param|impact) when provided — one finding per key per conversation.

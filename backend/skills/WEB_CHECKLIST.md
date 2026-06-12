@@ -1,3 +1,8 @@
+---
+name: web-checklist
+description: "Stage-driven web pentest orchestrator — stage router, checklist items, gate rules, and integration with PentestState + Work Registry. The primary entry point for all pentest flows."
+---
+
 # Web Pentest Checklist & Stage Orchestrator
 
 Use this file as the **orchestrator** for full web application assessments. It implements the **stage-driven pentest workflow** defined in `skills/PENTEST_WORKFLOW.md`:
@@ -15,6 +20,87 @@ The orchestrator must:
 - Decide which **stage** to run next based on the Pentest State.
 - Load only the **relevant skills** for the current stage.
 - Update **locks**, **artifacts**, and **findings** via **write_file** to keep the state machine consistent.
+
+---
+
+## PentestState + Work Registry Integration
+
+This checklist is tightly coupled with two data structures stored in the canonical state file at `daily/<target>/<YYYY-MM-DD>`:
+
+### PentestState (Source of Truth)
+
+The PentestState object tracks all engagement data. This checklist **reads and writes** these fields:
+
+```text
+PentestState:
+  target: string
+  scope:
+    allowed_hosts: [string]
+    allowed_urls: [string]
+    notes: string
+  phase: "recon" | "exploit" | "report" | "completed"
+  phase_lock:
+    recon_complete: boolean
+    exploit_complete: boolean
+    report_complete: boolean
+  checklist:
+    recon: boolean
+    input_handling: boolean
+    auth_session: boolean
+    access_control: boolean
+    business_logic: boolean
+    other: boolean
+  artifacts:
+    endpoints: [string]
+    forms: [{url, method, params:[string]}]
+    parameters: [string]
+    tech_stack: {server, framework, waf_hints, headers: {}}
+  tested_vectors: [string]
+  findings_index: [string]
+  last_action_summary: string
+```
+
+### Work Registry (Multi-Agent Coordination)
+
+When running in multi-agent mode, the Work Registry section tracks parallel work:
+
+```text
+# Work Registry
+- Active Agents:
+  - <session_id>: <role> | status
+- Task Queue:
+  - [ ] TASK_ID | type | scope | owner | status | created_at
+- Claims (Locks):
+  - TASK_ID: owner_session_id | lock_until | notes
+- Completed:
+  - TASK_ID | owner | result_summary | artifact_refs
+- Help Requests:
+  - HELP_REQUEST-<id>: from_session | task_ref | reason | status (OPEN|RESOLVED)
+```
+
+### Stage ↔ PentestState Field Mapping
+
+| Stage | Writes to PentestState fields |
+|-------|-------------------------------|
+| SCOPE | `target`, `scope.*`, `phase`, `checklist.recon=false` |
+| RECON | `artifacts.endpoints`, `artifacts.tech_stack`, `artifacts.forms`, `phase_lock.recon_complete`, `phase="exploit"` |
+| ENUMERATION | `artifacts.parameters`, `artifacts.forms` (detailed), `tested_vectors` |
+| VERIFY | `tested_vectors`, `findings_index`, `checklist.{input_handling,auth_session,access_control,business_logic,other}`, `phase_lock.exploit_complete`, `phase="report"` |
+| REPORT | `phase_lock.report_complete`, `phase="completed"`, `last_action_summary` |
+
+### 5-Stage ↔ 3-Phase Mapping (CORE_ORCHESTRATOR alignment)
+
+The CORE_ORCHESTRATOR uses a 3-phase model (`recon` → `exploit` → `report`). This 5-stage checklist maps to it:
+
+| 5-Stage (this file) | 3-Phase (CORE_ORCHESTRATOR) | PentestState.phase |
+|----------------------|-----------------------------|--------------------|
+| SCOPE | (pre-recon) | `recon` (with checklist.recon=false) |
+| RECON | `recon` | `recon` |
+| ENUMERATION | `exploit` (early) | `exploit` |
+| VERIFY | `exploit` (main) | `exploit` |
+| REPORT | `report` | `report` → `completed` |
+
+**Gate rule:** Phase transitions follow CORE_ORCHESTRATOR rules — `recon` phase requires `checklist.recon=true` to advance; `exploit` phase requires all checklist sections true; `report` phase sets `completed`.
 
 ---
 
@@ -56,8 +142,209 @@ Then apply the following logic **in order**:
 
 **Locking behavior**
 
-- Once a stage is marked **DONE** and its lock flag set to `true`, the orchestrator must **not** rerun that stage’s heavy actions.
+- Once a stage is marked **DONE** and its lock flag set to `true`, the orchestrator must **not** rerun that stage's heavy actions.
 - Earlier stages may only be **temporarily unlocked** and re-run in a **targeted** fashion when an allowed unlock trigger occurs (see below).
+
+---
+
+## Gate Rules (Stage Transition Conditions)
+
+A stage can only transition to the next when its **gate conditions** are satisfied:
+
+### Gate 1: SCOPE → RECON
+- [ ] User has stated target(s) clearly
+- [ ] Scope limitations documented (staging only? no payments? etc.)
+- [ ] `Scope confirmed: true` in Pentest State
+- [ ] `Stage.Scope: DONE`
+
+### Gate 2: RECON → ENUMERATION
+- [ ] Headers summary captured (`curl -I`)
+- [ ] Tech stack inferred (server, framework, language, DB hints)
+- [ ] robots.txt / sitemap.xml / .well-known checked
+- [ ] Directory/path enumeration done (dirsearch or curl loop)
+- [ ] WAF hints documented
+- [ ] `Endpoints.discovered` populated
+- [ ] `Stage.Recon: DONE` (or `PARTIAL`)
+- [ ] `Locks.ReconLocked: true`
+
+### Gate 3: ENUMERATION → VERIFY
+- [ ] Parameters identified for key endpoints (query/body)
+- [ ] Light parameter fuzzing attempted (wfuzz or curl loops)
+- [ ] Auth surfaces mapped (/login, /register, /forgot, /otp, /api/auth, etc.)
+- [ ] `Parameters.discovered` populated
+- [ ] `Endpoints.authenticated_only` populated (if auth exists)
+- [ ] `Stage.Enumeration: DONE` (or `PARTIAL`)
+- [ ] `Locks.EnumerationLocked: true`
+
+### Gate 4: VERIFY → REPORT
+- [ ] All `Findings.candidates` processed (confirmed, rejected, or blocked)
+- [ ] Every confirmed finding has `report_finding` called with evidence
+- [ ] `Findings.confirmed` synchronized with report_finding outputs
+- [ ] All CORE_ORCHESTRATOR checklist sections completed (see Verify sub-checklist below)
+- [ ] `Stage.Verify: DONE` (or `PARTIAL`)
+- [ ] `Locks.VerifyLocked: true`
+
+### Gate 5: REPORT → DONE
+- [ ] All confirmed findings cross-checked against report_finding calls
+- [ ] Coverage summary written (per-stage status)
+- [ ] Gaps and blocked areas documented
+- [ ] `Stage.Report: DONE`
+- [ ] `phase = "completed"`
+
+---
+
+## Checklist Items (Per Stage)
+
+### Stage 1 — SCOPE Checklist
+
+- [ ] **1.1** Identify target URL(s) / domain(s)
+- [ ] **1.2** Confirm scope limitations with user (staging? production? specific paths?)
+- [ ] **1.3** Record `allowed_hosts` and `allowed_urls` in PentestState
+- [ ] **1.4** Set `Scope confirmed: true|false`
+- [ ] **1.5** Initialize canonical state file at `daily/<target>/<YYYY-MM-DD>`
+- [ ] **1.6** Set `Stage.Scope: DONE`
+
+**DO NOT:** call exec, send HTTP requests, run any tools.
+
+---
+
+### Stage 2 — RECON Checklist
+
+- [ ] **2.1 Headers & Security Posture**
+  - [ ] `curl -I <target>` — capture status code, Server, X-Powered-By
+  - [ ] Check security headers: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy
+  - [ ] Document missing/insecure headers
+- [ ] **2.2 Tech Stack Inference**
+  - [ ] Infer server type (nginx, Apache, etc.)
+  - [ ] Infer framework/language (Express, Django, Laravel, etc.)
+  - [ ] Infer database hints (from error pages, headers)
+  - [ ] Record in `artifacts.tech_stack`
+- [ ] **2.3 robots.txt / Sitemap / Well-Known**
+  - [ ] Fetch `/robots.txt` — extract disallowed paths
+  - [ ] Fetch `/sitemap.xml` — extract listed URLs
+  - [ ] Check `/.well-known/` for security.txt, openid-configuration, etc.
+- [ ] **2.4 Directory/Path Enumeration**
+  - [ ] Run `dirsearch` (or `wfuzz` with safe wordlist)
+  - [ ] Fallback: `craft_payload` curl loop with common paths
+  - [ ] Record discovered paths in `Endpoints.discovered`
+- [ ] **2.5 WAF Detection**
+  - [ ] Check for WAF indicators in headers (e.g. `cf-ray`, `x-sucuri-id`, `x-akamai`)
+  - [ ] Send test payload to check WAF response patterns
+  - [ ] Document WAF type and behavior
+- [ ] **2.6 Update Pentest State**
+  - [ ] `Artifacts.recon` populated with log references
+  - [ ] `Endpoints.discovered` updated
+  - [ ] `Stage.Recon: DONE` (or `PARTIAL`)
+  - [ ] `Locks.ReconLocked: true`
+
+---
+
+### Stage 3 — ENUMERATION Checklist
+
+- [ ] **3.1 Parameter Mapping**
+  - [ ] For each key endpoint in `Endpoints.discovered`, identify query parameters
+  - [ ] Identify body parameters (POST/PUT endpoints)
+  - [ ] Identify header-based inputs (custom headers, cookies)
+  - [ ] Record in `Parameters.discovered`
+- [ ] **3.2 Hidden Parameter Discovery**
+  - [ ] Run `wfuzz` or curl loops with common param names
+  - [ ] Test for parameter pollution / type confusion
+  - [ ] Record newly found parameters
+- [ ] **3.3 Auth Surface Mapping**
+  - [ ] Identify `/login`, `/register`, `/signup`, `/forgot`, `/reset`
+  - [ ] Identify `/otp`, `/verify`, `/2fa`, `/mfa`
+  - [ ] Identify `/api/auth`, `/api/token`, `/api/session`
+  - [ ] Map auth flow (which endpoints call which)
+  - [ ] Record in `Endpoints.authenticated_only`
+- [ ] **3.4 SPA/Auth Flow Capture (if needed)**
+  - [ ] Load `skills/ui-flow/SKILL.md` for SPA crawling
+  - [ ] Load `skills/auth-journey/SKILL.md` for auth flow HAR capture
+  - [ ] Capture HAR and cookies.json for later verification
+- [ ] **3.5 Update Pentest State**
+  - [ ] `Artifacts.enumeration` populated
+  - [ ] `Parameters.discovered` updated
+  - [ ] `Endpoints.authenticated_only` updated
+  - [ ] `Stage.Enumeration: DONE` (or `PARTIAL`)
+  - [ ] `Locks.EnumerationLocked: true`
+
+---
+
+### Stage 4 — VERIFY Checklist (maps to CORE_ORCHESTRATOR exploit phase)
+
+The Verify stage maps to the CORE_ORCHESTRATOR's `exploit` phase. Each sub-section below corresponds to a `checklist.*` field in PentestState:
+
+#### 4A. Input Handling (`checklist.input_handling`)
+- [ ] **4A.1** SQL Injection — test all query/body params with `skills/sqli/SKILL.md`
+- [ ] **4A.2** XSS (Reflected/Stored) — test with `skills/xss/SKILL.md` or `skills/xss-advanced/SKILL.md`
+- [ ] **4A.3** LFI / Path Traversal — test file params with `skills/lfi/SKILL.md`
+- [ ] **4A.4** Command Injection — test with `skills/command-injection/SKILL.md`
+- [ ] **4A.5** XXE — test XML endpoints with `skills/xxe/SKILL.md`
+- [ ] **4A.6** NoSQL Injection — test with `skills/nosql-injection/SKILL.md`
+- [ ] **4A.7** Header Injection — test with `skills/header-injection/SKILL.md`
+- [ ] **4A.8** Open Redirect — test redirect params with `skills/open-redirect/SKILL.md`
+- [ ] **4A.9** File Upload — test upload endpoints with `skills/file-upload/SKILL.md`
+- [ ] **4A.10** Mark `checklist.input_handling = true` when all candidates processed
+
+#### 4B. Auth & Session (`checklist.auth_session`)
+- [ ] **4B.1** Auth bypass — test with `skills/auth/SKILL.md`
+- [ ] **4B.2** JWT/Token issues — test with `skills/jwt-session/SKILL.md`
+- [ ] **4B.3** Session fixation / hijacking
+- [ ] **4B.4** Password reset flow abuse
+- [ ] **4B.5** OTP/2FA bypass
+- [ ] **4B.6** Mark `checklist.auth_session = true` when all candidates processed
+
+#### 4C. Access Control (`checklist.access_control`)
+- [ ] **4C.1** IDOR — test with `skills/idor/SKILL.md`
+- [ ] **4C.2** Privilege escalation (horizontal/vertical)
+- [ ] **4C.3** Post-login ACL — test with `skills/post-login-acl/SKILL.md`
+- [ ] **4C.4** Generic access control — test with `skills/access-control/SKILL.md`
+- [ ] **4C.5** Mark `checklist.access_control = true` when all candidates processed
+
+#### 4D. Request/Config (`checklist.other` — RequestConfig slice)
+- [ ] **4D.1** CSRF — test with `skills/csrf/SKILL.md`
+- [ ] **4D.2** SSRF — test with `skills/ssrf/SKILL.md`
+- [ ] **4D.3** CORS misconfiguration — test with `skills/cors/SKILL.md`
+- [ ] **4D.4** Rate limiting — test with `skills/rate-limit/SKILL.md`
+- [ ] **4D.5** Security headers analysis (detailed, from recon data)
+- [ ] **4D.6** Mark `checklist.other = true` when all candidates processed
+
+#### 4E. Business Logic (`checklist.business_logic`)
+- [ ] **4E.1** Multi-step flow bypass — test with `skills/logic-flaw/SKILL.md`
+- [ ] **4E.2** Price/coupon tampering
+- [ ] **4E.3** Replay/idempotency issues
+- [ ] **4E.4** State machine violations
+- [ ] **4E.5** Race conditions (safe micro-checks, e.g. 2 concurrent requests)
+- [ ] **4E.6** Mark `checklist.business_logic = true` when all candidates processed
+
+#### 4F. Verify Completion
+- [ ] **4F.1** All `Findings.candidates` processed
+- [ ] **4F.2** Every confirmed finding has `report_finding` with confidence + evidence
+- [ ] **4F.3** `Findings.confirmed` synchronized
+- [ ] **4F.4** `Stage.Verify: DONE` (or `PARTIAL`)
+- [ ] **4F.5** `Locks.VerifyLocked: true`
+- [ ] **4F.6** `phase_lock.exploit_complete = true`
+- [ ] **4F.7** `phase = "report"`
+
+---
+
+### Stage 5 — REPORT Checklist
+
+- [ ] **5.1** Cross-check: every `Findings.confirmed` entry has a `report_finding` call
+- [ ] **5.2** Summarize coverage per stage:
+  - [ ] Scope: DONE / OUT_OF_SCOPE
+  - [ ] Recon: DONE / PARTIAL
+  - [ ] Enumeration: DONE / PARTIAL
+  - [ ] Verify: DONE / PARTIAL (which checklist sections completed?)
+- [ ] **5.3** List remaining gaps:
+  - [ ] Unreachable endpoints (auth required, scope limited)
+  - [ ] Blocked tests (CAPTCHA, WAF, rate limit)
+  - [ ] Untested categories (why? time? scope?)
+- [ ] **5.4** For multi-agent mode: ensure all Work Registry tasks are DONE/FAILED/BLOCKED
+- [ ] **5.5** Mark `Stage.Report: DONE`
+- [ ] **5.6** Set `phase = "completed"`
+- [ ] **5.7** Update `last_action_summary` with final status
+
+**DO NOT:** call exec, run new tests, or modify `Findings.confirmed` (except to sync IDs).
 
 ---
 
@@ -77,7 +364,7 @@ Allowed triggers to temporarily unlock a previous stage:
 When a trigger occurs:
 
 1. Identify the **minimal stage** to unlock (Recon or Enumeration, sometimes Verify).
-2. Temporarily set that stage’s status to `IN_PROGRESS` and its lock flag to `false`.
+2. Temporarily set that stage's status to `IN_PROGRESS` and its lock flag to `false`.
 3. Perform **targeted work** only for the new host/surface/params.
 4. Merge new artifacts into the existing Pentest State:
    - Append to `Artifacts`, `Endpoints`, `Parameters`, and/or `Findings.candidates`.
@@ -91,7 +378,7 @@ Do not reset a stage completely or re-run all heavy scanning for areas that are 
 
 ## Multi-Agent Router (Task Mapping & Coordination)
 
-When the user explicitly requests **multiple agents** (e.g. “work with 3 agents”) or when the workload is **large** (many endpoints/parameters/candidates), the orchestrator should:
+When the user explicitly requests **multiple agents** (e.g. "work with 3 agents") or when the workload is **large** (many endpoints/parameters/candidates), the orchestrator should:
 
 1. Ensure the canonical state file at `daily/<target>/<YYYY-MM-DD>` includes:
    - `# Pentest State` (with Stage and Locks).
@@ -104,7 +391,7 @@ When the user explicitly requests **multiple agents** (e.g. “work with 3 agent
    - Assigned TASK_IDs.
    - Safety caps for that stage and skills.
    - Required outputs (what to write into Work Registry and Pentest State).
-   - Explicit instruction: **“Do not run anything unless you successfully claim the task in the Work Registry.”**
+   - Explicit instruction: **"Do not run anything unless you successfully claim the task in the Work Registry."**
 
 Each sub-agent (worker) must NOT call sessions_spawn/list/send/history/status; must claim before exec/craft_payload; write only to Work Registry. If help needed, create HELP_REQUEST. Sub-agent must:
 
@@ -180,131 +467,6 @@ Load skills via **memory_get(path: "skills/<path>")**. Do not load multiple skil
 
 ---
 
-## Stage 1 — Scope (Orchestration)
-
-- Use `skills/PENTEST_WORKFLOW.md` as the reference for Scope rules.
-- Steps:
-  - Ask the user (or read the latest user message) to determine the **target** and any **scope limitations** (e.g. staging only, no production payments).
-  - Initialize or update the Pentest State file at `daily/<target>/<YYYY-MM-DD>`.
-  - Set:
-    - `Target`
-    - `Date`
-    - `Scope confirmed: true|false`
-    - `Stage.Scope: IN_PROGRESS` → `DONE`
-  - Do not use **exec**.
-- Log scope confirmation and any constraints in:
-  - `# Pentest State` (Scope fields)
-  - `# Checklist progress` (e.g. “Scope confirmed: true”).
-
----
-
-## Stage 2 — Recon (Requirements & Checklist)
-
-Recon follows the rules in `skills/PENTEST_WORKFLOW.md` and must be **non-destructive**.
-
-- **Required recon outputs**
-  - Headers summary (`curl -I`).
-  - Tech stack notes (Server, X-Powered-By, framework hints).
-  - robots/sitemap discovery (`/robots.txt`, `/sitemap.xml`, `/.well-known/`).
-  - Dir/path enumeration:
-    - `exec: dirsearch` **or**
-    - `craft_payload` curl loop fallback.
-  - WAF hints based on headers and error responses.
-  - Update `Endpoints.discovered` with all known paths/URLs.
-- **Tools**
-  - **exec**: `curl`, `nmap` (safe usage only), `dirsearch`, `wfuzz` (low-volume).
-  - **craft_payload**: small curl loops if tools missing.
-- **Logging into Pentest State**
-  - `Artifacts.recon`: references to recon logs, outputs.
-  - `Endpoints.discovered`: updated list.
-  - `# Checklist progress`: which recon items are done or partial.
-  - `# Tested vectors`: brief description of recon requests and results.
-- **Locking Recon**
-  - When recon completion criteria are satisfied:
-    - Set `Stage.Recon: DONE` (or `PARTIAL` if limited).
-    - Set `Locks.ReconLocked: true`.
-
----
-
-## Stage 3 — Enumeration (Requirements & Checklist)
-
-Enumeration uses recon outputs to understand and lightly probe parameters and auth surfaces.
-
-- **Required enumeration outputs**
-  - Parameter identification (query/body) for key endpoints.
-  - Light parameter fuzzing with wfuzz or curl loops to find hidden parameters (respect safety caps).
-  - Auth surface mapping:
-    - `/login`, `/register`, `/signup`, `/forgot`, `/reset`, `/otp`, `/verify`, `/api/auth`, etc.
-  - Optional SPA/auth support:
-    - Run `skills/ui-flow/SKILL.md` or `skills/auth-journey/SKILL.md` to capture HAR and cookies if needed.
-  - Update:
-    - `Endpoints.authenticated_only`
-    - `Parameters.discovered`
-- **Tools**
-  - **exec**: `curl`, `wfuzz` (low volume).
-  - **craft_payload**: small loops.
-- **Logging into Pentest State**
-  - `Artifacts.enumeration`: references to enumeration logs and HARs.
-  - `Parameters.discovered`, `Endpoints.authenticated_only` updated.
-  - `# Checklist progress`: enumeration coverage.
-  - `# Tested vectors`: endpoints and parameters tested, with outcomes.
-- **Locking Enumeration**
-  - When enumeration completion criteria are satisfied:
-    - Set `Stage.Enumeration: DONE` (or `PARTIAL` if limited).
-    - Set `Locks.EnumerationLocked: true`.
-
----
-
-## Stage 4 — Vulnerability Analysis + Verify (Requirements & Checklist)
-
-Verify uses artifacts from Recon and Enumeration to test **specific vulnerability hypotheses**.
-
-- **Candidate building**
-  - From `Endpoints.discovered`, `Endpoints.authenticated_only`, and `Parameters.discovered`, construct `Findings.candidates`:
-    - Each candidate should specify: endpoint, parameter(s), suspected vuln type(s).
-- **Per-candidate workflow**
-  - Decide the best-matching skill (SQLi/XSS/IDOR/CSRF/etc.).
-  - Load that skill via **memory_get**.
-  - Run **minimal PoC checks** within that skill’s safety rules (no brute force, no destructive actions).
-  - If confirmed:
-    - Call **report_finding(...)** (required).
-    - Append the finding ID/title to `Findings.confirmed`.
-- **Tools**
-  - **exec**: `curl`, `wfuzz`, `sqlmap`, safe node runners, etc., as allowed by individual skills.
-  - **craft_payload** for small helpers and replays.
-- **Logging into Pentest State**
-  - `Artifacts.verify`: references to PoC scripts, logs, HARs.
-  - `Findings.candidates`: populated and updated as processed.
-  - `Findings.confirmed`: synchronized with actual report_finding calls.
-  - `# Checklist progress`: which vulnerability classes were checked.
-  - `# Tested vectors`: specific payloads/vectors used and high-level results.
-- **Locking Verify**
-  - When all known candidates are processed or scope/time is exhausted:
-    - Set `Stage.Verify: DONE` (or `PARTIAL`).
-    - Set `Locks.VerifyLocked: true`.
-  - Do not leave confirmed issues without **report_finding**.
-
----
-
-## Stage 5 — Report (Requirements & Checklist)
-
-The Report stage compiles the work already done; it does **not** run new tests.
-
-- **Requirements**
-  - Ensure every entry in `Findings.confirmed` corresponds to a prior **report_finding** call.
-  - Summarize coverage by stage (Scope, Recon, Enumeration, Verify).
-  - List remaining gaps or blocked areas:
-    - E.g. “CAPTCHA limited further brute-force checks”, “Admin area not in scope”.
-  - Mark `Stage.Report: DONE` in the Pentest State.
-- **Tools**
-  - **memory_get**, **memory_search** only.
-  - **write_file** to update the Pentest State and add any final checklist notes.
-- **Logging**
-  - Update `# Checklist progress` with a concise stage-by-stage summary.
-  - Ensure `# Tested vectors` and all Artifacts sections are consistent with the work performed.
-
----
-
 ## Global Rules (applied by the Orchestrator)
 
 1. **In-scope only**
@@ -319,4 +481,20 @@ The Report stage compiles the work already done; it does **not** run new tests.
    - Always read and update the canonical Pentest State at `daily/<target>/<YYYY-MM-DD>`:
      - Avoid retesting areas already logged and locked.
      - Use unlock triggers only for targeted re-runs on new surfaces.
+6. **Confidence required**
+   - Every `report_finding` call must include `confidence` (0-100) and `confidence_reason` (min 20 chars).
+   - Confidence < 50 + weak POC = do NOT report.
+   - Confidence < 30 = reject (likely hallucination).
 
+---
+
+## Dedup Integration
+
+Before calling `report_finding` or re-testing a vector:
+
+1. Check `findings_index` in PentestState — if a matching `FINDING_KEY` exists, skip.
+2. Check `tested_vectors` — if `(endpoint, param, vuln_type)` is already listed, skip.
+3. In multi-agent mode, check `Work Registry → Completed` for duplicate task keys.
+4. FINDING_KEY format: `<CATEGORY>|<normalized_endpoint>|<param>|<impact>`
+
+This ensures no duplicate testing or reporting across single-agent and multi-agent modes.

@@ -55,10 +55,39 @@ Command injection / OS command injection — unsanitized input passed to shell (
 - Only PoC commands: id, whoami, echo, uname. No rm, no curl to external servers, no reverse shells, no credential access.
 - In-scope only; one request per payload to confirm.
 
+## Error Recovery & Fallback
+
+### Primary Tool
+**curl** — send injection payloads via HTTP requests.
+
+### Fallback Tool
+**craft_payload + delimiter/encoding variants** — when direct injection fails, try different separators and encodings.
+
+### Error Patterns & Recovery
+
+| Error Pattern | Detection | Recovery Action |
+|---|---|---|
+| **Timeout** | curl hangs >30s (possible blind RCE or sleep) | Retry with `--connect-timeout 10 --max-time 20`. If timeout with sleep payload, note as potential blind RCE. |
+| **Connection refused** | `curl: (7) Couldn't connect` | Skip parameter, log "target unreachable". If all fail, escalate to user. |
+| **WAF block** | HTTP 403/406, payload blocked | Pivot to **memory_get**(path: "skills/waf-bypass/SKILL.md"). Try: URL-encode special chars (`%3B`, `%7C`, `%26`), use `${IFS}` instead of spaces, or backtick variants. |
+| **Command output suppressed** | 200 OK but no command output in response | Try time-based: `; sleep 5` or `| ping -c 3 127.0.0.1` and measure response time. Try out-of-band (DNS/HTTP callback) if available. |
+| **Rate limit (429)** | HTTP 429 | Stop, log tested params, report partial results. |
+| **Filter blocks delimiters** | `;`, `|`, `&` characters stripped | Try alternative separators: `%0a` (newline), `||`, `&&`, backticks, `$()`. Try without spaces: `;id` or `\n id`. |
+| **No output channel** | Injection works (time-based confirms) but no output visible | Note as "blind command injection". Report with time-based evidence. Suggest user approve DNS callback for full confirmation. |
+
+### Manual Fallback Workflow (when direct injection fails)
+1. **exec**(curl -s "URL?ip=127.0.0.1; id") — semicolon separator.
+2. **exec**(curl -s "URL?ip=127.0.0.1 | id") — pipe separator.
+3. **exec**(curl -s "URL?ip=127.0.0.1%0aid") — newline separator.
+4. Try **craft_payload** with: `$(id)`, `` `id` ``, `${IFS}id`, URL-encoded variants.
+5. Time-based fallback: `; sleep 5` — measure response delta.
+6. If nothing works after 5-6 variants, log "not exploitable" and move on.
+
 ## When to Escalate or Pivot
 
 - If response suggests injection but no output: try different delimiter or encoding; log as potential and escalate to user.
 - If WAF blocks: **memory_get**(path: "skills/waf-bypass/SKILL.md"); minimal payloads only.
+- If all tools fail (timeout, crash, WAF): log error details, mark parameter as "skipped — tool failure", and move on. Never leave parameter unlogged.
 
 ---
 

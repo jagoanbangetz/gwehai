@@ -15,6 +15,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Report, VerificationStatus } from '../entities/report.entity';
 import { ToolsService } from '../tools/tools.service';
+import { stripAnsi } from '../utils/ansi.util';
 
 /** Severity levels that trigger re-verification. */
 const REVERIFY_SEVERITIES = ['HIGH', 'CRITICAL'];
@@ -92,13 +93,13 @@ export class ReVerifyService {
         verifiedAt: passed ? new Date() : null,
         metadata: {
           ...finding.metadata,
-          last_verify_output: result.stdout.substring(0, 2000),
+          last_verify_output: stripAnsi(result.stdout).substring(0, 2000),
           last_verify_exit_code: result.exitCode,
         },
       } as any);
 
       this.logger.log(`Finding ${finding.id} re-verify result: ${newStatus} (attempt ${attempts})`);
-      return { status: newStatus, evidence: result.stdout.substring(0, 500), attempts };
+      return { status: newStatus, evidence: stripAnsi(result.stdout).substring(0, 500), attempts };
     } catch (err: any) {
       this.logger.warn(`Re-verify error for finding ${finding.id}: ${err?.message}`);
       await this.reportRepo.update(finding.id, {
