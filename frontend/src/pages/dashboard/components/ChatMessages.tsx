@@ -1,10 +1,8 @@
 import MarkdownMessage from '../../../components/MarkdownMessage'
 import FollowUpChips from '../../../components/FollowUpChips'
-import ThinkingBar from '../../../components/ThinkingBar'
 import StatusBadge from '../../../components/StatusBadge'
 import ProgressIndicator from '../../../components/ProgressIndicator'
 import type { ProgressState } from '../../../components/ProgressIndicator'
-import { GwehLogRenderer } from '../../../components/GwehLog'
 import { getModelLabel } from '../../../components/ModelPicker'
 import type { Message } from '../types'
 import type { LogEvent } from '../../../components/GwehLog'
@@ -37,8 +35,8 @@ export default function ChatMessages({
   messageToolsSnapshot,
   currentStep,
   activityLog,
-  logEvents,
-  pentestChecklistProgress,
+  logEvents: _logEvents,
+  pentestChecklistProgress: _pentestChecklistProgress,
   onSendWithText,
   showToast: _showToast,
   onStop,
@@ -95,8 +93,6 @@ export default function ChatMessages({
         .map((message) => {
           const isUser = message.role === 'user'
           const isAssistant = message.role === 'assistant'
-          const toolIds = messageToolsSnapshot[message.id] || []
-          const hasTools = toolIds.length > 0
 
           // Determine status for badge
           let badgeStatus: 'streaming' | 'done' | 'error' | 'stopped' | 'thinking' | null = null
@@ -160,46 +156,6 @@ export default function ChatMessages({
                     </span>
                   </div>
                 )}
-
-                {/* ThinkingBar (for agent mode) */}
-                {isAssistant && !isSimpleConversation && (message.isStreaming || currentStep || activityLog.length > 0) && (
-                  <ThinkingBar
-                    currentStep={currentStep}
-                    steps={activityLog}
-                    isStreaming={message.isStreaming}
-                    checklistProgress={pentestChecklistProgress}
-                  />
-                )}
-
-                {/* GwehLog events */}
-                {isAssistant && logEvents.length > 0 && message.isStreaming && (
-                  <GwehLogRenderer events={logEvents} />
-                )}
-
-                {/* Tool terminals */}
-                {isAssistant && hasTools && toolIds.map((toolId: string) => {
-                  const tool = (window as any).__gwehai_tools?.[toolId]
-                  if (!tool) return null
-                  const isRunning = tool.status === 'running'
-                  return (
-                    <div key={toolId} className="tool-terminal">
-                      <div className="tool-terminal__header">
-                        <span className={`tool-terminal__status ${isRunning ? 'tool-terminal__status--running' : ''}`}>
-                          {isRunning ? '◉' : tool.status === 'ok' ? '✓' : '✕'}
-                        </span>
-                        <span className="tool-terminal__name">{tool.name}</span>
-                        {tool.reasoning && (
-                          <span className="tool-terminal__reasoning">{tool.reasoning}</span>
-                        )}
-                      </div>
-                      {tool.logs.length > 0 && (
-                        <pre className="tool-terminal__logs">
-                          {tool.logs.join('\n')}
-                        </pre>
-                      )}
-                    </div>
-                  )
-                })}
 
                 {/* Main content */}
                 {isAssistant && message.content ? (
