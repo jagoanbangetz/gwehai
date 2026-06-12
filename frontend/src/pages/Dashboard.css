@@ -4778,3 +4778,42 @@
   }
 }
 
+/* Agent mode progress indicator — clean, minimal */
+.chat-agent-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0;
+  color: oklch(0.65 0.05 250);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+.chat-agent-indicator-icon {
+  font-size: 0.9rem;
+  animation: agentSpin 2s linear infinite;
+}
+@keyframes agentSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.chat-agent-indicator-text {
+  opacity: 0.85;
+}
+.chat-agent-indicator-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.chat-agent-indicator-dots span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: oklch(0.65 0.05 250);
+  animation: agentPulse 1.2s infinite;
+}
+.chat-agent-indicator-dots span:nth-child(2) { animation-delay: 0.2s; }
+.chat-agent-indicator-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes agentPulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}

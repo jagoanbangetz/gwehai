@@ -30,8 +30,8 @@ export default function ChatMessages({
   isLoading,
   isSimpleConversation,
   messageToolsSnapshot,
-  currentStep: _currentStep,
-  activityLog: _activityLog,
+  currentStep,
+  activityLog: _activityLog_unused,
   logEvents: _logEvents,
   pentestChecklistProgress: _pentestChecklistProgress,
   onSendWithText,
@@ -125,6 +125,17 @@ export default function ChatMessages({
                   <div className="chat-simple-indicator">
                     <span className="chat-simple-indicator-text">Replying</span>
                     <span className="chat-simple-indicator-dots">
+                      <span /><span /><span />
+                    </span>
+                  </div>
+                )}
+
+                {/* Agent mode progress indicator */}
+                {isAssistant && !isSimpleConversation && message.isStreaming && !message.done && !message.content && currentStep && (
+                  <div className="chat-agent-indicator">
+                    <span className="chat-agent-indicator-icon">&#9881;</span>
+                    <span className="chat-agent-indicator-text">{currentStep}</span>
+                    <span className="chat-agent-indicator-dots">
                       <span /><span /><span />
                     </span>
                   </div>
