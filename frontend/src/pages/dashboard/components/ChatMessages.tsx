@@ -1,8 +1,5 @@
 import MarkdownMessage from '../../../components/MarkdownMessage'
 import FollowUpChips from '../../../components/FollowUpChips'
-import StatusBadge from '../../../components/StatusBadge'
-import ProgressIndicator from '../../../components/ProgressIndicator'
-import type { ProgressState } from '../../../components/ProgressIndicator'
 import { getModelLabel } from '../../../components/ModelPicker'
 import type { Message } from '../types'
 import type { LogEvent } from '../../../components/GwehLog'
@@ -33,28 +30,16 @@ export default function ChatMessages({
   isLoading,
   isSimpleConversation,
   messageToolsSnapshot,
-  currentStep,
-  activityLog,
+  currentStep: _currentStep,
+  activityLog: _activityLog,
   logEvents: _logEvents,
   pentestChecklistProgress: _pentestChecklistProgress,
   onSendWithText,
   showToast: _showToast,
-  onStop,
+  onStop: _onStop,
   disabled,
 }: ChatMessagesProps) {
   // Derive progress state for ProgressIndicator
-  const lastMsg = messages[messages.length - 1]
-  const isStreaming = lastMsg?.role === 'assistant' && lastMsg.isStreaming && !lastMsg.done
-  const progressState: ProgressState = (() => {
-    if (!isLoading && !isStreaming) return 'idle'
-    if (lastMsg?.eventType === 'error') return 'error'
-    if (isStreaming) {
-      if (lastMsg?.eventType === 'thinking' || lastMsg?.eventType === 'planning') return 'thinking'
-      return 'generating'
-    }
-    if (lastMsg?.done) return 'done'
-    return 'thinking'
-  })()
 
   if (messages.length === 0) {
     return (
@@ -67,13 +52,6 @@ export default function ChatMessages({
 
   return (
     <div className="chat-messages">
-      {/* Progress indicator — AI builder style status bar */}
-      <ProgressIndicator
-        state={progressState}
-        currentStep={currentStep}
-        activityLog={activityLog}
-        onStop={onStop}
-      />
       {messages
         .filter((message) => {
           if (message.role === 'user') return true
@@ -119,11 +97,6 @@ export default function ChatMessages({
               )}
 
               <div className="chat-message__content">
-                {/* Status badge for assistant messages */}
-                {isAssistant && badgeStatus && (
-                  <StatusBadge status={badgeStatus} modelKey={message.modelKey} />
-                )}
-
                 {/* Model label */}
                 {isAssistant && message.modelKey && message.modelKey !== 'auto' && !badgeStatus && (
                   <div className="assistant-model-label">
