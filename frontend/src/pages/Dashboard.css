@@ -5225,3 +5225,16 @@
   font-size: 1.15rem !important;
   filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
 }
+
+/* ── Card icon — SOLID bg, clearly visible ── */
+.hacktivity-card-icon {
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: 10px !important;
+  flex-shrink: 0;
+}
+.hacktivity-card-icon i {
+  font-size: 1.2rem !important;
+  line-height: 1;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5));
+}

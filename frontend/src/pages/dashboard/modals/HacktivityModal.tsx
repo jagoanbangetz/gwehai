@@ -249,7 +249,7 @@ export default function HacktivityModal({
                         className="hacktivity-card"
                         onClick={() => { onSelectHacktivityId(row.id); onSelectHacktivity(row) }}
                       >
-                        <div className="hacktivity-card-icon" style={{ background: color + '30', color: 'white', fontSize: '1.1rem' }}>
+                        <div className="hacktivity-card-icon" style={{ background: color + '99', color: 'white', fontSize: '1.1rem' }}>
                           <i className={icon} />
                         </div>
                         <div className="hacktivity-card-body">
