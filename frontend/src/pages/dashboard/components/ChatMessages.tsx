@@ -56,7 +56,7 @@ export default function ChatMessages({
         .filter((message) => {
           if (message.role === 'user') return true
           if (message.role === 'assistant' && (message.eventType === 'planning' || message.eventType === 'thinking' || message.eventType === 'content' || message.eventType === 'executing' || message.eventType === 'planning-next')) {
-            return true
+            const c2 = String(message.content || "").trim(); const t2 = String(message.thinking || "").trim().length > 0; if (!c2 && !t2 && !message.isStreaming) return false; return true
           }
           const content = String(message.content || '').trim()
           const hasThinking = String(message.thinking || '').trim().length > 0

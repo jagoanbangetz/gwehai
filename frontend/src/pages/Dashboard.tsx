@@ -258,7 +258,7 @@ const Dashboard = () => {
     const withAgentsMatch = userInput.match(/\bwith\s+(\d+)\s+agents?\b/i)
     const maxAgents = withAgentsMatch ? Math.min(20, Math.max(1, parseInt(withAgentsMatch[1], 10))) : undefined
     const isSimple = chatMode === 'ask'; setIsSimpleConversation(isSimple)
-    setMessages((prev) => [...prev, makeUserMessage(userInput), makeAssistantMessage(isSimple ? 'content' : 'thinking', selectedModelKey)])
+    const assistantMsg = makeAssistantMessage(isSimple ? 'content' : 'thinking', selectedModelKey); setMessages((prev) => [...prev, makeUserMessage(userInput), assistantMsg]); setCurrentAssistantMessageId(assistantMsg.id)
     if (!messageOverride) setInput(''); inputRef.current?.focus()
     stopRequestedRef.current = false; sendInProgressRef.current = true; const isNewChat = !currentChatId
     setIsLoading(true); setCurrentStep(null); setActivityLog([]); setLogEvents([])
