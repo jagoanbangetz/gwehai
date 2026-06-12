@@ -98,7 +98,7 @@ export default function HacktivityModal({
         <div className="hacktivity-header">
           <div className="hacktivity-header-left">
             <h2 className="hacktivity-title">
-              <i className="fa-solid fa-bolt" style={{ color: '#f59e0b', marginRight: 8 }} />
+              <i className="fa-solid fa-bolt-lightning" style={{ color: '#f59e0b', marginRight: 8 }} />
               {selectedHacktivity ? 'Action Detail' : 'Hacktivity'}
             </h2>
             {!selectedHacktivity && (
