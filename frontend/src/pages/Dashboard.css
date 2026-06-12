@@ -1147,6 +1147,7 @@
 
 .tool-panel-body::-webkit-scrollbar-thumb {
   background: oklch(0.3 0 0 / 0.5);
+}
   border-radius: 3px;
 }
 
@@ -1238,6 +1239,7 @@
 
 .tool-terminal::-webkit-scrollbar-thumb {
   background: oklch(0.3 0 0 / 0.5);
+}
   border-radius: 3px;
 }
 
@@ -3618,48 +3620,265 @@
 }
 
 /* Current Pentest Modal */
+/* ── Current Pentest Modal ── */
 .current-pentest-modal {
-  max-width: 480px;
+  max-width: 520px;
 }
 
-.current-pentest-hint {
-  font-size: 13px;
+/* empty state */
+.cp-empty {
+  text-align: center;
+  padding: 2rem 1rem;
   color: oklch(0.72 0.005 60);
+}
+.cp-empty-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: oklch(0.85 0.003 60);
+  margin: 0 0 0.25rem 0;
+}
+.cp-empty-hint {
+  font-size: 13px;
+  color: oklch(0.62 0.005 60);
   margin: 0 0 1rem 0;
 }
 
-.current-pentest-loading {
-  padding: 1.5rem;
-  text-align: center;
-  color: oklch(0.77 0.005 60);
-}
-
-.current-pentest-list {
+/* job list */
+.cp-job-list {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1rem;
 }
 
-.current-pentest-empty,
-.current-pentest-card {
-  padding: 0.5rem 0;
+/* card */
+.cp-card {
+  background: oklch(0.16 0.004 260);
+  border: 1px solid oklch(0.22 0.004 260);
+  border-radius: 12px;
+  padding: 1.25rem;
 }
 
-.current-pentest-card {
-  transition: opacity 0.2s ease;
+/* header */
+.cp-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
 }
 
-.current-pentest-empty p {
-  margin: 0 0 0.5rem 0;
-  color: oklch(0.87 0.003 60);
+/* status badge */
+.cp-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.cp-status--running {
+  background: oklch(0.2 0.06 145 / 0.3);
+  color: oklch(0.75 0.15 145);
+}
+.cp-status--completed {
+  background: oklch(0.15 0.04 145 / 0.25);
+  color: oklch(0.7 0.12 145);
+}
+.cp-status--failed {
+  background: oklch(0.2 0.08 25 / 0.3);
+  color: oklch(0.7 0.18 25);
+}
+.cp-status--stopped {
+  background: oklch(0.18 0.02 60 / 0.25);
+  color: oklch(0.65 0.04 70);
+}
+.cp-status--unknown {
+  background: oklch(0.18 0.01 260 / 0.3);
+  color: oklch(0.65 0.01 260);
 }
 
-.current-pentest-empty-hint {
-  font-size: 13px;
-  color: oklch(0.62 0.005 60) !important;
-  margin-bottom: 1rem !important;
+/* target */
+.cp-target {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: oklch(0.9 0.003 60);
+  min-width: 0;
+}
+.cp-target i {
+  color: oklch(0.6 0.12 250);
+  font-size: 0.75rem;
+}
+.cp-target span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+/* progress */
+.cp-progress-section {
+  margin-bottom: 0.75rem;
+}
+.cp-progress-bar {
+  height: 6px;
+  background: oklch(0.22 0.005 260);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 0.35rem;
+}
+.cp-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, oklch(0.65 0.15 250), oklch(0.7 0.18 145));
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+.cp-progress-text {
+  font-size: 0.75rem;
+  color: oklch(0.62 0.005 60);
+}
+
+/* activity */
+.cp-activity {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: oklch(0.77 0.005 60);
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.65rem;
+  background: oklch(0.19 0.01 260);
+  border-radius: 8px;
+}
+.cp-activity i {
+  font-size: 0.7rem;
+}
+
+/* checklist */
+.cp-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+.cp-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: oklch(0.65 0.005 60);
+  transition: color 0.2s;
+}
+.cp-checklist-item.done {
+  color: oklch(0.77 0.08 145);
+}
+.cp-checklist-item i {
+  width: 14px;
+  text-align: center;
+  font-size: 0.7rem;
+}
+.cp-checklist-item.done i {
+  color: oklch(0.7 0.15 145);
+}
+
+/* footer */
+.cp-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.cp-elapsed {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: oklch(0.62 0.005 60);
+}
+.cp-elapsed--done {
+  color: oklch(0.65 0.1 145);
+}
+
+/* actions */
+.cp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.cp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s;
+}
+.cp-btn--primary {
+  background: oklch(0.35 0.08 250);
+  color: oklch(0.92 0.05 250);
+}
+.cp-btn--primary:hover {
+  background: oklch(0.42 0.1 250);
+}
+.cp-btn--secondary {
+  background: oklch(0.2 0.01 260);
+  color: oklch(0.82 0.003 60);
+  border: 1px solid oklch(0.28 0.005 260);
+}
+.cp-btn--secondary:hover {
+  background: oklch(0.24 0.01 260);
+}
+
+/* details toggle */
+.cp-details-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  color: oklch(0.52 0.005 60);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem 0;
+}
+.cp-details-toggle:hover {
+  color: oklch(0.7 0.005 60);
+}
+.cp-details {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid oklch(0.22 0.004 260);
+}
+.cp-detail-row {
+  margin-bottom: 0.4rem;
+}
+.cp-detail-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: oklch(0.52 0.005 60);
+  display: block;
+  margin-bottom: 0.15rem;
+}
+.cp-detail-value {
+  font-size: 0.78rem;
+  color: oklch(0.8 0.003 60);
+  word-break: break-all;
+}
+.cp-mono {
+  font-family: ui-monospace, monospace;
+  font-size: 0.72rem;
+}
+
+/* old btn classes kept for empty state */
 .pentest-runner-link-btn,
 .pentest-conversation-btn {
   padding: 0.5rem 1rem;
@@ -3671,115 +3890,20 @@
   margin-right: 0.5rem;
   margin-top: 0.25rem;
 }
-
 .pentest-runner-link-btn {
   background: oklch(0.35 0.08 250);
   color: oklch(0.9 0.1 250);
 }
-
 .pentest-runner-link-btn:hover {
   background: oklch(0.4 0.1 250);
 }
-
 .pentest-conversation-btn {
   background: oklch(0.25 0.02 260);
   color: oklch(0.92 0.003 60);
   border: 1px solid oklch(0.35 0 0 / 0.5);
 }
-
 .pentest-conversation-btn:hover {
   background: oklch(0.3 0 0 / 0.5);
-}
-
-.current-pentest-row {
-  margin-bottom: 0.75rem;
-}
-
-.current-pentest-label {
-  display: block;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: oklch(0.57 0.005 60);
-  margin-bottom: 0.25rem;
-}
-
-.current-pentest-status {
-  font-weight: 600;
-}
-
-.current-pentest-status--running {
-  color: oklch(0.75 0.15 145);
-}
-
-.current-pentest-status--completed {
-  color: oklch(0.7 0.15 145);
-}
-
-.current-pentest-status--failed,
-.current-pentest-status--stopped {
-  color: oklch(0.65 0.2 25);
-}
-
-.current-pentest-phase {
-  font-weight: 600;
-  color: oklch(0.82 0.003 60);
-}
-
-.current-pentest-job-id {
-  font-size: 12px;
-  word-break: break-all;
-  color: oklch(0.77 0.005 60);
-}
-
-.current-pentest-message {
-  font-size: 13px;
-  color: oklch(0.82 0.003 60);
-  display: block;
-}
-
-.current-pentest-conversation-id {
-  font-size: 12px;
-  color: oklch(0.72 0.005 60);
-  font-family: ui-monospace, monospace;
-}
-
-.current-pentest-checklist-wrap .current-pentest-label {
-  margin-bottom: 0.35rem;
-}
-
-.current-pentest-checklist {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-  font-size: 12px;
-  color: oklch(0.82 0.003 60);
-}
-
-.current-pentest-checklist-item {
-  white-space: nowrap;
-}
-
-.current-pentest-last-action-wrap {
-  align-items: flex-start;
-}
-
-.current-pentest-last-action-wrap .current-pentest-label {
-  flex-shrink: 0;
-}
-
-.current-pentest-last-action {
-  font-size: 13px;
-  color: oklch(0.82 0.003 60);
-  line-height: 1.4;
-  display: block;
-}
-
-.current-pentest-actions {
-  margin-top: 1rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
 }
 
 /* Plan Modal */
@@ -4092,14 +4216,13 @@
     padding: 1rem;
   }
 
-  .current-pentest-actions {
+  .cp-actions {
     flex-direction: column;
   }
 
-  .pentest-runner-link-btn,
-  .pentest-conversation-btn {
+  .cp-btn {
     width: 100%;
-    margin-right: 0;
+    justify-content: center;
   }
 
   /* Plan modal – mobile */
