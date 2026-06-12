@@ -38,6 +38,7 @@ import { PentestJobsService } from '../pentest-jobs/pentest-jobs.service';
 import { truncateMessagesForContext, clipTextPreserveHeadTail, MAX_CONTEXT_CHARS_PER_ROLE } from './context-manager';
 import { CveFeedService } from '../cve-feed/cve-feed.service';
 import type { TechFingerprint } from '../cve-feed/cve-feed.types';
+import { stripAnsi } from '../utils/ansi.util';
 
 /** Small delay so SSE client receives events over time and frontend typing effect can run */
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -585,7 +586,7 @@ export class AgentOrchestratorService {
           });
           push({
             type: 'tool_log',
-            data: { tool: tc.name, output: clipTextPreserveHeadTail(r.result, 4000) },
+            data: { tool: tc.name, output: clipTextPreserveHeadTail(stripAnsi(r.result), 4000) },
           });
         }
 
