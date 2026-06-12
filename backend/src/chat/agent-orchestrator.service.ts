@@ -395,25 +395,78 @@ export class AgentOrchestratorService {
     }
 
     const MAX_TURNS = 100;
+    const DEADLINE_WARNING_TURN = 80;
     let turn = 0;
     let finalContent = '';
     let lastStepAt = 0;
     let stepLimitReached = false;
 
+    // ── Checklist Progress Tracker ──────────────────────────────────
+    // Tracks checklist state across turns to detect stale progress.
+    // If 3 consecutive turns pass with no checklist advancement, force-skip section.
+    let lastChecklistJson = '';
+    let staleChecklistTurns = 0;
+    const CHECKLIST_STALE_THRESHOLD = 3;
+    let continuationMode = false; // true = past step limit, checklist incomplete, auto-continuing
+
     while (turn < MAX_TURNS) {
       if (abortSignal?.aborted) throw new Error('Request was cancelled');
       turn++;
 
-      // Plan enforcement
-      try {
-        validateStep(planId, limits, { stepNumber: turn, lastStepAtMs: lastStepAt });
-      } catch (err: any) {
-        if (err?.message?.includes('steps per session')) {
-          stepLimitReached = true;
-          push({ type: 'status', data: { message: 'Step limit reached for this session. Summarizing findings...' } });
-          break;
+      // ── Deadline Awareness ──────────────────────────────────────────
+      // Warn agent to prioritize when running low on turns
+      if (turn === DEADLINE_WARNING_TURN) {
+        push({ type: 'status', data: { message: `⚠️ Running low on turns (${turn}/${MAX_TURNS}). Prioritizing remaining checklist items and high-impact vulns.` } });
+        messages.push({
+          role: 'system',
+          content: `You have used ${turn} of ${MAX_TURNS} turns. Prioritize remaining checklist sections. Skip optional/redundant tests. Focus on high-impact vulnerabilities first. Complete the current section and move to the next one quickly.`,
+        });
+      }
+
+      // Plan enforcement — skip validation when in continuation mode (past step limit)
+      if (!continuationMode) {
+        try {
+          validateStep(planId, limits, { stepNumber: turn, lastStepAtMs: lastStepAt });
+        } catch (err: any) {
+          if (err?.message?.includes('steps per session')) {
+            // ── Continuation Prompt ────────────────────────────────────
+            // Don't just summarize — check if pentest checklist is incomplete
+            // and auto-continue with context from previous turns.
+            try {
+              const pentestState = await this.pentestJobs.getStateByConversationId(userId, cid);
+              if (pentestState) {
+                const checklist = pentestState.state.checklist ?? {};
+                const CHECKLIST_ORDER = ['recon', 'input_handling', 'auth_session', 'access_control', 'business_logic', 'other'];
+                const incomplete = CHECKLIST_ORDER.filter((s) => !checklist[s]);
+                if (incomplete.length > 0) {
+                  stepLimitReached = true;
+                  continuationMode = true;
+                  const nextSection = incomplete[0];
+                  push({
+                    type: 'status',
+                    data: {
+                      message: `Step limit reached but checklist incomplete (${incomplete.length} sections remaining). Auto-continuing with ${nextSection}...`,
+                    },
+                  });
+                  // Inject continuation prompt and keep looping
+                  messages.push({
+                    role: 'system',
+                    content: `Step limit reached. Checklist progress: ${JSON.stringify(checklist)}. Incomplete sections: ${incomplete.join(', ')}. Continue immediately with the next section: "${nextSection}". Do NOT summarize — keep testing until the checklist is complete. Call update_pentest_phase when done with each section.`,
+                  });
+                  continue; // Don't break — keep the agent loop running
+                }
+              }
+            } catch (stateErr: any) {
+              // Non-blocking: if state lookup fails, fall through to normal break
+              push({ type: 'status', data: { message: `Checklist check skipped: ${stateErr?.message || 'unknown'}` } });
+            }
+            // If no pentest job or checklist is complete, break normally
+            stepLimitReached = true;
+            push({ type: 'status', data: { message: 'Step limit reached for this session. Summarizing findings...' } });
+            break;
+          }
+          throw err;
         }
-        throw err;
       }
       if (turn === 1) {
         const payload = getPlanPayload(planId);
@@ -536,14 +589,28 @@ export class AgentOrchestratorService {
 
         const executeOne = async (tc: LlmToolCall, args: Record<string, any>): Promise<string> => {
           if (abortSignal?.aborted) throw new Error('Request was cancelled');
-          try {
-            if (tc.name === 'sessions_send') {
-              return await this.handleSessionsSendTool(args, userId, cid, jobId, pushEvent, nextAgentIndexRef, memoryScopeId, abortSignal, options?.model_key, options?.maxAgentsForRun);
+          const maxRetries = 1;
+          for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+              if (tc.name === 'sessions_send') {
+                return await this.handleSessionsSendTool(args, userId, cid, jobId, pushEvent, nextAgentIndexRef, memoryScopeId, abortSignal, options?.model_key, options?.maxAgentsForRun);
+              }
+              const result = await this.toolExecutor.runTool(tc.name, args, mkContext());
+              // Check for hard failures in result (non-zero exit, command required errors)
+              if (attempt < maxRetries && typeof result === 'string' && (result.includes('command is required') || result.match(/exit code [1-9]/))) {
+                push({ type: 'status', data: { message: `Retrying tool ${tc.name} (attempt ${attempt + 2}/${maxRetries + 1})...` } });
+                continue;
+              }
+              return result;
+            } catch (err: any) {
+              if (attempt < maxRetries) {
+                push({ type: 'status', data: { message: `Tool ${tc.name} failed, retrying (${attempt + 2}/${maxRetries + 1})...` } });
+                continue;
+              }
+              return `Error: ${err?.message || String(err)}`;
             }
-            return await this.toolExecutor.runTool(tc.name, args, mkContext());
-          } catch (err: any) {
-            return `Error: ${err?.message || String(err)}`;
           }
+          return `Error: tool ${tc.name} failed after ${maxRetries + 1} attempts`;
         };
 
         // Run regular tools — parallel with settle, sequential for heavy targets
@@ -598,6 +665,40 @@ export class AgentOrchestratorService {
         const tokensThisTurn =
           Math.ceil((response.content?.length || 0) / 4) + 500 + (response.tool_calls?.length || 0) * 200;
         await this.planUsage.recordStep(userId, cid, tokensThisTurn);
+
+        // ── Checklist Progress Tracker ───────────────────────────────
+        // Check if checklist advanced this turn. If 3 turns stale, force next section.
+        try {
+          const pentestState = await this.pentestJobs.getStateByConversationId(userId, cid);
+          if (pentestState) {
+            const currentChecklistJson = JSON.stringify(pentestState.state.checklist ?? {});
+            if (currentChecklistJson === lastChecklistJson && lastChecklistJson !== '') {
+              staleChecklistTurns++;
+              if (staleChecklistTurns >= CHECKLIST_STALE_THRESHOLD) {
+                const checklist = pentestState.state.checklist ?? {};
+                const CHECKLIST_ORDER = ['recon', 'input_handling', 'auth_session', 'access_control', 'business_logic', 'other'];
+                const incomplete = CHECKLIST_ORDER.filter((s) => !checklist[s]);
+                if (incomplete.length > 0) {
+                  const nextSection = incomplete[0];
+                  push({
+                    type: 'status',
+                    data: { message: `⚠️ No checklist progress for ${staleChecklistTurns} turns. Forcing advance to: ${nextSection}` },
+                  });
+                  messages.push({
+                    role: 'system',
+                    content: `You have been stuck on the same checklist section for ${staleChecklistTurns} turns. Stop what you are doing and move to the next incomplete section: "${nextSection}". Call update_pentest_phase to mark the current section done (even if partial), then start testing ${nextSection}.`,
+                  });
+                  staleChecklistTurns = 0;
+                }
+              }
+            } else {
+              staleChecklistTurns = 0;
+            }
+            lastChecklistJson = currentChecklistJson;
+          }
+        } catch (trackerErr: any) {
+          // Non-blocking: checklist tracking is best-effort
+        }
 
         // ── Dynamic Prompt Rebuild for Next Turn ─────────────────────
         // Track tool names from this turn for phase detection
