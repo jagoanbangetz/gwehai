@@ -82,7 +82,7 @@ export default function SidebarHeader({
         </button>
         <button className="nav-item" onClick={onShowHacktivity} title="Hacktivity" data-tour="hacktivity-button">
           <span className="nav-icon">
-            <i className="fa-solid fa-chart-mixed" />
+            <i className="fa-solid fa-chart-simple" />
           </span>
           <span className="nav-text">Hacktivity</span>
         </button>

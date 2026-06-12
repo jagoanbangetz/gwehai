@@ -31,8 +31,8 @@ export const LOG_PHASE_ORDER: LogPhase[] = [
 
 /** Header label for each phase */
 export const LOG_PHASE_HEADER: Record<LogPhase, string> = {
-  THINKING: '[GWEHAI ▸ THINKING]',
-  EXECUTION: '[GWEHAI ▸ EXECUTION]',
-  MODULE_LOADER: '[GWEHAI ▸ MODULE LOADER]',
-  REASONING: '[GWEHAI ▸ REASONING]',
+  THINKING: 'Thinking',
+  EXECUTION: 'Executing',
+  MODULE_LOADER: 'Loading',
+  REASONING: 'Reasoning',
 };

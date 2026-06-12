@@ -1,11 +1,6 @@
 import { useState } from 'react'
 import MarkdownMessage from '../../../components/MarkdownMessage'
 import FollowUpChips from '../../../components/FollowUpChips'
-import ThinkingBar from '../../../components/ThinkingBar'
-import StatusBadge from '../../../components/StatusBadge'
-import ProgressIndicator from '../../../components/ProgressIndicator'
-import type { ProgressState } from '../../../components/ProgressIndicator'
-import { GwehLogRenderer } from '../../../components/GwehLog'
 import { getModelLabel } from '../../../components/ModelPicker'
 import AnsiText from '../../../components/AnsiText'
 import type { Message } from '../types'
@@ -23,6 +18,7 @@ interface ChatMessagesProps {
   onSendWithText: (text: string) => void
   showToast: (msg: string, type?: 'success' | 'error' | 'info' | 'warning') => void
   onStop?: () => void
+  isResuming?: boolean
   disabled?: boolean
 }
 
@@ -51,12 +47,13 @@ export default function ChatMessages({
   isSimpleConversation,
   messageToolsSnapshot,
   currentStep,
-  activityLog,
-  logEvents,
-  pentestChecklistProgress,
+  activityLog: _activityLog_unused,
+  logEvents: _logEvents,
+  pentestChecklistProgress: _pentestChecklistProgress,
   onSendWithText,
   showToast: _showToast,
-  onStop,
+  onStop: _onStop,
+  isResuming,
   disabled,
 }: ChatMessagesProps) {
   // Track which tool bubbles are collapsed
@@ -73,18 +70,6 @@ export default function ChatMessages({
   }
 
   // Derive progress state for ProgressIndicator
-  const lastMsg = messages[messages.length - 1]
-  const isStreaming = lastMsg?.role === 'assistant' && lastMsg.isStreaming && !lastMsg.done
-  const progressState: ProgressState = (() => {
-    if (!isLoading && !isStreaming) return 'idle'
-    if (lastMsg?.eventType === 'error') return 'error'
-    if (isStreaming) {
-      if (lastMsg?.eventType === 'thinking' || lastMsg?.eventType === 'planning') return 'thinking'
-      return 'generating'
-    }
-    if (lastMsg?.done) return 'done'
-    return 'thinking'
-  })()
 
   if (messages.length === 0) {
     return (
@@ -97,18 +82,28 @@ export default function ChatMessages({
 
   return (
     <div className="chat-messages">
-      {/* Progress indicator */}
-      <ProgressIndicator
-        state={progressState}
-        currentStep={currentStep}
-        activityLog={activityLog}
-        onStop={onStop}
-      />
+      {/* Resume indicator when reconnecting to a running pentest */}
+      {isResuming && (
+        <div className="chat-message chat-message--assistant chat-message--streaming">
+          <div className="chat-message__avatar">
+            <span className="chat-message__avatar-icon">G</span>
+          </div>
+          <div className="chat-message__content">
+            <div className="chat-agent-indicator">
+              <span className="chat-agent-indicator-icon">&#9881;</span>
+              <span className="chat-agent-indicator-text">Resuming pentest</span>
+              <span className="chat-agent-indicator-dots">
+                <span /><span /><span />
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
       {messages
         .filter((message) => {
           if (message.role === 'user') return true
           if (message.role === 'assistant' && (message.eventType === 'planning' || message.eventType === 'thinking' || message.eventType === 'content' || message.eventType === 'executing' || message.eventType === 'planning-next')) {
-            return true
+            const c2 = String(message.content || "").trim(); const t2 = String(message.thinking || "").trim().length > 0; if (!c2 && !t2 && !message.isStreaming) return false; return true
           }
           const content = String(message.content || '').trim()
           const hasThinking = String(message.thinking || '').trim().length > 0
@@ -123,8 +118,6 @@ export default function ChatMessages({
         .map((message) => {
           const isUser = message.role === 'user'
           const isAssistant = message.role === 'assistant'
-          const toolIds = messageToolsSnapshot[message.id] || []
-          const hasTools = toolIds.length > 0
 
           // Determine status for badge
           let badgeStatus: 'streaming' | 'done' | 'error' | 'stopped' | 'thinking' | null = null
@@ -153,11 +146,6 @@ export default function ChatMessages({
               </div>
 
               <div className="chat-message__content">
-                {/* Status badge for assistant messages */}
-                {isAssistant && badgeStatus && (
-                  <StatusBadge status={badgeStatus} modelKey={message.modelKey} />
-                )}
-
                 {/* Model label */}
                 {isAssistant && message.modelKey && message.modelKey !== 'auto' && !badgeStatus && (
                   <div className="assistant-model-label">
@@ -208,68 +196,16 @@ export default function ChatMessages({
                   </div>
                 )}
 
-                {/* ThinkingBar (for agent mode) */}
-                {isAssistant && !isSimpleConversation && (message.isStreaming || currentStep || activityLog.length > 0) && (
-                  <ThinkingBar
-                    currentStep={currentStep}
-                    steps={activityLog}
-                    isStreaming={message.isStreaming}
-                    checklistProgress={pentestChecklistProgress}
-                  />
+                {/* Agent mode progress indicator */}
+                {isAssistant && !isSimpleConversation && message.isStreaming && !message.done && !message.content && currentStep && (
+                  <div className="chat-agent-indicator">
+                    <span className="chat-agent-indicator-icon">&#9881;</span>
+                    <span className="chat-agent-indicator-text">{currentStep}</span>
+                    <span className="chat-agent-indicator-dots">
+                      <span /><span /><span />
+                    </span>
+                  </div>
                 )}
-
-                {/* GwehLog events */}
-                {isAssistant && logEvents.length > 0 && message.isStreaming && (
-                  <GwehLogRenderer events={logEvents} />
-                )}
-
-                {/* ── Tool Output Bubbles (V4: clean chat style, NO terminal blocks) ── */}
-                {isAssistant && hasTools && toolIds.map((toolId: string) => {
-                  const tool = (window as any).__gwehai_tools?.[toolId]
-                  if (!tool) return null
-                  const isRunning = tool.status === 'running'
-                  const isCollapsed = collapsedTools[toolId]
-
-                  return (
-                    <div
-                      key={toolId}
-                      className={`tool-bubble tool-bubble--${toolStatusMod(tool.status)}`}
-                    >
-                      <button
-                        type="button"
-                        className="tool-bubble__header"
-                        onClick={() => toggleTool(toolId)}
-                        aria-expanded={!isCollapsed}
-                      >
-                        <span className="tool-bubble__status-icon">
-                          {toolStatusIcon(tool.status)}
-                        </span>
-                        <span className="tool-bubble__tool-name">{tool.name}</span>
-                        {tool.reasoning && (
-                          <span className="tool-bubble__reasoning">{tool.reasoning}</span>
-                        )}
-                        <span className="tool-bubble__chevron">
-                          <i className={`fa-solid fa-chevron-${isCollapsed ? 'down' : 'up'}`} />
-                        </span>
-                      </button>
-                      {!isCollapsed && tool.logs.length > 0 && (
-                        <div className="tool-bubble__body">
-                          {tool.logs.map((line: string, idx: number) => (
-                            <div key={idx} className="tool-bubble__line">
-                              <AnsiText text={line} />
-                            </div>
-                          ))}
-                          {isRunning && <span className="tool-bubble__cursor" />}
-                        </div>
-                      )}
-                      {!isCollapsed && isRunning && tool.logs.length === 0 && (
-                        <div className="tool-bubble__body">
-                          <span className="tool-bubble__cursor" />
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
 
                 {/* Main content */}
                 {isAssistant && message.content ? (
