@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import apiClient from '../../utils/api'
 import './Admin.css'
 
@@ -29,6 +29,7 @@ const GROUP_CONFIG: Record<string, { icon: string; color: string; description: s
   security: { icon: 'fa-shield-halved',   color: 'oklch(0.55 0.14 25)',   description: 'Encryption, secrets & access control' },
   auth:     { icon: 'fa-key',             color: 'oklch(0.6 0.14 60)',    description: 'Authentication & OAuth providers' },
   general:  { icon: 'fa-sliders',         color: 'oklch(0.6 0.04 60)',    description: 'General application settings' },
+  branding: { icon: 'fa-palette',         color: 'oklch(0.65 0.12 300)',  description: 'Logo, favicon & visual identity' },
 }
 
 /* ── Field descriptions ── */
@@ -59,6 +60,8 @@ const FIELD_DESCRIPTIONS: Record<string, string> = {
   APP_NAME:                 'Application display name.',
   SESSION_DRIVER:           'Session storage driver: file, redis, database.',
   CACHE_DRIVER:             'Cache backend: file, redis, memcached.',
+  site_logo_url:            'Brand logo displayed in the app header and reports.',
+  site_favicon_url:         'Browser tab icon (favicon). ICO, PNG, or SVG.',
 }
 
 /* ── Boolean field detection ── */
@@ -105,6 +108,159 @@ function ToggleSwitch({
     >
       <span className="settings-toggle-knob" />
     </button>
+  )
+}
+
+/* ── Branding Upload Field ── */
+function BrandingUploadField({
+  type,
+  label,
+  description,
+  currentUrl,
+  onUploaded,
+  showToast,
+}: {
+  type: 'logo' | 'favicon'
+  label: string
+  description?: string
+  currentUrl: string
+  onUploaded: (url: string) => void
+  showToast: (kind: 'success' | 'error', msg: string) => void
+}) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [preview, setPreview] = useState<string | null>(currentUrl || null)
+  const [uploading, setUploading] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+
+  useEffect(() => {
+    setPreview(currentUrl || null)
+  }, [currentUrl])
+
+  const ACCEPT = ['image/png', 'image/jpeg', 'image/jpg', 'image/svg+xml', 'image/x-icon', 'image/vnd.microsoft.icon']
+  const MAX_SIZE = 2 * 1024 * 1024
+
+  const handleFile = async (file: File) => {
+    if (!ACCEPT.includes(file.type) && !file.name.match(/\.(png|jpe?g|svg|ico)$/i)) {
+      showToast('error', 'Invalid format. Allowed: PNG, JPG, SVG, ICO')
+      return
+    }
+    if (file.size > MAX_SIZE) {
+      showToast('error', `File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max: 2MB`)
+      return
+    }
+
+    // Preview
+    const reader = new FileReader()
+    reader.onload = () => setPreview(reader.result as string)
+    reader.readAsDataURL(file)
+
+    // Upload
+    setUploading(true)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      form.append('type', type)
+      const res = await apiClient.post('/admin/settings/upload', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      const url = res.data?.url
+      onUploaded(url)
+      showToast('success', `${type === 'logo' ? 'Logo' : 'Favicon'} updated`)
+
+      // Update favicon in <head>
+      if (type === 'favicon' && url) {
+        let link = document.querySelector("link[rel*='icon']") as HTMLLinkElement | null
+        if (!link) {
+          link = document.createElement('link')
+          link.rel = 'icon'
+          document.head.appendChild(link)
+        }
+        link.href = url
+      }
+    } catch (e: any) {
+      showToast('error', e?.response?.data?.message || e?.message || 'Upload failed')
+      setPreview(currentUrl || null)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) handleFile(file)
+  }
+
+  const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) handleFile(file)
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  return (
+    <div className="branding-upload-field">
+      <div className="branding-field-header">
+        <span className="branding-field-label">{label}</span>
+        {description && <span className="branding-field-desc">{description}</span>}
+      </div>
+
+      <div
+        className={`branding-dropzone ${dragOver ? 'drag-over' : ''} ${uploading ? 'uploading' : ''}`}
+        onClick={() => fileRef.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={onDrop}
+      >
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".png,.jpg,.jpeg,.svg,.ico,image/png,image/jpeg,image/svg+xml,image/x-icon"
+          onChange={onInputChange}
+          hidden
+        />
+
+        {uploading ? (
+          <div className="branding-dropzone-loading">
+            <i className="fa-solid fa-spinner fa-spin" />
+            <span>Uploading…</span>
+          </div>
+        ) : preview ? (
+          <div className="branding-preview-wrap">
+            <img src={preview} alt={label} className="branding-preview-img" />
+            <div className="branding-preview-overlay">
+              <i className="fa-solid fa-cloud-arrow-up" />
+              <span>Click or drop to replace</span>
+            </div>
+          </div>
+        ) : (
+          <div className="branding-dropzone-empty">
+            <i className="fa-solid fa-cloud-arrow-up" />
+            <span>Click or drag &amp; drop</span>
+            <span className="branding-dropzone-hint">PNG, JPG, SVG, ICO — max 2MB</span>
+          </div>
+        )}
+      </div>
+
+      {preview && (
+        <button
+          type="button"
+          className="branding-remove-btn"
+          onClick={(e) => {
+            e.stopPropagation()
+            setPreview(null)
+            onUploaded('')
+            showToast('success', `${type === 'logo' ? 'Logo' : 'Favicon'} removed`)
+            if (type === 'favicon') {
+              const link = document.querySelector("link[rel*='icon']") as HTMLLinkElement | null
+              if (link) link.href = '/favicon.ico'
+            }
+          }}
+        >
+          <i className="fa-solid fa-trash" /> Remove
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -245,7 +401,7 @@ export default function AdminSettings() {
   }
 
   /* ── Group order ── */
-  const GROUP_ORDER = ['ai', 'payment', 'email', 'security', 'auth', 'general']
+  const GROUP_ORDER = ['ai', 'payment', 'email', 'security', 'auth', 'general', 'branding']
 
   /* Stats */
   const stats = useMemo(() => {
@@ -402,93 +558,138 @@ export default function AdminSettings() {
               {/* Card body */}
               {!isCollapsed && (
                 <div className="settings-group-body">
-                  {group.fields.map((fieldKey) => {
-                    const meta = data.settings[fieldKey]
-                    if (!meta) return null
-                    const val = getDisplayValue(fieldKey, meta)
-                    const fieldVisible = visible.has(fieldKey)
-                    const dirtyField = isDirty(fieldKey)
-                    const boolField = isBooleanField(fieldKey, meta)
-                    const description = FIELD_DESCRIPTIONS[fieldKey]
+                  {groupKey === 'branding' ? (
+                    <div className="branding-grid">
+                      <BrandingUploadField
+                        type="logo"
+                        label="Site Logo"
+                        description="Displayed in the app header and reports"
+                        currentUrl={data.settings['site_logo_url']?.value || ''}
+                        onUploaded={(url) => {
+                          setData((prev) => {
+                            if (!prev) return prev
+                            return {
+                              ...prev,
+                              settings: {
+                                ...prev.settings,
+                                site_logo_url: { ...prev.settings['site_logo_url'], value: url, hasValue: !!url, source: 'db' },
+                              },
+                            }
+                          })
+                        }}
+                        showToast={showToast}
+                      />
+                      <BrandingUploadField
+                        type="favicon"
+                        label="Favicon"
+                        description="Browser tab icon (ICO, PNG, or SVG)"
+                        currentUrl={data.settings['site_favicon_url']?.value || ''}
+                        onUploaded={(url) => {
+                          setData((prev) => {
+                            if (!prev) return prev
+                            return {
+                              ...prev,
+                              settings: {
+                                ...prev.settings,
+                                site_favicon_url: { ...prev.settings['site_favicon_url'], value: url, hasValue: !!url, source: 'db' },
+                              },
+                            }
+                          })
+                        }}
+                        showToast={showToast}
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      {group.fields.map((fieldKey) => {
+                        const meta = data.settings[fieldKey]
+                        if (!meta) return null
+                        const val = getDisplayValue(fieldKey, meta)
+                        const fieldVisible = visible.has(fieldKey)
+                        const dirtyField = isDirty(fieldKey)
+                        const boolField = isBooleanField(fieldKey, meta)
+                        const description = FIELD_DESCRIPTIONS[fieldKey]
 
-                    return (
-                      <div
-                        key={fieldKey}
-                        className={`settings-field${dirtyField ? ' dirty' : ''}${boolField ? ' boolean-field' : ''}`}
-                      >
-                        {/* Field label row */}
-                        <div className="settings-field-header">
-                          <div className="settings-field-label-group">
-                            <label className="settings-field-label" htmlFor={`setting-${fieldKey}`}>
-                              {meta.label || fieldKey}
-                            </label>
-                            <span className={`settings-source-badge source-${meta.source}`}>
-                              {meta.source === 'db' ? (
-                                <><i className="fa-solid fa-database" /> DB</>
-                              ) : (
-                                <><i className="fa-solid fa-terminal" /> ENV</>
-                              )}
-                            </span>
-                          </div>
-                          <div className="settings-field-status">
-                            {dirtyField ? (
-                              <span className="settings-status-modified">
-                                <i className="fa-solid fa-pen" /> Modified
-                              </span>
-                            ) : meta.hasValue ? (
-                              <span className="settings-status-saved">
-                                <i className="fa-solid fa-check" /> Saved
-                              </span>
+                        return (
+                          <div
+                            key={fieldKey}
+                            className={`settings-field${dirtyField ? ' dirty' : ''}${boolField ? ' boolean-field' : ''}`}
+                          >
+                            {/* Field label row */}
+                            <div className="settings-field-header">
+                              <div className="settings-field-label-group">
+                                <label className="settings-field-label" htmlFor={`setting-${fieldKey}`}>
+                                  {meta.label || fieldKey}
+                                </label>
+                                <span className={`settings-source-badge source-${meta.source}`}>
+                                  {meta.source === 'db' ? (
+                                    <><i className="fa-solid fa-database" /> DB</>
+                                  ) : (
+                                    <><i className="fa-solid fa-terminal" /> ENV</>
+                                  )}
+                                </span>
+                              </div>
+                              <div className="settings-field-status">
+                                {dirtyField ? (
+                                  <span className="settings-status-modified">
+                                    <i className="fa-solid fa-pen" /> Modified
+                                  </span>
+                                ) : meta.hasValue ? (
+                                  <span className="settings-status-saved">
+                                    <i className="fa-solid fa-check" /> Saved
+                                  </span>
+                                ) : (
+                                  <span className="settings-status-empty">
+                                    <i className="fa-solid fa-minus" /> Not set
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Description */}
+                            {description && (
+                              <p className="settings-field-description">{description}</p>
+                            )}
+
+                            {/* Input area */}
+                            {boolField ? (
+                              <div className="settings-bool-row">
+                                <ToggleSwitch
+                                  checked={val.toLowerCase() === 'true'}
+                                  onChange={(v) => handleChange(fieldKey, v)}
+                                />
+                                <span className="settings-bool-label">
+                                  {val.toLowerCase() === 'true' ? 'Enabled' : 'Disabled'}
+                                </span>
+                              </div>
                             ) : (
-                              <span className="settings-status-empty">
-                                <i className="fa-solid fa-minus" /> Not set
-                              </span>
+                              <div className="settings-input-wrap">
+                                <input
+                                  id={`setting-${fieldKey}`}
+                                  type={fieldVisible ? 'text' : 'password'}
+                                  className="settings-input"
+                                  value={val}
+                                  placeholder={meta.hasValue ? meta.value : 'Not set — enter value…'}
+                                  onChange={(e) => handleChange(fieldKey, e.target.value)}
+                                  autoComplete="off"
+                                  spellCheck={false}
+                                />
+                                <button
+                                  type="button"
+                                  className="settings-eye-btn"
+                                  onClick={() => toggleVisible(fieldKey)}
+                                  title={fieldVisible ? 'Hide value' : 'Show value'}
+                                  aria-label={fieldVisible ? 'Hide value' : 'Show value'}
+                                >
+                                  <i className={`fa-solid ${fieldVisible ? 'fa-eye-slash' : 'fa-eye'}`} />
+                                </button>
+                              </div>
                             )}
                           </div>
-                        </div>
-
-                        {/* Description */}
-                        {description && (
-                          <p className="settings-field-description">{description}</p>
-                        )}
-
-                        {/* Input area */}
-                        {boolField ? (
-                          <div className="settings-bool-row">
-                            <ToggleSwitch
-                              checked={val.toLowerCase() === 'true'}
-                              onChange={(v) => handleChange(fieldKey, v)}
-                            />
-                            <span className="settings-bool-label">
-                              {val.toLowerCase() === 'true' ? 'Enabled' : 'Disabled'}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="settings-input-wrap">
-                            <input
-                              id={`setting-${fieldKey}`}
-                              type={fieldVisible ? 'text' : 'password'}
-                              className="settings-input"
-                              value={val}
-                              placeholder={meta.hasValue ? meta.value : 'Not set — enter value…'}
-                              onChange={(e) => handleChange(fieldKey, e.target.value)}
-                              autoComplete="off"
-                              spellCheck={false}
-                            />
-                            <button
-                              type="button"
-                              className="settings-eye-btn"
-                              onClick={() => toggleVisible(fieldKey)}
-                              title={fieldVisible ? 'Hide value' : 'Show value'}
-                              aria-label={fieldVisible ? 'Hide value' : 'Show value'}
-                            >
-                              <i className={`fa-solid ${fieldVisible ? 'fa-eye-slash' : 'fa-eye'}`} />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
+                        )
+                      })}
+                    </>
+                  )}
                 </div>
               )}
             </div>

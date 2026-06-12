@@ -1738,6 +1738,161 @@
   font-family: var(--font-mono);
 }
 
+/* ── Branding Upload ── */
+.branding-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.branding-upload-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.branding-field-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.branding-field-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: oklch(0.92 0.003 60);
+}
+
+.branding-field-desc {
+  font-size: 0.78rem;
+  color: oklch(0.55 0.005 60);
+}
+
+.branding-dropzone {
+  position: relative;
+  border: 2px dashed oklch(0.3 0.006 60 / 0.5);
+  border-radius: 10px;
+  min-height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  overflow: hidden;
+  background: oklch(0.11 0.003 60 / 0.5);
+}
+
+.branding-dropzone:hover {
+  border-color: oklch(0.55 0.12 280 / 0.5);
+  background: oklch(0.13 0.005 60 / 0.5);
+}
+
+.branding-dropzone.drag-over {
+  border-color: oklch(0.65 0.15 280);
+  background: oklch(0.15 0.01 280 / 0.15);
+  border-style: solid;
+}
+
+.branding-dropzone.uploading {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.branding-dropzone-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  color: oklch(0.67 0.005 60);
+  font-size: 0.9rem;
+}
+
+.branding-dropzone-loading i {
+  font-size: 1.5rem;
+  color: oklch(0.55 0.12 280);
+}
+
+.branding-dropzone-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  color: oklch(0.55 0.005 60);
+  font-size: 0.88rem;
+  padding: 1.5rem;
+}
+
+.branding-dropzone-empty i {
+  font-size: 1.8rem;
+  opacity: 0.6;
+}
+
+.branding-dropzone-hint {
+  font-size: 0.72rem;
+  opacity: 0.6;
+}
+
+.branding-preview-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.branding-preview-img {
+  max-width: 100%;
+  max-height: 130px;
+  object-fit: contain;
+  padding: 0.75rem;
+  border-radius: 8px;
+}
+
+.branding-preview-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  background: oklch(0.08 0 0 / 0.75);
+  opacity: 0;
+  transition: opacity 0.2s;
+  font-size: 0.82rem;
+  color: oklch(0.9 0 0);
+}
+
+.branding-preview-wrap:hover .branding-preview-overlay {
+  opacity: 1;
+}
+
+.branding-preview-overlay i {
+  font-size: 1.4rem;
+}
+
+.branding-remove-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: transparent;
+  border: 1px solid oklch(0.35 0.08 25 / 0.4);
+  color: oklch(0.65 0.1 25);
+  font-size: 0.78rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  align-self: flex-start;
+}
+
+.branding-remove-btn:hover {
+  background: oklch(0.25 0.06 25 / 0.15);
+  color: oklch(0.75 0.12 25);
+}
+
 @media (max-width: 768px) {
   .admin-layout {
     flex-direction: column;
@@ -1787,6 +1942,10 @@
   }
 
   .admin-guardrails-plans-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .branding-grid {
     grid-template-columns: 1fr;
   }
 }
