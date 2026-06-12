@@ -3816,6 +3816,93 @@
   color: oklch(0.65 0.1 145);
 }
 
+/* Live Feed */
+.cp-live-feed {
+  margin: 0.75rem 0;
+  border: 1px solid oklch(0.3 0.02 260);
+  border-radius: 8px;
+  overflow: hidden;
+  background: oklch(0.14 0.01 260);
+}
+
+.cp-live-feed-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: oklch(0.7 0.08 250);
+  background: oklch(0.16 0.02 260);
+  border-bottom: 1px solid oklch(0.25 0.02 260);
+}
+
+.cp-live-feed-header i {
+  font-size: 0.75rem;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.cp-live-feed-list {
+  max-height: 250px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.3 0.02 260) transparent;
+}
+
+.cp-feed-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  border-bottom: 1px solid oklch(0.18 0.01 260);
+  transition: background 0.15s;
+}
+
+.cp-feed-row:nth-child(even) {
+  background: oklch(0.155 0.01 260);
+}
+
+.cp-feed-row:last-child {
+  border-bottom: none;
+}
+
+.cp-feed-icon {
+  flex-shrink: 0;
+  width: 1rem;
+  text-align: center;
+  font-size: 0.7rem;
+}
+
+.cp-feed-time {
+  flex-shrink: 0;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.72rem;
+  color: oklch(0.5 0.02 260);
+  min-width: 5.5rem;
+}
+
+.cp-feed-msg {
+  flex: 1;
+  color: oklch(0.75 0.02 260);
+  word-break: break-word;
+}
+
+/* Color-coded severity */
+.cp-feed-row.ev-info .cp-feed-icon { color: oklch(0.65 0.15 250); }
+.cp-feed-row.ev-finding .cp-feed-icon { color: oklch(0.65 0.2 25); }
+.cp-feed-row.ev-finding .cp-feed-msg { color: oklch(0.8 0.15 25); }
+.cp-feed-row.ev-error .cp-feed-icon { color: oklch(0.65 0.2 25); }
+.cp-feed-row.ev-error .cp-feed-msg { color: oklch(0.75 0.12 25); }
+.cp-feed-row.ev-done .cp-feed-icon { color: oklch(0.7 0.15 145); }
+.cp-feed-row.ev-warning .cp-feed-icon { color: oklch(0.75 0.15 80); }
+
 /* actions */
 .cp-actions {
   display: flex;
