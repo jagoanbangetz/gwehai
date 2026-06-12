@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { HacktivityRow, HacktivityConversationRow } from '../types'
 import { formatReportTime } from '../utils'
 
@@ -102,6 +103,15 @@ export default function HacktivityModal({
   onClose,
 }: Props) {
   const totalPages = Math.max(1, Math.ceil(hacktivityTotal / hacktivityPageSize))
+  const [hideErrors, setHideErrors] = useState(false)
+
+  /* Detect error entries: result is null / empty / whitespace-only */
+  function isError(row: HacktivityRow): boolean {
+    return !row.result || row.result.trim().length === 0
+  }
+
+  /* Filtered list for display */
+  const displayList = hideErrors ? hacktivityList.filter((r) => !isError(r)) : hacktivityList
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -220,7 +230,26 @@ export default function HacktivityModal({
                   <h3 className="hacktivity-section-title">
                     <i className="fa-solid fa-clipboard-check" /> Result
                   </h3>
-                  <pre className="hacktivity-pre hacktivity-result">{formatResult(String(selectedHacktivity.result))}</pre>
+                  {(() => {
+                    const resultStr = formatResult(String(selectedHacktivity.result))
+                    const isLong = resultStr.length > 200
+                    return isLong ? (
+                      <details className="hacktivity-result-details">
+                        <summary className="hacktivity-result-summary">
+                          <span className="hacktivity-result-preview">{resultStr.slice(0, 200)}…</span>
+                          <span className="hacktivity-result-toggle hacktivity-result-expand">
+                            <i className="fa-solid fa-chevron-down" /> Expand
+                          </span>
+                          <span className="hacktivity-result-toggle hacktivity-result-collapse">
+                            <i className="fa-solid fa-chevron-up" /> Collapse
+                          </span>
+                        </summary>
+                        <pre className="hacktivity-pre hacktivity-result">{resultStr}</pre>
+                      </details>
+                    ) : (
+                      <pre className="hacktivity-pre hacktivity-result">{resultStr}</pre>
+                    )
+                  })()}
                 </section>
               )}
             </div>
@@ -239,25 +268,35 @@ export default function HacktivityModal({
 
               {/* Filter + toolbar */}
               <div className="hacktivity-toolbar">
-                <label className="hacktivity-filter">
-                  <i className="fa-solid fa-filter" />
-                  <select
-                    value={selectedHacktivityConversationId ?? ''}
-                    onChange={(e) => {
-                      const id = e.target.value || null
-                      onSelectConversation(id)
-                      onPageChange(1)
-                      onLoadHacktivity(1, id)
-                    }}
+                <div className="hacktivity-toolbar-left">
+                  <label className="hacktivity-filter">
+                    <i className="fa-solid fa-filter" />
+                    <select
+                      value={selectedHacktivityConversationId ?? ''}
+                      onChange={(e) => {
+                        const id = e.target.value || null
+                        onSelectConversation(id)
+                        onPageChange(1)
+                        onLoadHacktivity(1, id)
+                      }}
+                    >
+                      <option value="">All conversations</option>
+                      {hacktivityConversations.map((c) => (
+                        <option key={c.conversationId} value={c.conversationId}>
+                          {trunc(c.title || c.conversationId, 30)} ({c.count})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    className={`hacktivity-hide-errors${hideErrors ? ' hacktivity-hide-errors--active' : ''}`}
+                    onClick={() => setHideErrors((v) => !v)}
+                    title={hideErrors ? 'Show error entries' : 'Hide error entries'}
                   >
-                    <option value="">All conversations</option>
-                    {hacktivityConversations.map((c) => (
-                      <option key={c.conversationId} value={c.conversationId}>
-                        {trunc(c.title || c.conversationId, 30)} ({c.count})
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    <i className={hideErrors ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye'} />
+                    {hideErrors ? 'Errors hidden' : 'Hide errors'}
+                  </button>
+                </div>
                 <span className="hacktivity-count">{hacktivityTotal} actions</span>
               </div>
 
@@ -274,12 +313,13 @@ export default function HacktivityModal({
                     <span>Run a pentest to see AI actions appear here in real-time</span>
                   </div>
                 ) : (
-                  hacktivityList.map((row) => {
+                  displayList.map((row) => {
                     const { icon, color } = getIcon(row.toolArgs)
+                    const error = isError(row)
                     return (
                       <div
                         key={row.id}
-                        className="hacktivity-card"
+                        className={`hacktivity-card${error ? ' hacktivity-card--error' : ''}`}
                         onClick={() => { onSelectHacktivityId(row.id); onSelectHacktivity(row) }}
                       >
                         <div className="hacktivity-card-icon" style={{ background: color + '99', color: 'white', fontSize: '1.1rem' }}>
@@ -287,7 +327,14 @@ export default function HacktivityModal({
                         </div>
                         <div className="hacktivity-card-body">
                           <div className="hacktivity-card-top">
-                            <span className="hacktivity-card-action">{getActionLabel(row.toolArgs)}</span>
+                            <span className="hacktivity-card-action">
+                              {getActionLabel(row.toolArgs)}
+                              {error && (
+                                <span className="hacktivity-error-badge">
+                                  <i className="fa-solid fa-circle-exclamation" /> ERROR
+                                </span>
+                              )}
+                            </span>
                             <span className="hacktivity-card-time">{formatReportTime(row.createdAt)}</span>
                           </div>
                           <div className="hacktivity-card-bottom">
