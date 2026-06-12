@@ -112,10 +112,51 @@ export function useDashboardData(showToast: (msg: string, type?: 'success' | 'er
   }, [])
 
   const getHacktivityActionLabel = useCallback((toolArgs: Record<string, unknown> | null): string => {
-    if (!toolArgs || typeof toolArgs !== 'object') return '—'
-    const name = (toolArgs.name ?? toolArgs.tool ?? toolArgs.command ?? toolArgs.path) as string | undefined
-    if (name && typeof name === 'string') { const s = name.trim(); return s.length > 30 ? s.slice(0, 30) + '…' : s }
-    return Object.keys(toolArgs)[0] || '—'
+    if (!toolArgs || typeof toolArgs !== 'object') return 'Unknown action'
+    const name = (toolArgs.name ?? toolArgs.tool) as string | undefined
+    const cmd = (toolArgs.command ?? toolArgs.path ?? '') as string
+    const key = (name ?? cmd).trim().toLowerCase()
+
+    const LABELS: Record<string, string> = {
+      nuclei: 'Scanning for vulnerabilities with Nuclei',
+      nikto: 'Running Nikto web scanner',
+      nmap: 'Running network scan with Nmap',
+      masscan: 'Scanning ports with Masscan',
+      subfinder: 'Discovering subdomains',
+      sqlmap: 'Testing for SQL injection',
+      metasploit: 'Running Metasploit exploit',
+      xss: 'Testing for XSS vulnerabilities',
+      sqli: 'Testing for SQL injection',
+      rce: 'Testing for remote code execution',
+      hydra: 'Brute-forcing credentials with Hydra',
+      john: 'Cracking passwords with John the Ripper',
+      ffuf: 'Fuzzing directories with ffuf',
+      gobuster: 'Enumerating directories with Gobuster',
+      attack_chain: 'Executing attack chain',
+      craft_payload: 'Crafting attack payload',
+      jwt_analyze: 'Analyzing JWT token',
+      report_finding: 'Reporting security finding',
+      re_verify_findings: 'Re-verifying findings',
+      memory_search: 'Searching agent memory',
+      exec: 'Running terminal command',
+      write_file: 'Writing file to disk',
+      sessions_spawn: 'Spawning agent session',
+      sessions_send: 'Sending message to agent',
+      browser_action: 'Browsing the web',
+      read_file: 'Reading file',
+      web_search: 'Searching the web',
+      file_edit: 'Editing file',
+    }
+
+    if (LABELS[key]) return LABELS[key]
+
+    // For exec with a command, show the command
+    if (name === 'exec' && typeof toolArgs.command === 'string') {
+      const c = toolArgs.command.trim()
+      return c.length > 50 ? 'Running: ' + c.slice(0, 50) + '…' : 'Running: ' + c
+    }
+    if (name && typeof name === 'string') { const s = name.trim(); return s.length > 40 ? s.slice(0, 40) + '…' : s }
+    return Object.keys(toolArgs)[0] || 'Unknown action'
   }, [])
 
   // ─── Plan ───

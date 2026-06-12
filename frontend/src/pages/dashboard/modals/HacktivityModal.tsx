@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import type { HacktivityRow, HacktivityConversationRow } from '../types'
 import { formatReportTime } from '../utils'
 
@@ -52,16 +52,82 @@ function trunc(str: string, max: number): string {
   return str.length > max ? str.slice(0, max) + '…' : str
 }
 
-/* ── Result formatter ── */
-function formatResult(result: string): string {
-  // Try to pretty-print JSON
+/* ── Smart result preview ── */
+function resultPreview(result: string): string {
   const trimmed = result.trim()
+  if (!trimmed) return ''
+
+  // HTML → summarize
+  if (trimmed.startsWith('<') || /<[a-z][\s>]/i.test(trimmed.slice(0, 100))) {
+    const tags = trimmed.match(/<\/?([a-zA-Z][a-zA-Z0-9]*)/g)
+    const unique = [...new Set((tags || []).map(t => t.replace(/<\/?/, '')))].slice(0, 5)
+    return `HTML content (${unique.join(', ')}${(tags || []).length > 5 ? '…' : ''})`
+  }
+
+  // JSON → summarize
   if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
     try {
-      return JSON.stringify(JSON.parse(trimmed), null, 2)
-    } catch { /* not valid JSON, return as-is */ }
+      const parsed = JSON.parse(trimmed)
+      if (Array.isArray(parsed)) return `JSON array with ${parsed.length} items`
+      const keys = Object.keys(parsed)
+      return `JSON object (${keys.slice(0, 3).join(', ')}${keys.length > 3 ? '…' : ''})`
+    } catch { /* not valid JSON */ }
   }
-  return result
+
+  // Plain text → first line or trunc
+  const firstLine = trimmed.split('\n')[0]
+  return firstLine.length > 80 ? firstLine.slice(0, 80) + '…' : firstLine
+}
+
+/* ── Human-friendly result renderer ── */
+function SmartResult({ result }: { result: string }) {
+  const trimmed = result.trim()
+
+  // JSON → pretty table-like list
+  if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+    try {
+      const parsed = JSON.parse(trimmed)
+      if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'object') {
+        return (
+          <div className="hacktivity-result-table-wrap">
+            <table className="hacktivity-result-table">
+              <thead>
+                <tr>{Object.keys(parsed[0]).map(k => <th key={k}>{k}</th>)}</tr>
+              </thead>
+              <tbody>
+                {parsed.slice(0, 20).map((row, i) => (
+                  <tr key={i}>{Object.values(row).map((v, j) => <td key={j}>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</td>)}</tr>
+                ))}
+              </tbody>
+            </table>
+            {parsed.length > 20 && <div className="hacktivity-result-more">…and {parsed.length - 20} more rows</div>}
+          </div>
+        )
+      }
+      // Simple JSON → pretty print
+      return <pre className="hacktivity-pre hacktivity-result">{JSON.stringify(parsed, null, 2)}</pre>
+    } catch { /* fall through */ }
+  }
+
+  // HTML → summary
+  if (trimmed.startsWith('<') || /<[a-z][\s>]/i.test(trimmed.slice(0, 100))) {
+    const textContent = trimmed.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+    const tags = trimmed.match(/<\/?([a-zA-Z][a-zA-Z0-9]*)/g)
+    const unique = [...new Set((tags || []).map(t => t.replace(/<\/?/, '')))].slice(0, 8)
+    return (
+      <div className="hacktivity-result-html-summary">
+        <div className="hacktivity-result-html-tags">
+          <i className="fa-solid fa-code" /> Contains: {unique.join(', ')}
+        </div>
+        {textContent.length > 0 && (
+          <pre className="hacktivity-pre hacktivity-result">{trunc(textContent, 500)}</pre>
+        )}
+      </div>
+    )
+  }
+
+  // Plain text
+  return <pre className="hacktivity-pre hacktivity-result">{trimmed}</pre>
 }
 
 /* ── Props ── */
@@ -104,6 +170,46 @@ export default function HacktivityModal({
 }: Props) {
   const totalPages = Math.max(1, Math.ceil(hacktivityTotal / hacktivityPageSize))
   const [hideErrors, setHideErrors] = useState(false)
+  const [showTechDetails, setShowTechDetails] = useState(false)
+
+  /* ── Search autocomplete state ── */
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searchRef = useRef<HTMLDivElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) setSearchOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  // Filtered conversations for autocomplete
+  const filteredConversations = useMemo(() => {
+    if (!searchQuery.trim()) return hacktivityConversations
+    const q = searchQuery.toLowerCase()
+    return hacktivityConversations.filter(c =>
+      (c.title || c.conversationId).toLowerCase().includes(q)
+    )
+  }, [hacktivityConversations, searchQuery])
+
+  // Selected conversation label
+  const selectedLabel = useMemo(() => {
+    if (!selectedHacktivityConversationId) return ''
+    const c = hacktivityConversations.find(x => x.conversationId === selectedHacktivityConversationId)
+    return c ? (c.title || trunc(c.conversationId, 20)) : trunc(selectedHacktivityConversationId, 20)
+  }, [selectedHacktivityConversationId, hacktivityConversations])
+
+  function selectConversation(id: string | null) {
+    onSelectConversation(id)
+    onPageChange(1)
+    onLoadHacktivity(1, id)
+    setSearchQuery('')
+    setSearchOpen(false)
+  }
 
   /* Detect error entries: result is null / empty / whitespace-only */
   function isError(row: HacktivityRow): boolean {
@@ -129,7 +235,7 @@ export default function HacktivityModal({
           </div>
           <div className="hacktivity-header-right">
             {selectedHacktivity && (
-              <button className="hacktivity-back-btn" onClick={() => { onSelectHacktivityId(null); onSelectHacktivity(null) }}>
+              <button className="hacktivity-back-btn" onClick={() => { onSelectHacktivityId(null); onSelectHacktivity(null); setShowTechDetails(false) }}>
                 <i className="fa-solid fa-arrow-left" /> Back
               </button>
             )}
@@ -144,6 +250,12 @@ export default function HacktivityModal({
           {selectedHacktivity ? (
             /* ═══════ DETAIL VIEW ═══════ */
             <div className="hacktivity-detail">
+              {/* "What happened" summary */}
+              <div className="hacktivity-what-happened">
+                <i className="fa-solid fa-circle-info" style={{ color: '#60a5fa' }} />
+                <span>{getActionLabel(selectedHacktivity.toolArgs)}</span>
+              </div>
+
               {/* Meta cards */}
               <div className="hacktivity-meta-grid">
                 <div className="hacktivity-meta-card">
@@ -165,36 +277,75 @@ export default function HacktivityModal({
                 <div className="hacktivity-meta-card">
                   {(() => { const { icon, color } = getIcon(selectedHacktivity.toolArgs); return <i className={icon} style={{ color }} /> })()}
                   <div>
-                    <span className="hacktivity-meta-label">Action</span>
-                    <span className="hacktivity-meta-value">{getActionLabel(selectedHacktivity.toolArgs)}</span>
+                    <span className="hacktivity-meta-label">Tool</span>
+                    <span className="hacktivity-meta-value">{(() => {
+                      const name = (selectedHacktivity.toolArgs?.name ?? selectedHacktivity.toolArgs?.tool) as string | undefined
+                      return name || '—'
+                    })()}</span>
                   </div>
                 </div>
-                {selectedHacktivity.conversationId && (
-                  <div className="hacktivity-meta-card">
-                    <i className="fa-solid fa-message" />
-                    <div>
-                      <span className="hacktivity-meta-label">Conversation</span>
-                      <code className="hacktivity-meta-code">{trunc(selectedHacktivity.conversationId, 12)}</code>
-                    </div>
-                  </div>
-                )}
               </div>
+
+              {/* Technical details toggle */}
+              <button
+                className="hacktivity-tech-toggle"
+                onClick={() => setShowTechDetails(v => !v)}
+              >
+                <i className={showTechDetails ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-right'} />
+                {showTechDetails ? 'Hide' : 'Show'} technical details
+              </button>
+
+              {showTechDetails && (
+                <div className="hacktivity-tech-details">
+                  {selectedHacktivity.conversationId && (
+                    <div className="hacktivity-tech-row">
+                      <span className="hacktivity-tech-label">Conversation ID</span>
+                      <code className="hacktivity-tech-value">{selectedHacktivity.conversationId}</code>
+                    </div>
+                  )}
+                  {selectedHacktivity.id && (
+                    <div className="hacktivity-tech-row">
+                      <span className="hacktivity-tech-label">Action ID</span>
+                      <code className="hacktivity-tech-value">{selectedHacktivity.id}</code>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Tool arguments */}
               {selectedHacktivity.toolArgs && Object.keys(selectedHacktivity.toolArgs).length > 0 && (
                 <section className="hacktivity-section">
                   <h3 className="hacktivity-section-title">
-                    <i className="fa-solid fa-gears" /> Arguments
+                    <i className="fa-solid fa-gears" /> Parameters
                   </h3>
                   <div className="hacktivity-args-grid">
                     {Object.entries(selectedHacktivity.toolArgs).map(([k, v]) => {
+                      // Skip 'name' and 'tool' keys since they're shown above
+                      if (k === 'name' || k === 'tool') return null
                       const isNested = v !== null && typeof v === 'object'
                       const strVal = isNested ? JSON.stringify(v, null, 2) : String(v ?? '')
                       const isLong = !isNested && strVal.length > 100
 
+                      // Friendly key names
+                      const friendlyKey: Record<string, string> = {
+                        command: 'Command',
+                        target: 'Target',
+                        url: 'URL',
+                        host: 'Host',
+                        port: 'Port',
+                        path: 'File path',
+                        content: 'Content',
+                        message: 'Message',
+                        query: 'Search query',
+                        template: 'Template',
+                        wordlist: 'Wordlist',
+                        threads: 'Threads',
+                        timeout: 'Timeout',
+                      }
+
                       return (
                         <div key={k} className="hacktivity-arg-item">
-                          <code className="hacktivity-arg-key">{k}</code>
+                          <code className="hacktivity-arg-key">{friendlyKey[k] || k}</code>
                           <span className="hacktivity-arg-value">
                             {isNested ? (
                               <details className="hacktivity-arg-details">
@@ -228,15 +379,15 @@ export default function HacktivityModal({
               {selectedHacktivity.result != null && (
                 <section className="hacktivity-section">
                   <h3 className="hacktivity-section-title">
-                    <i className="fa-solid fa-clipboard-check" /> Result
+                    <i className="fa-solid fa-clipboard-check" /> What happened
                   </h3>
                   {(() => {
-                    const resultStr = formatResult(String(selectedHacktivity.result))
-                    const isLong = resultStr.length > 200
+                    const resultStr = String(selectedHacktivity.result).trim()
+                    const isLong = resultStr.length > 300
                     return isLong ? (
                       <details className="hacktivity-result-details">
                         <summary className="hacktivity-result-summary">
-                          <span className="hacktivity-result-preview">{resultStr.slice(0, 200)}…</span>
+                          <span className="hacktivity-result-preview">{resultPreview(resultStr)}</span>
                           <span className="hacktivity-result-toggle hacktivity-result-expand">
                             <i className="fa-solid fa-chevron-down" /> Expand
                           </span>
@@ -244,12 +395,22 @@ export default function HacktivityModal({
                             <i className="fa-solid fa-chevron-up" /> Collapse
                           </span>
                         </summary>
-                        <pre className="hacktivity-pre hacktivity-result">{resultStr}</pre>
+                        <SmartResult result={resultStr} />
                       </details>
                     ) : (
-                      <pre className="hacktivity-pre hacktivity-result">{resultStr}</pre>
+                      <SmartResult result={resultStr} />
                     )
                   })()}
+                </section>
+              )}
+
+              {/* Empty result = action failed */}
+              {(selectedHacktivity.result == null || String(selectedHacktivity.result).trim() === '') && (
+                <section className="hacktivity-section">
+                  <div className="hacktivity-failed-notice">
+                    <i className="fa-solid fa-circle-exclamation" />
+                    <span>This action didn't produce any output — it may have failed or timed out.</span>
+                  </div>
                 </section>
               )}
             </div>
@@ -269,25 +430,57 @@ export default function HacktivityModal({
               {/* Filter + toolbar */}
               <div className="hacktivity-toolbar">
                 <div className="hacktivity-toolbar-left">
-                  <label className="hacktivity-filter">
-                    <i className="fa-solid fa-filter" />
-                    <select
-                      value={selectedHacktivityConversationId ?? ''}
-                      onChange={(e) => {
-                        const id = e.target.value || null
-                        onSelectConversation(id)
-                        onPageChange(1)
-                        onLoadHacktivity(1, id)
-                      }}
-                    >
-                      <option value="">All conversations</option>
-                      {hacktivityConversations.map((c) => (
-                        <option key={c.conversationId} value={c.conversationId}>
-                          {trunc(c.title || c.conversationId, 30)} ({c.count})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  {/* ── Search autocomplete ── */}
+                  <div className="hacktivity-search" ref={searchRef}>
+                    <div className="hacktivity-search-input-wrap">
+                      <i className="fa-solid fa-magnifying-glass hacktivity-search-icon" />
+                      <input
+                        ref={searchInputRef}
+                        type="text"
+                        className="hacktivity-search-input"
+                        placeholder="Search conversations…"
+                        value={searchOpen ? searchQuery : (selectedLabel || '')}
+                        onFocus={() => { setSearchOpen(true); setSearchQuery('') }}
+                        onChange={(e) => { setSearchQuery(e.target.value); setSearchOpen(true) }}
+                      />
+                      {selectedHacktivityConversationId && (
+                        <button
+                          className="hacktivity-search-clear"
+                          onClick={(e) => { e.stopPropagation(); selectConversation(null); searchInputRef.current?.blur() }}
+                          title="Clear filter"
+                        >
+                          <i className="fa-solid fa-xmark" />
+                        </button>
+                      )}
+                    </div>
+                    {searchOpen && (
+                      <div className="hacktivity-search-dropdown">
+                        <div
+                          className={`hacktivity-search-option${!selectedHacktivityConversationId ? ' hacktivity-search-option--active' : ''}`}
+                          onClick={() => selectConversation(null)}
+                        >
+                          <i className="fa-solid fa-list" />
+                          <span>All conversations</span>
+                          <span className="hacktivity-search-count">{hacktivityTotal}</span>
+                        </div>
+                        {filteredConversations.map((c) => (
+                          <div
+                            key={c.conversationId}
+                            className={`hacktivity-search-option${selectedHacktivityConversationId === c.conversationId ? ' hacktivity-search-option--active' : ''}`}
+                            onClick={() => selectConversation(c.conversationId)}
+                          >
+                            <i className="fa-solid fa-message" />
+                            <span className="hacktivity-search-option-title">{trunc(c.title || c.conversationId, 35)}</span>
+                            <span className="hacktivity-search-count">{c.count}</span>
+                          </div>
+                        ))}
+                        {filteredConversations.length === 0 && searchQuery && (
+                          <div className="hacktivity-search-empty">No conversations match "{searchQuery}"</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
                   <button
                     className={`hacktivity-hide-errors${hideErrors ? ' hacktivity-hide-errors--active' : ''}`}
                     onClick={() => setHideErrors((v) => !v)}
@@ -308,9 +501,9 @@ export default function HacktivityModal({
                   </div>
                 ) : hacktivityList.length === 0 ? (
                   <div className="hacktivity-empty">
-                    <i className="fa-solid fa-inbox" />
-                    <p>No actions recorded yet</p>
-                    <span>Run a pentest to see AI actions appear here in real-time</span>
+                    <i className="fa-solid fa-satellite-dish" />
+                    <p>No activity yet</p>
+                    <span>Start a pentest session and your AI agent's actions will show up here in real-time</span>
                   </div>
                 ) : (
                   displayList.map((row) => {
@@ -322,7 +515,7 @@ export default function HacktivityModal({
                         className={`hacktivity-card${error ? ' hacktivity-card--error' : ''}`}
                         onClick={() => { onSelectHacktivityId(row.id); onSelectHacktivity(row) }}
                       >
-                        <div className="hacktivity-card-icon" style={{ background: color + '99', color: 'white', fontSize: '1.1rem' }}>
+                        <div className="hacktivity-card-icon" style={{ background: color + '22', color, fontSize: '1.1rem' }}>
                           <i className={icon} />
                         </div>
                         <div className="hacktivity-card-body">
@@ -331,7 +524,7 @@ export default function HacktivityModal({
                               {getActionLabel(row.toolArgs)}
                               {error && (
                                 <span className="hacktivity-error-badge">
-                                  <i className="fa-solid fa-circle-exclamation" /> ERROR
+                                  <i className="fa-solid fa-circle-exclamation" /> Failed
                                 </span>
                               )}
                             </span>
@@ -346,7 +539,7 @@ export default function HacktivityModal({
                               <span className="hacktivity-card-domain hacktivity-card-domain--empty">No target</span>
                             )}
                             {row.result && (
-                              <span className="hacktivity-card-preview">{trunc(row.result, 60)}</span>
+                              <span className="hacktivity-card-preview">{resultPreview(row.result)}</span>
                             )}
                           </div>
                         </div>
