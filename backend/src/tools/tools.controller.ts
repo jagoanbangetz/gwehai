@@ -5,6 +5,7 @@ import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '../entities/user.entity';
 import { ToolsService } from './tools.service';
 import { ToolAvailabilityService } from './tool-availability.service';
+import { WebSearchService } from './web-search.service';
 
 /** Tools API is admin-only. Normal users run tools only via the chat agent (scoped to their conversation). */
 @Controller('tools')
@@ -14,6 +15,7 @@ export class ToolsController {
   constructor(
     private readonly toolsService: ToolsService,
     private readonly toolAvailability: ToolAvailabilityService,
+    private readonly webSearchService: WebSearchService,
   ) {}
 
   /**
@@ -49,5 +51,26 @@ export class ToolsController {
   @Post('exec')
   async exec(@Body() body: { command: string; args?: string[]; target?: string; timeoutMs?: number; cwd?: string }) {
     return this.toolsService.execCommand(body);
+  }
+
+  /**
+   * POST /tools/web-search
+   * Web search for exploits, techniques, and reference fetching.
+   * Body: { query, type: 'exploit' | 'technique' | 'reference', url?, sessionId? }
+   * Rate limit: max 10 searches per session. Results cached 1h.
+   */
+  @Post('web-search')
+  async webSearch(@Body() body: { query: string; type: 'exploit' | 'technique' | 'reference'; url?: string; sessionId?: string }) {
+    return this.webSearchService.search(body.query, body.type, body.url, body.sessionId);
+  }
+
+  /**
+   * GET /tools/web-search/remaining?sessionId=xxx
+   * Check remaining web searches for a session.
+   */
+  @Get('web-search/remaining')
+  async webSearchRemaining(@Body() body: { sessionId?: string }) {
+    const sid = body?.sessionId || 'global';
+    return { sessionId: sid, remaining: this.webSearchService.getRemainingSearches(sid) };
   }
 }

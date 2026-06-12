@@ -30,6 +30,7 @@ import { getPlanDefinition, type PlanId } from '../config/plans.config';
 import { Observable } from 'rxjs';
 import { MailService } from '../mail/mail.service';
 import { PentestJobsService } from '../pentest-jobs/pentest-jobs.service';
+import { DbBackupService } from './db-backup.service';
 import * as bcrypt from 'bcrypt';
 
 const WIPE_CONFIRM_PHRASE = 'WIPE_ALL_DATA';
@@ -80,6 +81,7 @@ export class AdminController {
     private readonly planUsageService: PlanUsageService,
     private readonly mailService: MailService,
     private readonly pentestJobsService: PentestJobsService,
+    private readonly dbBackupService: DbBackupService,
   ) {}
 
   @Get('dashboard')
@@ -1331,5 +1333,67 @@ export class AdminController {
         conversations: deletedConversations.affected ?? 0,
       },
     };
+  }
+
+  // ─── DB Backup & Restore ────────────────────────────────────────
+
+  @Post('db/backup')
+  async createDbBackup(@Req() req: Request) {
+    const adminUser = req.user as { id: string };
+    const ip = this.adminService.getClientIp(req);
+
+    const result = await this.dbBackupService.createBackup();
+
+    await this.adminService.log(adminUser.id, 'db_backup_create', {
+      resource: result.filename,
+      details: JSON.stringify({ size: result.size }),
+      ipAddress: ip,
+    });
+
+    return { ok: true, ...result };
+  }
+
+  @Get('db/backups')
+  async listDbBackups() {
+    const backups = this.dbBackupService.listBackups();
+    return { ok: true, count: backups.length, backups };
+  }
+
+  @Post('db/restore/:filename')
+  async restoreDbBackup(
+    @Param('filename') filename: string,
+    @Body() body: { token?: string },
+    @Req() req: Request,
+  ) {
+    const adminUser = req.user as { id: string };
+    const ip = this.adminService.getClientIp(req);
+
+    if (!body?.token) {
+      // No token — generate one and return it for the admin to confirm
+      const { token, expiresAt } = this.dbBackupService.generateRestoreToken(filename);
+      await this.adminService.log(adminUser.id, 'db_restore_token_generated', {
+        resource: filename,
+        details: JSON.stringify({ expiresAt }),
+        ipAddress: ip,
+      });
+      return {
+        ok: true,
+        requiresConfirmation: true,
+        message: 'Send this token in body.token to confirm restore. Token expires in 5 minutes.',
+        token,
+        expiresAt,
+      };
+    }
+
+    // Token provided — execute restore
+    const result = await this.dbBackupService.restoreBackup(body.token);
+
+    await this.adminService.log(adminUser.id, 'db_restore_executed', {
+      resource: result.filename,
+      details: JSON.stringify({ message: result.message }),
+      ipAddress: ip,
+    });
+
+    return { ok: true, ...result };
   }
 }

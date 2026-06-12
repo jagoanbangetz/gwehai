@@ -50,7 +50,7 @@ export class GwehAISSEGuard implements CanActivate {
 
     try {
       // Use the same JWT secret and validation as the auth module.
-      const secret = this.configService.get<string>('JWT_SECRET') || 'your-super-secret-jwt-key';
+      const secret = this.configService.get<string>('JWT_SECRET');
 
       // Verify the token (same as JwtStrategy does).
       const payload = await this.jwtService.verifyAsync(token, {

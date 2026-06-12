@@ -25,6 +25,7 @@ describe('HacktivityService', () => {
     skip: jest.fn(),
     getMany: jest.fn(),
     getManyAndCount: jest.fn(),
+    getCount: jest.fn(),
   };
 
   const mockConversationRepo = {
@@ -140,9 +141,48 @@ describe('HacktivityService', () => {
       expect(mockHacktivityRepo.save).toHaveBeenCalled();
     });
 
+    it('skips noise entry: plain text "Error: command is required"', async () => {
+      const data = { result: 'Error: command is required' };
+      const r = await service.create('u1', data);
+      expect(r).toBeNull();
+      expect(mockHacktivityRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('skips noise entry: plain text "Error: exec requires a non-empty command."', async () => {
+      const data = { result: 'Error: exec requires a non-empty command.' };
+      const r = await service.create('u1', data);
+      expect(r).toBeNull();
+      expect(mockHacktivityRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('skips noise entry: case-insensitive "error: tool failed"', async () => {
+      const data = { result: 'error: tool failed to execute' };
+      const r = await service.create('u1', data);
+      expect(r).toBeNull();
+      expect(mockHacktivityRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('skips noise entry: empty string result', async () => {
+      const data = { result: '   ' };
+      const r = await service.create('u1', data);
+      expect(r).toBeNull();
+      expect(mockHacktivityRepo.create).not.toHaveBeenCalled();
+    });
+
     it('keeps entry: plain text result (not JSON)', async () => {
       const data = { result: 'some plain text output' };
       const created = { id: 'h-text', userId: 'u1', result: 'some plain text output', createdAt: new Date() };
+      mockHacktivityRepo.create.mockReturnValue(created);
+      mockHacktivityRepo.save.mockResolvedValue(created);
+
+      const result = await service.create('u1', data);
+      expect(result).not.toBeNull();
+      expect(mockHacktivityRepo.save).toHaveBeenCalled();
+    });
+
+    it('keeps entry: pentest output describing target error page (not a tool error)', async () => {
+      const data = { result: 'Found error page at /admin: "500 Internal Server Error: Database connection failed"' };
+      const created = { id: 'h-pentest', userId: 'u1', result: data.result, createdAt: new Date() };
       mockHacktivityRepo.create.mockReturnValue(created);
       mockHacktivityRepo.save.mockResolvedValue(created);
 
@@ -333,6 +373,45 @@ describe('HacktivityService', () => {
       const result = await service.listConversations('u1');
 
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('countEvidenceToolCalls', () => {
+    it('returns 0 when no hacktivity entries exist for conversation', async () => {
+      mockQueryBuilder.getMany.mockResolvedValue([]);
+      mockQueryBuilder.getCount.mockResolvedValue(0);
+
+      const result = await service.countEvidenceToolCalls('u1', 'conv-empty');
+
+      expect(result).toBe(0);
+    });
+
+    it('counts evidence-producing tool entries and excludes report_finding results', async () => {
+      const entries = [
+        { id: 'h1', result: '{"stdout":"SQL injection found in param id","exitCode":0}' },
+        { id: 'h2', result: '{"ok":true,"report_id":"r1","confidence":80}' },  // report_finding → skip
+        { id: 'h3', result: 'HTTP/1.1 200 OK\\nContent-Type: text/html' },
+        { id: 'h4', result: '{"ok":true,"path":"main","message":"saved"}' },  // write_file → skip
+        { id: 'h5', result: '{"phase":"exploit","checklist":{"recon":true}}' },  // update_pentest_phase → skip
+      ];
+      mockQueryBuilder.getMany.mockResolvedValue(entries);
+
+      const result = await service.countEvidenceToolCalls('u1', 'conv-1');
+
+      expect(result).toBe(2); // h1 and h3 are evidence
+    });
+
+    it('returns 0 when only non-evidence entries exist', async () => {
+      const entries = [
+        { id: 'h1', result: '{"ok":true,"report_id":"r1","confidence":80}' },
+        { id: 'h2', result: '{"phase":"exploit","checklist":{"recon":true}}' },
+        { id: 'h3', result: '{"ok":true,"path":"main","message":"saved"}' },
+      ];
+      mockQueryBuilder.getMany.mockResolvedValue(entries);
+
+      const result = await service.countEvidenceToolCalls('u1', 'conv-no-evidence');
+
+      expect(result).toBe(0);
     });
   });
 

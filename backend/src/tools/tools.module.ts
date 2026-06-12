@@ -8,6 +8,7 @@ import { ToolAvailabilityService } from './tool-availability.service';
 import { JwtAnalyzerService } from './jwt-analyzer.service';
 import { PayloadSandboxService } from './payload-sandbox.service';
 import { GlobalMemoryService } from './global-memory.service';
+import { WebSearchService } from './web-search.service';
 import { OobDetectorModule } from './oob-detector.module';
 import { ConversationMemory } from '../entities/conversation-memory.entity';
 import { GlobalMemory } from '../entities/global-memory.entity';
@@ -20,7 +21,7 @@ import { GlobalMemory } from '../entities/global-memory.entity';
     OobDetectorModule,
   ],
   controllers: [ToolsController],
-  providers: [ToolsService, ToolAvailabilityService, JwtAnalyzerService, PayloadSandboxService, GlobalMemoryService],
-  exports: [ToolsService, ToolAvailabilityService, JwtAnalyzerService, PayloadSandboxService, GlobalMemoryService, OobDetectorModule],
+  providers: [ToolsService, ToolAvailabilityService, JwtAnalyzerService, PayloadSandboxService, GlobalMemoryService, WebSearchService],
+  exports: [ToolsService, ToolAvailabilityService, JwtAnalyzerService, PayloadSandboxService, GlobalMemoryService, WebSearchService, OobDetectorModule],
 })
 export class ToolsModule {}

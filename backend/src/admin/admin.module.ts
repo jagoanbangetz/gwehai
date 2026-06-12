@@ -30,6 +30,7 @@ import { PlansModule } from '../plans/plans.module';
 import { BillingModule } from '../billing/billing.module';
 import { AdminService } from './admin.service';
 import { AdminSettingsService } from './admin-settings.service';
+import { DbBackupService } from './db-backup.service';
 import { HacktivityModule } from '../hacktivity/hacktivity.module';
 import { AuthModule } from '../auth/auth.module';
 import { MailModule } from '../mail/mail.module';
@@ -65,7 +66,7 @@ import { StorageModule } from '../storage/storage.module';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') || 'your-super-secret-jwt-key',
+        secret: configService.get<string>('JWT_SECRET'),
       }),
       inject: [ConfigService],
     }),
@@ -82,7 +83,7 @@ import { StorageModule } from '../storage/storage.module';
     StorageModule,
   ],
   controllers: [AdminController, AdminBillingController, AdminBillingConfigController, AdminModelsController, AdminOpsController],
-  providers: [AdminService, AdminSettingsService, GwehAISSEGuard],
+  providers: [AdminService, AdminSettingsService, DbBackupService, GwehAISSEGuard],
 })
 export class AdminModule {}
 

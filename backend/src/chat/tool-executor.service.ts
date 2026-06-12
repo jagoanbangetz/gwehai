@@ -271,6 +271,20 @@ export class ToolExecutorService {
       return JSON.stringify({ error: `report_finding confidence_reason must be at least 20 characters (got ${confidenceReason.length}). Explain what evidence supports or weakens the finding.` });
     }
 
+    // --- Tool Evidence Gate ---
+    // BLOCK fake findings: every report_finding MUST be backed by real tool execution
+    // in the same conversation. Check hacktivity for evidence-producing tool calls.
+    const evidenceCount = await this.hacktivityService.countEvidenceToolCalls(
+      context.userId,
+      context.conversationId,
+    );
+    if (evidenceCount === 0) {
+      return JSON.stringify({
+        error: 'report_finding BLOCKED: No tool execution evidence found in this conversation. You MUST run at least one tool (exec, craft_payload, browser_action, research_browse, etc.) before reporting a finding. Every finding must be backed by real tool output — no fabricated findings allowed.',
+        hint: 'Run exec, craft_payload, or browser_action to gather real evidence first, then call report_finding with the actual tool output as proof.',
+      });
+    }
+
     // Anti-hallucination gate: low confidence + weak evidence → block and ask to verify
     if (confidence < 50) {
       const detailLower = detail.toLowerCase();
