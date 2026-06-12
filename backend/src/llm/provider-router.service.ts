@@ -357,7 +357,7 @@ export class ProviderRouterService {
       model: option.defaultModel,
       messages: this.llmMessagesToOpenAI(messages),
       tools: apiTools,
-      tool_choice: tool_choice === 'required' ? 'required' : tool_choice === 'none' ? 'none' : 'auto',
+      // tool_choice NOT sent — DeepSeek V4 Pro rejects "thinking mode does not support tool_choice"
       max_tokens: caps.maxOutputTokens,
     };
     const res = await fetch('https://api.deepseek.com/v1/chat/completions', {

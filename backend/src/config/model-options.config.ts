@@ -115,7 +115,6 @@ export function getModelOptions(): ModelOption[] {
       // R1 no longer available — use V4 Pro as fallback
       defaultModel: getEnv('DEEPSEEK_REASONER_MODEL_ID', 'deepseek-v4-pro'),
       apiKeyEnv: 'DEEPSEEK_API_KEY',
-      isReasoning: true,
     },
   ];
 }
