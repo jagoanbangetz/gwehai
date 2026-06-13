@@ -814,6 +814,10 @@ export class AgentOrchestratorService {
         const resultMap = new Map<string, { tc: LlmToolCall; args: Record<string, any>; result: string }>();
         for (const r of [...regularResults, ...sendResults]) resultMap.set(r.tc.id, r);
 
+        // Collect vuln hints outside the tool message loop so user messages
+        // do not break tool_calls -> tool_response pairing (DeepSeek API requires
+        // tool messages immediately after assistant tool_calls with no user msgs between)
+        const vulnHints: string[] = [];
         for (const { tc } of parsedToolCalls) {
           const r = resultMap.get(tc.id);
           if (!r) continue;
@@ -833,16 +837,20 @@ export class AgentOrchestratorService {
             reportFindingCalledThisRun++;
           }
 
-          // Layer 1: Vuln detection — if exec output shows vulnerability evidence, remind LLM to call report_finding
+          // Layer 1: Vuln detection — collect hints, push after all tool responses
           const vulnHint = detectVulnIndicators(tc.name, r.result);
           if (vulnHint) {
-            messages.push({
-              role: 'user' as any,
-              content: `⚠️ VULNERABILITY INDICATOR DETECTED in exec output: ${vulnHint}`,
-            });
+            vulnHints.push(vulnHint);
             push({ type: 'status', data: { message: `⚠️ Vuln indicator found — remind to call report_finding` } });
             console.log(`[VulnDetect] turn=${turn} tool=${tc.name} hint=${vulnHint.slice(0, 80)}`);
           }
+        }
+        // Push vuln reminders AFTER all tool responses (keeps tool_calls pairing intact)
+        if (vulnHints.length > 0) {
+          messages.push({
+            role: 'user' as any,
+            content: '⚠️ VULNERABILITY INDICATORS DETECTED in exec outputs: ' + vulnHints.join(' | '),
+          });
         }
 
         // Layer 3: Periodic enforcement — every 5 turns without report_finding, inject mandatory reminder
