@@ -11,6 +11,19 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
+
+/** UUID v1-v5 format check — rejects XSS payloads, plain strings, etc. */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function assertValidUUID(id: string): void {
+  if (!UUID_RE.test(id)) {
+    throw new HttpException(
+      `Invalid ID format: "${id}" is not a valid UUID`,
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+}
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -50,6 +63,7 @@ export class AdminPlansController {
    */
   @Get(':id')
   async getPlan(@Param('id') id: string) {
+    assertValidUUID(id);
     const plan = await this.planRepo.findOne({ where: { id } });
     if (!plan) {
       throw new HttpException('Plan not found', HttpStatus.NOT_FOUND);
@@ -147,6 +161,7 @@ export class AdminPlansController {
     },
     @Req() req: Request,
   ) {
+    assertValidUUID(id);
     const adminUser = req.user as { id: string };
     const ip = this.adminService.getClientIp(req);
 
@@ -195,6 +210,7 @@ export class AdminPlansController {
    */
   @Delete(':id')
   async deletePlan(@Param('id') id: string, @Req() req: Request) {
+    assertValidUUID(id);
     const adminUser = req.user as { id: string };
     const ip = this.adminService.getClientIp(req);
 

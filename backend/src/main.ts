@@ -5,6 +5,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { WsAdapter } from '@nestjs/platform-ws';
 import { AppModule } from './app.module';
+import { QueryFailedExceptionFilter } from './common/filters/query-failed-exception.filter';
 
 async function bootstrap() {
   // Security: reject insecure JWT_SECRET at startup
@@ -27,6 +28,10 @@ async function bootstrap() {
       transformOptions: { enableImplicitConversion: true },
     }),
   );
+
+  // Global filter: catch QueryFailedError (invalid UUID, bad SQL, etc.)
+  // biar ga crash-restart loop
+  app.useGlobalFilters(new QueryFailedExceptionFilter());
 
   // Set global prefix for all routes
   app.setGlobalPrefix('api');
