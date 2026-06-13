@@ -441,6 +441,8 @@ export class AgentOrchestratorService {
         }
       }
     } catch (err: any) {
+        console.log('[AgentOrchestrator DEBUG] CAUGHT ERROR | type=' + typeof err + ' | ctor=' + (err?.constructor?.name || 'none') + ' | msg=' + String(err?.message || 'none').substring(0,100) + ' | getResp=' + (typeof err?.getResponse === 'function' ? JSON.stringify(err.getResponse()).substring(0,100) : 'N/A'));
+
       // Non-blocking: CVE injection is best-effort
       push({ type: 'status', data: { message: `CVE Feed skipped: ${err?.message || 'unknown'}` } });
     }
