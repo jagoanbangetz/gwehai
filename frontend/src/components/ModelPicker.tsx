@@ -167,6 +167,23 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
         const res = await apiClient.get<BackendModelRow[]>('/chat/models')
         if (cancelled) return
         const list = (Array.isArray(res.data) ? res.data : []).filter(m => m && m.isActive)
+
+        // If backend returns empty, fall back to built-in MODEL_OPTIONS
+        if (list.length === 0) {
+          const synthetic: BackendModelRow[] = MODEL_OPTIONS.map(o => ({
+            id: o.key,
+            name: o.label,
+            displayName: o.label,
+            provider: o.key,
+            isActive: true,
+            metadata: { key: o.key },
+          }))
+          setModels(synthetic)
+          const initial = synthetic.find(m => getModelKeyForRow(m) === value) || synthetic[0] || null
+          if (initial && !cancelled) setSelectedModelId(initial.id)
+          return
+        }
+
         setModels(list)
 
         let storedId: string | null = null
