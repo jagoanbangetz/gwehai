@@ -2,72 +2,108 @@ import React, { useState, useRef, useEffect, useMemo } from 'react'
 import apiClient from '../utils/api'
 import './ModelPicker.css'
 
-export type ModelKey = 'auto' | 'deepseek_v4' | 'deepseek_v4_pro' | 'deepseek_reasoner' | 'openai_gpt5' | 'openai_o' | 'claude' | 'gemini' | 'xai' | 'meta'
+/* ─── Model Keys ─── */
+export type ModelKey =
+  | 'auto'
+  | 'openai_gpt55' | 'openai_gpt5' | 'openai_gpt4o' | 'openai_o3' | 'openai_o4mini' | 'openai_codex'
+  | 'claude_fable5' | 'claude_opus48' | 'claude_sonnet4' | 'claude_haiku4'
+  | 'gemini_31_pro' | 'gemini_3_flash' | 'gemini_25_pro' | 'gemini_ultra'
+  | 'deepseek_v4' | 'deepseek_v4_flash' | 'deepseek_r1' | 'deepseek_chat' | 'deepseek_coder'
 
-/** Auto uses DeepSeek V4 Pro under the hood. */
-export const MODEL_OPTIONS: { key: ModelKey; label: string }[] = [
-  { key: 'auto', label: 'Auto' },
-  { key: 'claude', label: 'Claude' },
-  { key: 'deepseek_v4', label: 'DeepSeek V4' },
-  { key: 'deepseek_v4_pro', label: 'DeepSeek V4 Pro' },
-  { key: 'gemini', label: 'Gemini' },
-  { key: 'meta', label: 'Llama' },
-  { key: 'openai_gpt5', label: 'OpenAI GPT-5' },
-  { key: 'openai_o', label: 'OpenAI o4-mini' },
-  { key: 'xai', label: 'Grok' },
+/* ─── Provider Groups ─── */
+interface ModelOption {
+  key: ModelKey
+  label: string
+}
+
+interface ProviderGroup {
+  provider: string
+  icon: string
+  models: ModelOption[]
+}
+
+const PROVIDER_GROUPS: ProviderGroup[] = [
+  {
+    provider: 'OpenAI',
+    icon: 'fa-solid fa-bolt',
+    models: [
+      { key: 'openai_gpt55',   label: 'GPT-5.5' },
+      { key: 'openai_gpt5',    label: 'GPT-5' },
+      { key: 'openai_gpt4o',   label: 'GPT-4o' },
+      { key: 'openai_o3',      label: 'o3' },
+      { key: 'openai_o4mini',  label: 'o4-mini' },
+      { key: 'openai_codex',   label: 'Codex' },
+    ],
+  },
+  {
+    provider: 'Anthropic',
+    icon: 'fa-solid fa-shield-halved',
+    models: [
+      { key: 'claude_fable5',  label: 'Claude Fable 5' },
+      { key: 'claude_opus48',  label: 'Claude Opus 4.8' },
+      { key: 'claude_sonnet4', label: 'Claude Sonnet 4' },
+      { key: 'claude_haiku4',  label: 'Claude Haiku 4' },
+    ],
+  },
+  {
+    provider: 'Google AI',
+    icon: 'fa-solid fa-star',
+    models: [
+      { key: 'gemini_31_pro',  label: 'Gemini 3.1 Pro' },
+      { key: 'gemini_3_flash', label: 'Gemini 3 Flash' },
+      { key: 'gemini_25_pro',  label: 'Gemini 2.5 Pro' },
+      { key: 'gemini_ultra',   label: 'Gemini Ultra' },
+    ],
+  },
+  {
+    provider: 'DeepSeek',
+    icon: 'fa-solid fa-water',
+    models: [
+      { key: 'deepseek_v4',       label: 'V4' },
+      { key: 'deepseek_v4_flash', label: 'V4 Flash' },
+      { key: 'deepseek_r1',       label: 'R1' },
+      { key: 'deepseek_chat',     label: 'Chat' },
+      { key: 'deepseek_coder',    label: 'Coder' },
+    ],
+  },
 ]
+
+/* ─── Flat option list (for lookups) ─── */
+const ALL_MODEL_OPTIONS: { key: ModelKey; label: string; provider: string; icon: string }[] = [
+  { key: 'auto', label: 'Auto', provider: 'Auto', icon: 'fa-solid fa-shuffle' },
+  ...PROVIDER_GROUPS.flatMap(g => g.models.map(m => ({ ...m, provider: g.provider, icon: g.icon }))),
+]
+
+const MODEL_KEY_ORDER: ModelKey[] = ALL_MODEL_OPTIONS.map(o => o.key)
 
 const STORAGE_KEY = 'gwehai_model_key'
 const STORAGE_MODEL_ID_KEY = 'gwehai_model_id'
 
-/** Flat model key list for ordering (Auto first, rest alphabetical). */
-const MODEL_KEY_ORDER: ModelKey[] = MODEL_OPTIONS.map(o => o.key)
-
-/** Small FA icon per model (optional, subtle). */
-const MODEL_ICON: Record<ModelKey, string> = {
-  auto: 'fa-solid fa-shuffle',
-  deepseek_v4: 'fa-solid fa-water',
-  deepseek_v4_pro: 'fa-solid fa-water',
-  deepseek_reasoner: 'fa-solid fa-brain',
-  openai_gpt5: 'fa-solid fa-bolt',
-  openai_o: 'fa-solid fa-bolt',
-  claude: 'fa-solid fa-shield-halved',
-  gemini: 'fa-solid fa-star',
-  xai: 'fa-solid fa-x',
-  meta: 'fa-solid fa-paw',
-}
-
+/* ─── Helpers ─── */
 export function getStoredModelKey(): ModelKey {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw === 'deepseek' || raw === 'auto') return 'deepseek_v4'
-    // Migrate removed keys
-    if (raw === 'deepseek_reasoner' || raw === 'deepseek_v3') return 'deepseek_v4'
-    if (raw && MODEL_OPTIONS.some(o => o.key === raw)) return raw as ModelKey
+    if (raw && MODEL_KEY_ORDER.includes(raw as ModelKey)) return raw as ModelKey
   } catch (_) {}
   return 'deepseek_v4'
 }
 
 export function getStoredModelId(): string | null {
-  try {
-    return localStorage.getItem(STORAGE_MODEL_ID_KEY)
-  } catch (_) {}
+  try { return localStorage.getItem(STORAGE_MODEL_ID_KEY) } catch (_) {}
   return null
 }
 
 export function setStoredModelKey(key: ModelKey): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, key)
-  } catch (_) {}
+  try { localStorage.setItem(STORAGE_KEY, key) } catch (_) {}
 }
 
 export function getModelLabel(key: string): string {
-  const found = MODEL_OPTIONS.find(o => o.key === key)
+  const found = ALL_MODEL_OPTIONS.find(o => o.key === key)
   if (found) return found.label
-  // Fallback for removed/unknown keys: prettify the key
   return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
+/* ─── Backend Row ─── */
 interface BackendModelRow {
   id: string
   name: string
@@ -78,24 +114,27 @@ interface BackendModelRow {
 }
 
 function getModelKeyForRow(row: BackendModelRow): ModelKey | null {
-  // Use metadata.key from DB — seeded by model-options.config
   const metaKey = row.metadata?.key as string | undefined
-  if (metaKey && isValidModelKey(metaKey)) return metaKey
-  // Fallback: guess by provider
-  const provider = (row.provider || '').toLowerCase()
+  if (metaKey && MODEL_KEY_ORDER.includes(metaKey as ModelKey)) return metaKey as ModelKey
   const name = (row.name || '').toLowerCase()
-  if (provider === 'deepseek' || (provider === 'custom' && name.includes('deepseek'))) return 'deepseek_v4'
-  if (provider === 'anthropic') return 'claude'
-  if (provider === 'openai') return 'openai_gpt5'
-  if (provider === 'gemini' || provider === 'google') return 'gemini'
-  if (provider === 'xai') return 'xai'
-  if (provider === 'meta') return 'meta'
-  if (name.includes('claude') || name.includes('anthropic')) return 'claude'
-  if (name.includes('gpt') || name.includes('openai')) return 'openai_gpt5'
-  if (name.includes('gemini')) return 'gemini'
-  if (name.includes('grok') || name.includes('xai')) return 'xai'
-  if (name.includes('llama') || name.includes('meta')) return 'meta'
-  if (name.includes('deepseek') || name.includes('reasoner') || name.includes('coder')) return 'deepseek_v4'
+  if (name.includes('gpt-5.5') || name.includes('gpt55')) return 'openai_gpt55'
+  if (name.includes('gpt-5') || name.includes('gpt5') && !name.includes('gpt-5.5')) return 'openai_gpt5'
+  if (name.includes('gpt-4o')) return 'openai_gpt4o'
+  if (name.includes('o3')) return 'openai_o3'
+  if (name.includes('o4-mini') || name.includes('o4mini')) return 'openai_o4mini'
+  if (name.includes('codex')) return 'openai_codex'
+  if (name.includes('fable')) return 'claude_fable5'
+  if (name.includes('opus')) return 'claude_opus48'
+  if (name.includes('sonnet')) return 'claude_sonnet4'
+  if (name.includes('haiku')) return 'claude_haiku4'
+  if (name.includes('gemini-3.1') || name.includes('gemini31')) return 'gemini_31_pro'
+  if (name.includes('gemini-3') || (name.includes('gemini') && name.includes('flash'))) return 'gemini_3_flash'
+  if (name.includes('gemini-2.5') || name.includes('gemini25')) return 'gemini_25_pro'
+  if (name.includes('gemini-ultra')) return 'gemini_ultra'
+  if (name.includes('deepseek') && name.includes('flash')) return 'deepseek_v4_flash'
+  if (name.includes('deepseek') && (name.includes('v4') || name.includes('chat'))) return 'deepseek_v4'
+  if (name.includes('reasoner') || (name.includes('deepseek') && name.includes('r1'))) return 'deepseek_r1'
+  if (name.includes('coder')) return 'deepseek_coder'
   return null
 }
 
@@ -103,26 +142,20 @@ function isValidModelKey(k: string): k is ModelKey {
   return MODEL_KEY_ORDER.includes(k as ModelKey)
 }
 
-/** Filter out unsupported models (R1/V3 etc.) */
 function isSupportedModel(row: BackendModelRow): boolean {
-  const key = getModelKeyForRow(row)
-  return key !== null && MODEL_KEY_ORDER.includes(key)
+  return getModelKeyForRow(row) !== null
 }
 
+/* ─── Props ─── */
 export interface ModelPickerProps {
   value: ModelKey
-  /** Called when user picks a model. Second arg is the DB model id (UUID) when a specific model row is selected. */
   onChange: (key: ModelKey, modelId?: string) => void
   disabled?: boolean
   className?: string
   planId?: string | null
 }
 
-/**
- * Flat model picker dropdown — simple, clean, monochrome.
- * Auto on top, then alphabetical. No grouped provider sections.
- * Persists to localStorage; parent should sync to backend user preference if available.
- */
+/* ─── Component ─── */
 const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, className, planId }) => {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -136,30 +169,19 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
   const currentLabel = currentModel ? (currentModel.displayName || currentModel.name || fallbackLabel) : fallbackLabel
   const isFreePlan = (planId ?? '').toUpperCase() === 'FREE'
 
+  const currentOption = ALL_MODEL_OPTIONS.find(o => o.key === value)
+
   const searchLower = search.trim().toLowerCase()
-  const filteredModels = useMemo(() => {
-    // Filter: only supported models, then by search
+
+  // Group models from backend API by provider for grouped display
+  const groupedFromApi = useMemo(() => {
     const supported = models.filter(isSupportedModel)
-    if (!searchLower) return supported
-    return supported.filter(
-      m =>
-        (m.displayName || m.name || '').toLowerCase().includes(searchLower) ||
-        (m.name || '').toLowerCase().includes(searchLower),
-    )
+    if (!searchLower) return null // use API groups when no search
+    // When searching, show flat filtered list
+    return null
   }, [models, searchLower])
 
-  // Sort: Auto first, then alphabetical by display name
-  const sortedModels = useMemo(() => {
-    return [...filteredModels].sort((a, b) => {
-      const aKey = getModelKeyForRow(a) || 'auto'
-      const bKey = getModelKeyForRow(b) || 'auto'
-      const aIdx = MODEL_KEY_ORDER.indexOf(aKey)
-      const bIdx = MODEL_KEY_ORDER.indexOf(bKey)
-      return aIdx - bIdx
-    })
-  }, [filteredModels])
-
-  // Load models from backend so the picker mirrors Admin → Models.
+  // Load from backend
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -167,14 +189,12 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
         const res = await apiClient.get<BackendModelRow[]>('/chat/models')
         if (cancelled) return
         const list = (Array.isArray(res.data) ? res.data : []).filter(m => m && m.isActive)
-
-        // If backend returns empty, fall back to built-in MODEL_OPTIONS
         if (list.length === 0) {
-          const synthetic: BackendModelRow[] = MODEL_OPTIONS.map(o => ({
+          const synthetic: BackendModelRow[] = ALL_MODEL_OPTIONS.map(o => ({
             id: o.key,
             name: o.label,
             displayName: o.label,
-            provider: o.key,
+            provider: o.provider,
             isActive: true,
             metadata: { key: o.key },
           }))
@@ -183,29 +203,21 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
           if (initial && !cancelled) setSelectedModelId(initial.id)
           return
         }
-
         setModels(list)
-
         let storedId: string | null = null
-        try {
-          storedId = localStorage.getItem(STORAGE_MODEL_ID_KEY)
-        } catch (_) {}
-
+        try { storedId = localStorage.getItem(STORAGE_MODEL_ID_KEY) } catch (_) {}
         const byStored = storedId ? list.find(m => m.id === storedId) : undefined
         const byKey = list.find(m => getModelKeyForRow(m) === value)
         const byDefault = list.find(m => (m as any).isDefault)
         const fallback = list.find(isSupportedModel) || null
         const initial = byStored || byKey || byDefault || fallback || null
-        if (initial) {
-          setSelectedModelId(initial.id)
-        }
+        if (initial) setSelectedModelId(initial.id)
       } catch {
-        // API failed - fall back to built-in MODEL_OPTIONS as synthetic rows
-        const synthetic: BackendModelRow[] = MODEL_OPTIONS.map(o => ({
+        const synthetic: BackendModelRow[] = ALL_MODEL_OPTIONS.map(o => ({
           id: o.key,
           name: o.label,
           displayName: o.label,
-          provider: o.key,
+          provider: o.provider,
           isActive: true,
           metadata: { key: o.key },
         }))
@@ -214,9 +226,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
         if (initial && !cancelled) setSelectedModelId(initial.id)
       }
     })()
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {
@@ -224,9 +234,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
     setSearch('')
     searchInputRef.current?.focus()
     const onOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener('mousedown', onOutside)
     return () => document.removeEventListener('mousedown', onOutside)
@@ -240,11 +248,43 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
     setSelectedModelId(m.id)
     onChange(key, m.id)
     setStoredModelKey(key)
-    try {
-      localStorage.setItem(STORAGE_MODEL_ID_KEY, m.id)
-    } catch (_) {}
+    try { localStorage.setItem(STORAGE_MODEL_ID_KEY, m.id) } catch (_) {}
     setOpen(false)
   }
+
+  // Build options for rendering: either API-backed groups or synthetic fallback groups
+  const renderGroups = useMemo(() => {
+    // With search active, use flat filtered list
+    if (searchLower) {
+      const filtered = ALL_MODEL_OPTIONS.filter(o =>
+        o.label.toLowerCase().includes(searchLower) ||
+        o.provider.toLowerCase().includes(searchLower) ||
+        o.key.toLowerCase().includes(searchLower)
+      )
+      return [{ provider: 'Results', icon: '', models: filtered.map(o => ({ ...o, id: o.key, _row: null as any })) }]
+    }
+
+    // Build grouped from API models or fallback to ALL_MODEL_OPTIONS
+    const apiRows = models.filter(isSupportedModel)
+    if (apiRows.length > 0) {
+      return PROVIDER_GROUPS.map(g => {
+        const groupModels = g.models
+          .map(m => {
+            const row = apiRows.find(r => getModelKeyForRow(r) === m.key)
+            return row ? { ...m, id: row.id, _row: row } : null
+          })
+          .filter(Boolean) as (ModelOption & { id: string; _row: BackendModelRow })[]
+        return groupModels.length > 0 ? { provider: g.provider, icon: g.icon, models: groupModels } : null
+      }).filter(Boolean) as { provider: string; icon: string; models: (ModelOption & { id: string; _row: BackendModelRow })[] }[]
+    }
+
+    // Fallback: synthetic from ALL_MODEL_OPTIONS
+    return PROVIDER_GROUPS.map(g => ({
+      provider: g.provider,
+      icon: g.icon,
+      models: g.models.map(m => ({ ...m, id: m.key, _row: null as any })),
+    }))
+  }, [models, searchLower])
 
   return (
     <div className={`model-picker ${className ?? ''} ${open ? 'open' : ''}`} ref={containerRef}>
@@ -258,7 +298,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
         aria-expanded={open}
         aria-label={`Model: ${currentLabel}`}
       >
-        <i className={`model-picker-trigger-icon ${MODEL_ICON[value] || 'fa-solid fa-microchip'}`} aria-hidden />
+        <i className={`model-picker-trigger-icon ${currentOption?.icon || 'fa-solid fa-microchip'}`} aria-hidden />
         <span className="model-picker-label">{currentLabel}</span>
         <span className="model-picker-chevron" aria-hidden>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -270,7 +310,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
         <div
           className="model-picker-dropdown"
           role="listbox"
-          style={{ minWidth: triggerRef.current ? triggerRef.current.offsetWidth : undefined }}
+          style={{ minWidth: triggerRef.current ? Math.max(triggerRef.current.offsetWidth, 380) : undefined }}
         >
           <div className="model-picker-search-wrap">
             <i className="model-picker-search-icon fa-solid fa-magnifying-glass" aria-hidden />
@@ -286,35 +326,41 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
             />
           </div>
           <div className="model-picker-options-wrap">
-            {sortedModels.length === 0 ? (
-              <div className="model-picker-empty">
-                {models.length === 0
-                  ? 'No models available'
-                  : `No models match "${search}"`}
-              </div>
+            {renderGroups.length === 0 ? (
+              <div className="model-picker-empty">No models available</div>
             ) : (
-              sortedModels.map(m => {
-                const key = getModelKeyForRow(m) || 'auto'
-                const locked = isFreePlan && key !== 'auto'
-                const selected = selectedModelId === m.id
-                const icon = MODEL_ICON[key] || 'fa-solid fa-microchip'
-                return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    role="option"
-                    aria-selected={selected}
-                    aria-disabled={locked}
-                    className={`model-picker-option ${selected ? 'selected' : ''} ${locked ? 'locked' : ''}`}
-                    onClick={() => selectModel(m)}
-                  >
-                    <i className={`model-picker-option-icon ${icon}`} aria-hidden />
-                    <span className="model-picker-option-label">{m.displayName || m.name}</span>
-                    {locked && <span className="model-picker-option-tag">Pro</span>}
-                    {selected && <i className="model-picker-option-check fa-solid fa-check" aria-hidden />}
-                  </button>
-                )
-              })
+              renderGroups.map(group => (
+                <div key={group.provider} className="model-picker-group">
+                  {!searchLower && (
+                    <div className="model-picker-group-header">
+                      {group.icon && <i className={group.icon} aria-hidden />}
+                      <span>{group.provider}</span>
+                    </div>
+                  )}
+                  {group.models.map(m => {
+                    const locked = isFreePlan && m.key !== 'auto'
+                    const selected = selectedModelId === m.id
+                    const row = (m as any)._row as BackendModelRow | null
+                    const opt = ALL_MODEL_OPTIONS.find(o => o.key === m.key)
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        aria-disabled={locked}
+                        className={`model-picker-option ${selected ? 'selected' : ''} ${locked ? 'locked' : ''}`}
+                        onClick={() => row ? selectModel(row) : null}
+                      >
+                        <i className={`model-picker-option-icon ${opt?.icon || 'fa-solid fa-microchip'}`} aria-hidden />
+                        <span className="model-picker-option-label">{m.label}</span>
+                        {locked && <span className="model-picker-option-tag">Pro</span>}
+                        {selected && <i className="model-picker-option-check fa-solid fa-check" aria-hidden />}
+                      </button>
+                    )
+                  })}
+                </div>
+              ))
             )}
           </div>
         </div>
