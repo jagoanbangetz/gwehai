@@ -1,6 +1,10 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react'
 import apiClient from '../utils/api'
 import './ModelPicker.css'
+import OpenAIMono from '@lobehub/icons/es/OpenAI/components/Mono'
+import AnthropicMono from '@lobehub/icons/es/Anthropic/components/Mono'
+import GoogleMono from '@lobehub/icons/es/Google/components/Mono'
+import DeepSeekMono from '@lobehub/icons/es/DeepSeek/components/Mono'
 
 /* ─── Model Keys ─── */
 export type ModelKey =
@@ -10,6 +14,14 @@ export type ModelKey =
   | 'gemini_31_pro' | 'gemini_3_flash' | 'gemini_25_pro' | 'gemini_ultra'
   | 'deepseek_v4' | 'deepseek_v4_flash' | 'deepseek_r1' | 'deepseek_chat' | 'deepseek_coder'
 
+/* ─── Provider Icons (lobehub SVG components) ─── */
+const PROVIDER_ICONS: Record<string, React.FC<{ size?: number | string; style?: React.CSSProperties }>> = {
+  OpenAI: OpenAIMono as any,
+  Anthropic: AnthropicMono as any,
+  'Google AI': GoogleMono as any,
+  DeepSeek: DeepSeekMono as any,
+}
+
 /* ─── Provider Groups ─── */
 interface ModelOption {
   key: ModelKey
@@ -18,14 +30,14 @@ interface ModelOption {
 
 interface ProviderGroup {
   provider: string
-  icon: string
+  iconFa: string
   models: ModelOption[]
 }
 
-const PROVIDER_GROUPS: ProviderGroup[] = [
+export const PROVIDER_GROUPS: ProviderGroup[] = [
   {
     provider: 'OpenAI',
-    icon: 'fa-solid fa-bolt',
+    iconFa: 'fa-solid fa-bolt',
     models: [
       { key: 'openai_gpt55',   label: 'GPT-5.5' },
       { key: 'openai_gpt5',    label: 'GPT-5' },
@@ -37,7 +49,7 @@ const PROVIDER_GROUPS: ProviderGroup[] = [
   },
   {
     provider: 'Anthropic',
-    icon: 'fa-solid fa-shield-halved',
+    iconFa: 'fa-solid fa-shield-halved',
     models: [
       { key: 'claude_fable5',  label: 'Claude Fable 5' },
       { key: 'claude_opus48',  label: 'Claude Opus 4.8' },
@@ -47,7 +59,7 @@ const PROVIDER_GROUPS: ProviderGroup[] = [
   },
   {
     provider: 'Google AI',
-    icon: 'fa-solid fa-star',
+    iconFa: 'fa-solid fa-star',
     models: [
       { key: 'gemini_31_pro',  label: 'Gemini 3.1 Pro' },
       { key: 'gemini_3_flash', label: 'Gemini 3 Flash' },
@@ -57,7 +69,7 @@ const PROVIDER_GROUPS: ProviderGroup[] = [
   },
   {
     provider: 'DeepSeek',
-    icon: 'fa-solid fa-water',
+    iconFa: 'fa-solid fa-water',
     models: [
       { key: 'deepseek_v4',       label: 'V4' },
       { key: 'deepseek_v4_flash', label: 'V4 Flash' },
@@ -69,9 +81,9 @@ const PROVIDER_GROUPS: ProviderGroup[] = [
 ]
 
 /* ─── Flat option list (for lookups) ─── */
-const ALL_MODEL_OPTIONS: { key: ModelKey; label: string; provider: string; icon: string }[] = [
-  { key: 'auto', label: 'Auto', provider: 'Auto', icon: 'fa-solid fa-shuffle' },
-  ...PROVIDER_GROUPS.flatMap(g => g.models.map(m => ({ ...m, provider: g.provider, icon: g.icon }))),
+export const ALL_MODEL_OPTIONS: { key: ModelKey; label: string; provider: string; iconFa: string }[] = [
+  { key: 'auto', label: 'Auto', provider: 'Auto', iconFa: 'fa-solid fa-shuffle' },
+  ...PROVIDER_GROUPS.flatMap(g => g.models.map(m => ({ ...m, provider: g.provider, iconFa: g.iconFa }))),
 ]
 
 const MODEL_KEY_ORDER: ModelKey[] = ALL_MODEL_OPTIONS.map(o => o.key)
@@ -166,6 +178,8 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
   const isFreePlan = (planId ?? '').toUpperCase() === 'FREE'
 
   const currentOption = ALL_MODEL_OPTIONS.find(o => o.key === value)
+  const currentProvider = currentOption?.provider || ''
+  const ProviderIcon = PROVIDER_ICONS[currentProvider] || null
 
   const searchLower = search.trim().toLowerCase()
 
@@ -240,19 +254,17 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
     setOpen(false)
   }
 
-  // Build options for rendering: either API-backed groups or synthetic fallback groups
+  // Build options for rendering
   const renderGroups = useMemo(() => {
-    // With search active, use flat filtered list
     if (searchLower) {
       const filtered = ALL_MODEL_OPTIONS.filter(o =>
         o.label.toLowerCase().includes(searchLower) ||
         o.provider.toLowerCase().includes(searchLower) ||
         o.key.toLowerCase().includes(searchLower)
       )
-      return [{ provider: 'Results', icon: '', models: filtered.map(o => ({ ...o, id: o.key, _row: null as any })) }]
+      return [{ provider: 'Results', iconFa: '', models: filtered.map(o => ({ ...o, id: o.key, _row: null as any })) }]
     }
 
-    // Build grouped from API models or fallback to ALL_MODEL_OPTIONS
     const apiRows = models.filter(isSupportedModel)
     if (apiRows.length > 0) {
       return PROVIDER_GROUPS.map(g => {
@@ -262,14 +274,13 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
             return row ? { ...m, id: row.id, _row: row } : null
           })
           .filter(Boolean) as (ModelOption & { id: string; _row: BackendModelRow })[]
-        return groupModels.length > 0 ? { provider: g.provider, icon: g.icon, models: groupModels } : null
-      }).filter(Boolean) as { provider: string; icon: string; models: (ModelOption & { id: string; _row: BackendModelRow })[] }[]
+        return groupModels.length > 0 ? { provider: g.provider, iconFa: g.iconFa, models: groupModels } : null
+      }).filter(Boolean) as { provider: string; iconFa: string; models: (ModelOption & { id: string; _row: BackendModelRow })[] }[]
     }
 
-    // Fallback: synthetic from ALL_MODEL_OPTIONS
     return PROVIDER_GROUPS.map(g => ({
       provider: g.provider,
-      icon: g.icon,
+      iconFa: g.iconFa,
       models: g.models.map(m => ({ ...m, id: m.key, _row: null as any })),
     }))
   }, [models, searchLower])
@@ -286,7 +297,15 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
         aria-expanded={open}
         aria-label={`Model: ${currentLabel}`}
       >
-        <i className={`model-picker-trigger-icon ${currentOption?.icon || 'fa-solid fa-microchip'}`} aria-hidden />
+        {value === 'auto' ? (
+          <i className="model-picker-trigger-icon fa-solid fa-shuffle" aria-hidden />
+        ) : ProviderIcon ? (
+          <span className="model-picker-trigger-icon model-picker-trigger-svg">
+            <ProviderIcon size={16} />
+          </span>
+        ) : (
+          <i className={`model-picker-trigger-icon ${currentOption?.iconFa || 'fa-solid fa-microchip'}`} aria-hidden />
+        )}
         <span className="model-picker-label">{currentLabel}</span>
         <span className="model-picker-chevron" aria-hidden>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -317,11 +336,17 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
             {renderGroups.length === 0 ? (
               <div className="model-picker-empty">No models available</div>
             ) : (
-              renderGroups.map(group => (
+              renderGroups.map(group => {
+                const GroupIcon = PROVIDER_ICONS[group.provider] || null
+                return (
                 <div key={group.provider} className="model-picker-group">
                   {!searchLower && (
                     <div className="model-picker-group-header">
-                      {group.icon && <i className={group.icon} aria-hidden />}
+                      {GroupIcon ? (
+                        <span className="model-picker-group-svg"><GroupIcon size={14} /></span>
+                      ) : group.iconFa ? (
+                        <i className={group.iconFa} aria-hidden />
+                      ) : null}
                       <span>{group.provider}</span>
                     </div>
                   )}
@@ -329,7 +354,6 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
                     const locked = isFreePlan && m.key !== 'auto'
                     const selected = selectedModelId === m.id
                     const row = (m as any)._row as BackendModelRow | null
-                    const opt = ALL_MODEL_OPTIONS.find(o => o.key === m.key)
                     return (
                       <button
                         key={m.id}
@@ -340,7 +364,11 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
                         className={`model-picker-option ${selected ? 'selected' : ''} ${locked ? 'locked' : ''}`}
                         onClick={() => row ? selectModel(row) : null}
                       >
-                        <i className={`model-picker-option-icon ${opt?.icon || 'fa-solid fa-microchip'}`} aria-hidden />
+                        {GroupIcon ? (
+                          <span className="model-picker-option-svg"><GroupIcon size={14} /></span>
+                        ) : (
+                          <i className={`model-picker-option-icon fa-solid fa-microchip`} aria-hidden />
+                        )}
                         <span className="model-picker-option-label">{m.label}</span>
                         {locked && <span className="model-picker-option-tag">Pro</span>}
                         {selected && <i className="model-picker-option-check fa-solid fa-check" aria-hidden />}
@@ -348,7 +376,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
                     )
                   })}
                 </div>
-              ))
+              )})
             )}
           </div>
         </div>
