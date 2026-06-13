@@ -59,7 +59,19 @@ function estimateChars(messages: LlmMessage[]): number {
   return messages.reduce((n, m) => n + (typeof m.content === 'string' ? m.content.length : 0), 0);
 }
 
+/**
+ * Normalize tool message order and fix tool_calls protocol violations.
+ * 
+ * Two passes:
+ * 1. Forward pass: track tool_call IDs from assistant messages, drop orphan tool messages
+ * 2. Backward pass: detect assistant messages with unpaired tool_calls and either
+ *    strip the tool_calls (fallback to text-only) or remove the message entirely
+ * 
+ * This prevents the LLM API error:
+ * "An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'"
+ */
 function normalizeToolMessageOrder(messages: LlmMessage[]): LlmMessage[] {
+  // ── Pass 1: Forward — drop orphan tool messages ──────────────────────
   const out: LlmMessage[] = [];
   const openToolCallIds = new Set<string>();
 
@@ -76,6 +88,7 @@ function normalizeToolMessageOrder(messages: LlmMessage[]): LlmMessage[] {
       const tcid = String(msg.tool_call_id ?? '').trim();
       if (!tcid || !openToolCallIds.has(tcid)) {
         // Drop dangling/orphan tool message caused by context truncation.
+        console.log(`[ContextManager] Dropping orphan tool message (tool_call_id=${tcid || 'empty'})`);
         continue;
       }
       out.push(msg);
@@ -84,6 +97,44 @@ function normalizeToolMessageOrder(messages: LlmMessage[]): LlmMessage[] {
     }
 
     out.push(msg);
+  }
+
+  // ── Pass 2: Backward — fix assistant messages with unpaired tool_calls ─
+  // After Pass 1, `openToolCallIds` contains IDs from assistant messages whose
+  // tool responses were NOT found (dropped or never existed).
+  // We must remove these tool_calls from the assistant messages to prevent
+  // the "tool_calls must be followed by tool messages" API error.
+  if (openToolCallIds.size > 0) {
+    console.log(`[ContextManager] Found ${openToolCallIds.size} unpaired tool_call IDs: [${Array.from(openToolCallIds).join(', ')}]`);
+    
+    const fixed: LlmMessage[] = [];
+    for (const msg of out) {
+      if (msg.role === 'assistant' && msg.tool_calls?.length) {
+        // Filter out unpaired tool_calls
+        const paired = msg.tool_calls.filter((tc) => !openToolCallIds.has(tc.id));
+        
+        if (paired.length === 0) {
+          // All tool_calls are unpaired — strip tool_calls entirely, keep as text-only
+          const { tool_calls, ...textOnly } = msg;
+          if (textOnly.content?.trim()) {
+            console.log(`[ContextManager] Stripped all tool_calls from assistant message (kept text content)`);
+            fixed.push(textOnly as LlmMessage);
+          } else {
+            // No text content either — drop the message entirely
+            console.log(`[ContextManager] Dropped empty assistant message with only unpaired tool_calls`);
+          }
+        } else if (paired.length < msg.tool_calls.length) {
+          // Some tool_calls are unpaired — keep only paired ones
+          console.log(`[ContextManager] Stripped ${msg.tool_calls.length - paired.length} unpaired tool_calls from assistant message`);
+          fixed.push({ ...msg, tool_calls: paired });
+        } else {
+          fixed.push(msg);
+        }
+      } else {
+        fixed.push(msg);
+      }
+    }
+    return fixed;
   }
 
   return out;

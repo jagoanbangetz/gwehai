@@ -530,6 +530,16 @@ export class AgentOrchestratorService {
       const toolChoice = turn === 1 ? ('required' as const) : undefined;
       const modelKey = options?.model_key || 'auto';
 
+      // ── tool_calls protocol validation ─────────────────────────────────
+      // Log counts before sending to LLM to detect protocol issues early.
+      const truncatedForLlm = truncateMessagesForContext(messages);
+      const toolCallsCount = truncatedForLlm.filter((m) => m.role === 'assistant' && m.tool_calls?.length).length;
+      const toolResponsesCount = truncatedForLlm.filter((m) => m.role === 'tool').length;
+      console.log(`[AgentOrchestrator] turn=${turn} tool_calls count: ${toolCallsCount}, tool responses count: ${toolResponsesCount}, total messages: ${truncatedForLlm.length}`);
+      if (toolCallsCount > 0 && toolResponsesCount === 0) {
+        console.warn(`[AgentOrchestrator] WARNING: ${toolCallsCount} assistant messages with tool_calls but 0 tool responses — may trigger protocol error`);
+      }
+
       const toolsCap = this.costManager.getToolsOutputCap();
       const fallbackCaps = this.costManager.getCaps('auto', 'decision');
       const maxTokensForTools = toolsCap ?? fallbackCaps.maxOutputTokens;
@@ -538,7 +548,7 @@ export class AgentOrchestratorService {
             .generateWithTools({
               selectedModelKey: modelKey,
               selectedModelIdOverride: options?.modelIdOverride,
-              messages: truncateMessagesForContext(messages),
+              messages: truncatedForLlm,
               tools: PENTEST_TOOL_DEFS,
               mode: 'decision',
               tool_choice: toolChoice,
@@ -546,7 +556,7 @@ export class AgentOrchestratorService {
             .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
         : await this.llmService.generateWithTools(
             model!,
-            truncateMessagesForContext(messages),
+            truncatedForLlm,
             PENTEST_TOOL_DEFS,
             { tool_choice: toolChoice, max_tokens: maxTokensForTools },
           );
