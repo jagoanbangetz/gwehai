@@ -8,13 +8,15 @@ const Footer = () => {
         <div className="footer-section">
           <h3 className="footer-title">Start with GwehAI</h3>
           <p className="footer-subtitle">
-            Join top Fortune 500 companies using GwehAI for automated penetration testing.
+            Join top enterprises using GwehAI for automated penetration testing and security intelligence.
           </p>
-          <Link to="/signup" className="hero-button primary">Get Started</Link>
+          <Link to="/signup" className="hero-button primary">
+            <i className="fa-solid fa-rocket"></i> Get Started
+          </Link>
           <div className="footer-features">
-            <span>Professional reports</span>
-            <span>Enterprise-grade security</span>
-            <span>24/7 AI assistance</span>
+            <span><i className="fa-solid fa-check"></i> Professional reports</span>
+            <span><i className="fa-solid fa-check"></i> Enterprise-grade security</span>
+            <span><i className="fa-solid fa-check"></i> 24/7 AI assistance</span>
           </div>
         </div>
         <div className="footer-links">
@@ -39,7 +41,7 @@ const Footer = () => {
           </div>
         </div>
         <div className="footer-bottom">
-          <p>©2025 GwehAI</p>
+          <p>©2025 GwehAI. All rights reserved.</p>
         </div>
       </div>
     </footer>

@@ -32,7 +32,7 @@ const Header = () => {
         <Link to="/" className="logo">
           <img src={logo} alt="GwehAI" className="logo-image" />
           <span className="logo-text">Gweh</span>
-          <span className="logo-badge">[AI]</span>
+          <span className="logo-badge">AI</span>
         </Link>
         <nav className="nav">
           <button onClick={() => scrollToSection('features')} className="nav-link">
@@ -43,6 +43,9 @@ const Header = () => {
           </Link>
           <Link to="/pricing" className="nav-link">
             Pricing
+          </Link>
+          <Link to="/contact" className="nav-link">
+            Contact
           </Link>
         </nav>
         <div className="header-actions">
@@ -59,7 +62,9 @@ const Header = () => {
           ) : (
             <>
               <Link to="/login" className="header-link">Sign In</Link>
-              <Link to="/signup" className="cta-button">Get Started</Link>
+              <Link to="/signup" className="cta-button">
+                <i className="fa-solid fa-arrow-right"></i> Get Started
+              </Link>
             </>
           )}
         </div>

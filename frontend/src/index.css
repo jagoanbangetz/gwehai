@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 * {
   margin: 0;
@@ -7,27 +7,40 @@
 }
 
 :root {
-  /* Simple Black and White theme */
-  --primary-color: oklch(1 0 0);
-  --primary-foreground: oklch(0 0 0);
-  --secondary-color: oklch(0.2 0 0);
-  --accent-color: oklch(0.8 0 0);
-  --accent-foreground: oklch(0 0 0);
-  
-  /* Text colors - white on black */
-  --text-primary: oklch(1 0 0);
-  --text-secondary: oklch(0.7 0 0);
-  --text-muted: oklch(0.5 0 0);
-  
-  /* Background colors - black */
-  --bg-primary: oklch(0 0 0);
-  --bg-secondary: oklch(0.05 0 0);
-  --bg-card: oklch(0.08 0 0);
-  
+  /* Gradient accent system */
+  --gradient-primary: linear-gradient(135deg, #8B5CF6 0%, #6366F1 25%, #3B82F6 50%, #0EA5E9 75%, #06B6D4 100%);
+  --gradient-accent: linear-gradient(135deg, #8B5CF6 0%, #3B82F6 50%, #06B6D4 100%);
+  --gradient-glow: linear-gradient(135deg, rgba(139, 92, 246, 0.4) 0%, rgba(59, 130, 246, 0.4) 50%, rgba(6, 182, 212, 0.4) 100%);
+  --gradient-subtle: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.1) 50%, rgba(6, 182, 212, 0.1) 100%);
+
+  /* Colors */
+  --primary-color: #8B5CF6;
+  --primary-foreground: #ffffff;
+  --secondary-color: #3B82F6;
+  --accent-color: #06B6D4;
+  --accent-foreground: #ffffff;
+
+  /* Text colors */
+  --text-primary: oklch(0.95 0.01 270);
+  --text-secondary: oklch(0.7 0.02 270);
+  --text-muted: oklch(0.5 0.02 270);
+
+  /* Background colors */
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #0f0f18;
+  --bg-card: rgba(15, 15, 25, 0.8);
+  --bg-glass: rgba(15, 15, 30, 0.6);
+
   /* Border and input */
-  --border-color: oklch(0.2 0 0);
-  --input-color: oklch(0.1 0 0);
-  
+  --border-color: rgba(139, 92, 246, 0.15);
+  --border-glow: rgba(139, 92, 246, 0.3);
+  --input-color: rgba(15, 15, 30, 0.8);
+
+  /* Glassmorphism */
+  --glass-bg: rgba(15, 15, 30, 0.6);
+  --glass-border: rgba(139, 92, 246, 0.12);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+
   /* Radius */
   --radius: 0.75rem;
   --radius-sm: 0.5rem;
@@ -35,30 +48,12 @@
   --radius-xl: 1.5rem;
 }
 
-.dark {
-  --primary-color: oklch(1 0 0);
-  --primary-foreground: oklch(0 0 0);
-  --secondary-color: oklch(0.2 0 0);
-  --accent-color: oklch(0.8 0 0);
-  
-  --text-primary: oklch(1 0 0);
-  --text-secondary: oklch(0.7 0 0);
-  --text-muted: oklch(0.5 0 0);
-  
-  --bg-primary: oklch(0 0 0);
-  --bg-secondary: oklch(0.05 0 0);
-  --bg-card: oklch(0.08 0 0);
-  
-  --border-color: oklch(0.2 0 0);
-  --input-color: oklch(0.1 0 0);
-}
-
 html {
   scroll-behavior: smooth;
 }
 
 body {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Roboto Mono', 'Courier New', monospace;
+  font-family: 'Inter', 'JetBrains Mono', -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   color: var(--text-primary);
@@ -67,27 +62,23 @@ body {
   overflow-x: hidden;
   transition: background-color 0.3s ease, color 0.3s ease;
   position: relative;
-  font-variant-ligatures: none;
   letter-spacing: 0.01em;
 }
 
-/* Ensure body has proper background for animated background to work */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
-  background: oklch(0 0 0);
+  background: var(--bg-primary);
   z-index: -1;
 }
 
-/* Force black theme */
 body {
-  background-color: oklch(0 0 0) !important;
+  background-color: var(--bg-primary) !important;
 }
 
 code {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Roboto Mono', 'Courier New',
-    monospace;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Roboto Mono', monospace;
 }
 
 a {
@@ -100,46 +91,34 @@ button {
   cursor: pointer;
   border: none;
   background: none;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Roboto Mono', 'Courier New', monospace;
-  font-variant-ligatures: none;
+  font-family: inherit;
   letter-spacing: 0.01em;
 }
 
 input,
 textarea,
 select {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Roboto Mono', 'Courier New', monospace;
-  font-variant-ligatures: none;
+  font-family: inherit;
   letter-spacing: 0.01em;
 }
 
-/* Smooth scroll reveal animations */
+/* Scroll reveal animations */
 @media (prefers-reduced-motion: no-preference) {
   .fade-in {
     animation: fadeIn 0.6s ease-out;
   }
-  
+
   .slide-up {
     animation: slideUp 0.6s ease-out;
   }
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
 }
