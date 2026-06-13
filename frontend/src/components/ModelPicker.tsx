@@ -138,10 +138,6 @@ function getModelKeyForRow(row: BackendModelRow): ModelKey | null {
   return null
 }
 
-function isValidModelKey(k: string): k is ModelKey {
-  return MODEL_KEY_ORDER.includes(k as ModelKey)
-}
-
 function isSupportedModel(row: BackendModelRow): boolean {
   return getModelKeyForRow(row) !== null
 }
@@ -172,14 +168,6 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
   const currentOption = ALL_MODEL_OPTIONS.find(o => o.key === value)
 
   const searchLower = search.trim().toLowerCase()
-
-  // Group models from backend API by provider for grouped display
-  const groupedFromApi = useMemo(() => {
-    const supported = models.filter(isSupportedModel)
-    if (!searchLower) return null // use API groups when no search
-    // When searching, show flat filtered list
-    return null
-  }, [models, searchLower])
 
   // Load from backend
   useEffect(() => {
