@@ -184,7 +184,7 @@ export class HacktivityService {
       .andWhere('h.conversationId IS NOT NULL')
       .andWhere("h.createdAt > NOW() - INTERVAL '30 days'")
       .groupBy('h.conversationId')
-      .orderBy('lastActivity', 'DESC')
+      .orderBy('MAX(h.createdAt)', 'DESC')
       .limit(MAX_CONVERSATIONS)
       .getRawMany<{ conversationId: string; count: string; lastActivity: string }>();
     if (raw.length === 0) {
