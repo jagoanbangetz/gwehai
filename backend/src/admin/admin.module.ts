@@ -6,11 +6,13 @@ import { AdminController } from './admin.controller';
 import { AdminBillingController } from './admin-billing.controller';
 import { AdminBillingConfigController } from './admin-billing-config.controller';
 import { AdminModelsController } from './admin-models.controller';
+import { AdminPlansController } from './admin-plans.controller';
 import { User } from '../entities/user.entity';
 import { LlmModel } from '../entities/llm-model.entity';
 import { BillingPolicy } from '../entities/billing-policy.entity';
 import { PlanBillingRule } from '../entities/plan-billing-rule.entity';
 import { Model } from '../entities/model.entity';
+import { Plan } from '../entities/plan.entity';
 import { CreditOrder } from '../entities/credit-order.entity';
 import { Report } from '../entities/report.entity';
 import { UsageEvent } from '../entities/usage-event.entity';
@@ -39,7 +41,6 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { GwehAISSEGuard } from '../gwehai/gwehai-sse.guard';
 import { CveFeedModule } from '../cve-feed/cve-feed.module';
 import { AdminOpsController } from './admin-ops.controller';
-import { StorageModule } from '../storage/storage.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { StorageModule } from '../storage/storage.module';
       AdminSetting,
       AbuseEvent,
       Subscription,
+      Plan,
     ]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -80,10 +82,8 @@ import { StorageModule } from '../storage/storage.module';
     PaypalModule,
     SubscriptionsModule,
     CveFeedModule,
-    StorageModule,
   ],
-  controllers: [AdminController, AdminBillingController, AdminBillingConfigController, AdminModelsController, AdminOpsController],
+  controllers: [AdminController, AdminBillingController, AdminBillingConfigController, AdminModelsController, AdminOpsController, AdminPlansController],
   providers: [AdminService, AdminSettingsService, DbBackupService, GwehAISSEGuard],
 })
 export class AdminModule {}
-
