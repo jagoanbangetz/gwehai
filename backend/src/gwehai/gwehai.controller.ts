@@ -107,7 +107,7 @@ export class GwehAIController {
     }
 
     // Auto = DeepSeek. Default to 'auto' so we never run without a model (avoids "Model not found").
-    const validModelKey = (model_key && ['auto', 'deepseek', 'openai_gpt5', 'claude', 'gemini'].includes(model_key)
+    const validModelKey = (model_key && ['auto', 'deepseek_v4', 'deepseek_v4_flash', 'deepseek_r1', 'deepseek_chat', 'deepseek_coder', 'openai_gpt55', 'openai_gpt5', 'openai_gpt4o', 'openai_o3', 'openai_o4mini', 'openai_codex', 'claude_fable5', 'claude_opus48', 'claude_sonnet4', 'claude_haiku4', 'gemini_31_pro', 'gemini_3_flash', 'gemini_25_pro', 'gemini_ultra'].includes(model_key)
       ? model_key
       : 'auto') as 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini';
     return this.gwehaiService.createJob(user.id, messages, stream, conversation_id || job_id, validModelKey);
@@ -211,7 +211,7 @@ export class GwehAIController {
       .map((m) => {
         const meta = (m.metadata || {}) as Record<string, any>;
         const key = (meta.key as string) || '';
-        if (!['auto', 'deepseek', 'deepseek_v4', 'deepseek_v4_pro', 'openai_gpt5', 'openai_o', 'claude', 'gemini', 'xai', 'meta', 'deepseek_reasoner'].includes(key)) return null;
+        if (!['auto', 'deepseek_v4', 'deepseek_v4_flash', 'deepseek_r1', 'deepseek_chat', 'deepseek_coder', 'openai_gpt55', 'openai_gpt5', 'openai_gpt4o', 'openai_o3', 'openai_o4mini', 'openai_codex', 'claude_fable5', 'claude_opus48', 'claude_sonnet4', 'claude_haiku4', 'gemini_31_pro', 'gemini_3_flash', 'gemini_25_pro', 'gemini_ultra'].includes(key)) return null;
         return {
           key,
           label: m.displayName || m.name || key,
