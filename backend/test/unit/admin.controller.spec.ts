@@ -48,7 +48,6 @@ describe('AdminController', () => {
   const pentestJobsService = { listRecentForAdmin: jest.fn().mockResolvedValue([]) } as any;
   const dbBackupService = { createBackup: jest.fn(), listBackups: jest.fn().mockReturnValue([]), generateRestoreToken: jest.fn(), restoreBackup: jest.fn() } as any;
   const adminSettingsService = { getApiKey: jest.fn(), invalidate: jest.fn(), invalidateAll: jest.fn() } as any;
-  const objectStorageService = { upload: jest.fn().mockResolvedValue({ url: 'https://example.com/test.png', key: 'branding/logo/test.png' }), delete: jest.fn() } as any;
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -68,7 +67,6 @@ describe('AdminController', () => {
       abuseRepo,
       adminService as any,
       adminSettingsService,
-      objectStorageService,
       gwehaiService as any,
       hacktivityService as any,
       planUsageService,
