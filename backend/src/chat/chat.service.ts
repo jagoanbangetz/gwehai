@@ -1287,6 +1287,7 @@ export class ChatService {
       break;
     }
 
+    const modelKeySummary = options?.model_key || 'auto';
     // Log report_finding stats for debugging
     console.log(`[ReportFinding] run complete: turns=${turn} report_finding_calls=${reportFindingCalledThisRun} conversationId=${cid}`);
 
@@ -1340,7 +1341,6 @@ export class ChatService {
     }
 
     // If we hit MAX_TURNS or step limit without any text reply, ask the model once for a summary (no tools).
-    const modelKeySummary = options?.model_key || 'auto';
     if (!finalContent?.trim()) {
       push({ type: 'status', data: { message: 'Writing response...' } });
       const summaryPrompt = stepLimitReached
