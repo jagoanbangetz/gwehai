@@ -44,11 +44,11 @@
   fill: rgba(255, 255, 255, 0.1);
   stroke: rgba(255, 255, 255, 0.2);
   stroke-width: 2;
-  filter: drop-shadow(0 0 10px rgba(99, 102, 241, 0.3));
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.15));
 }
 
 .cloud-dot {
-  fill: rgba(99, 102, 241, 0.6);
+  fill: rgba(255, 255, 255, 0.3);
   animation: blink 2s ease-in-out infinite;
 }
 
@@ -104,25 +104,25 @@
 
 .node-circle {
   fill: rgba(255, 255, 255, 0.05);
-  stroke: rgba(99, 102, 241, 0.4);
+  stroke: rgba(255, 255, 255, 0.2);
   stroke-width: 2;
-  filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.2));
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.1));
 }
 
 .node-building {
   fill: rgba(255, 255, 255, 0.05);
-  stroke: rgba(99, 102, 241, 0.4);
+  stroke: rgba(255, 255, 255, 0.2);
   stroke-width: 2;
 }
 
 .node-web {
   fill: rgba(255, 255, 255, 0.05);
-  stroke: rgba(99, 102, 241, 0.4);
+  stroke: rgba(255, 255, 255, 0.2);
   stroke-width: 2;
 }
 
 .node-dot {
-  fill: rgba(99, 102, 241, 0.8);
+  fill: rgba(255, 255, 255, 0.4);
   animation: pulseDot 2s ease-in-out infinite;
 }
 
@@ -138,11 +138,11 @@
 }
 
 .connection-line {
-  stroke: rgba(99, 102, 241, 0.2);
+  stroke: rgba(255, 255, 255, 0.1);
   stroke-width: 1.5;
   stroke-dasharray: 5, 5;
   animation: dashMove 3s linear infinite;
-  filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.3));
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.15));
 }
 
 @keyframes dashMove {

@@ -14,7 +14,7 @@
   overflow: hidden;
   box-shadow:
     0 20px 60px rgba(0, 0, 0, 0.5),
-    0 0 40px rgba(139, 92, 246, 0.06);
+    0 0 40px rgba(255, 255, 255, 0.04);
   transform: rotateX(2deg);
   transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -93,17 +93,17 @@
 }
 
 .t-info {
-  color: #3b82f6;
+  color: #999;
   font-weight: 600;
 }
 
 .t-warn {
-  color: #f59e0b;
+  color: #bbb;
   font-weight: 600;
 }
 
 .t-crit {
-  color: #ef4444;
+  color: #ddd;
   font-weight: 600;
 }
 
@@ -112,12 +112,12 @@
 }
 
 .t-check {
-  color: #22c55e;
+  color: #ccc;
   font-size: 0.9rem;
 }
 
 .terminal-line.success .t-text {
-  color: #22c55e;
+  color: #ccc;
 }
 
 .t-cursor {

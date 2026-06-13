@@ -5,7 +5,7 @@
   right: 0;
   height: 3px;
   z-index: 9999;
-  background: oklch(0.16 0.006 60);
+  background: oklch(0.16 0 0);
   overflow: hidden;
 }
 
@@ -15,8 +15,8 @@
   background: linear-gradient(
     90deg,
     transparent,
-    oklch(0.6 0.2 250),
-    oklch(0.75 0.15 260),
+    oklch(0.6 0 0),
+    oklch(0.75 0 0),
     transparent
   );
   animation: nav-loading-slide 0.5s ease-in-out;

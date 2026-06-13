@@ -34,10 +34,10 @@
   max-width: 90%;
   background: oklch(0.08 0 0 / 0.95);
   backdrop-filter: blur(20px);
-  border: 1px solid oklch(0.24 0.006 60 / 0.5);
+  border: 1px solid oklch(0.24 0 0 / 0.5);
   border-radius: 8px;
   box-shadow: 
-    0 8px 32px oklch(0.07 0.005 60 / 0.55),
+    0 8px 32px oklch(0.07 0 0 / 0.55),
     inset 0 1px 0 oklch(1 0 0 / 0.1);
   font-family: var(--font-mono);
   overflow: hidden;
@@ -59,7 +59,7 @@
   justify-content: space-between;
   padding: 0.75rem 1rem;
   background: oklch(0.1 0 0 / 0.8);
-  border-bottom: 1px solid oklch(0.24 0.006 60 / 0.3);
+  border-bottom: 1px solid oklch(0.24 0 0 / 0.3);
 }
 
 .terminal-controls {
@@ -74,20 +74,20 @@
 }
 
 .control-dot.red {
-  background: oklch(0.6 0.2 25);
+  background: oklch(0.6 0 0);
 }
 
 .control-dot.yellow {
-  background: oklch(0.7 0.15 80);
+  background: oklch(0.7 0 0);
 }
 
 .control-dot.green {
-  background: oklch(0.6 0.15 150);
+  background: oklch(0.55 0 0);
 }
 
 .terminal-title {
   font-size: 0.75rem;
-  color: oklch(0.72 0.005 60);
+  color: oklch(0.72 0 0);
   font-weight: 500;
 }
 
@@ -148,17 +148,17 @@
 }
 
 .terminal-prompt {
-  color: oklch(0.5 0.1 200);
+  color: oklch(0.5 0 0);
   font-weight: 600;
 }
 
 .terminal-text {
-  color: oklch(0.92 0.003 60);
+  color: oklch(0.92 0 0);
   flex: 1;
 }
 
 .terminal-text.typing {
-  color: oklch(0.62 0.005 60);
+  color: oklch(0.62 0 0);
 }
 
 .terminal-cursor {
@@ -195,14 +195,14 @@
   width: 200px;
   height: 200px;
   border-radius: 50%;
-  border: 2px solid oklch(0.3 0.1 240 / 0.6);
-  background: oklch(0.1 0.1 240 / 0.2);
+  border: 2px solid oklch(0.3 0 0 / 0.6);
+  background: oklch(0.15 0 0 / 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
   animation: circlePulse 4s ease-in-out infinite;
-  filter: drop-shadow(0 0 20px oklch(0.3 0.1 240 / 0.4));
+  filter: drop-shadow(0 0 20px oklch(0.3 0 0 / 0.4));
 }
 
 @keyframes circlePulse {
@@ -219,11 +219,11 @@
 .shape-diamond {
   width: 80px;
   height: 80px;
-  background: oklch(0.5 0.2 15);
+  background: oklch(0.5 0 0);
   transform: rotate(45deg);
   position: relative;
   animation: diamondRotate 8s linear infinite;
-  filter: drop-shadow(0 0 15px oklch(0.5 0.2 15 / 0.6));
+  filter: drop-shadow(0 0 15px oklch(0.5 0 0 / 0.6));
 }
 
 @keyframes diamondRotate {
@@ -242,10 +242,10 @@
   transform: translate(-50%, -50%) rotate(-45deg);
   width: 12px;
   height: 12px;
-  background: oklch(0.7 0.15 300);
+  background: oklch(0.7 0 0);
   border-radius: 50%;
   animation: dotPulse 2s ease-in-out infinite;
-  filter: drop-shadow(0 0 8px oklch(0.7 0.15 300 / 0.8));
+  filter: drop-shadow(0 0 8px oklch(0.7 0 0 / 0.8));
 }
 
 @keyframes dotPulse {
@@ -344,7 +344,7 @@
   position: absolute;
   width: 100%;
   height: 100%;
-  border: 2px solid oklch(0.4 0.1 200 / 0.5);
+  border: 2px solid oklch(0.5 0 0 / 0.5);
   border-radius: 50%;
   animation: nodePulse 2s ease-in-out infinite;
 }
@@ -367,11 +367,11 @@
 .node-core {
   width: 20px;
   height: 20px;
-  background: oklch(0.6 0.1 200);
+  background: oklch(0.5 0 0);
   border-radius: 50%;
   position: relative;
   z-index: 1;
-  box-shadow: 0 0 15px oklch(0.6 0.1 200 / 0.6);
+  box-shadow: 0 0 15px oklch(0.5 0 0 / 0.6);
   animation: coreBlink 1.5s ease-in-out infinite;
 }
 
@@ -397,11 +397,11 @@
 }
 
 .connection-line {
-  stroke: oklch(0.4 0.1 200 / 0.4);
+  stroke: oklch(0.4 0 0 / 0.4);
   stroke-width: 1.5;
   stroke-dasharray: 8, 4;
   animation: lineFlow 4s linear infinite;
-  filter: drop-shadow(0 0 4px oklch(0.4 0.1 200 / 0.3));
+  filter: drop-shadow(0 0 4px oklch(0.4 0 0 / 0.3));
 }
 
 @keyframes lineFlow {
@@ -423,12 +423,12 @@
 .code-snippet {
   position: absolute;
   background: oklch(0.1 0 0 / 0.6);
-  border: 1px solid oklch(0.24 0.006 60 / 0.3);
+  border: 1px solid oklch(0.24 0 0 / 0.3);
   border-radius: 4px;
   padding: 0.5rem 0.75rem;
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  color: oklch(0.72 0.005 60);
+  color: oklch(0.72 0 0);
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -485,15 +485,15 @@
 
 .code-line {
   display: block;
-  color: oklch(0.62 0.005 60);
+  color: oklch(0.62 0 0);
 }
 
 .code-line:first-child {
-  color: oklch(0.5 0.1 200);
+  color: oklch(0.5 0 0);
 }
 
 .code-line:last-child {
-  color: oklch(0.7 0.1 300);
+  color: oklch(0.7 0 0);
 }
 
 /* Responsive */

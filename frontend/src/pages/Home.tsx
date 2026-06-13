@@ -13,10 +13,12 @@ const Home = () => {
     <>
       <AnimatedBackground variant="full" intensity="low" />
       <Header />
-      <Hero />
-      <Stats />
-      <Features />
-      <FAQ />
+      <main>
+        <Hero />
+        <Stats />
+        <Features />
+        <FAQ />
+      </main>
       <Footer />
       <ScrollToTop />
     </>

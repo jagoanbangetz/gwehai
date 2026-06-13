@@ -10,7 +10,7 @@
   transition: all 0.4s cubic-bezier(0.22, 1, 0.36, 1);
   box-shadow: 
     0 4px 12px oklch(0 0 0 / 0.05),
-    0 0 0 1px oklch(0.88 0.01 240 / 0.1);
+    0 0 0 1px oklch(0.88 0 0 / 0.1);
 }
 
 .feature-illustration:hover {
@@ -57,10 +57,10 @@
 }
 
 .feature-cloud {
-  fill: rgba(99, 102, 241, 0.1);
-  stroke: rgba(99, 102, 241, 0.4);
+  fill: rgba(255, 255, 255, 0.05);
+  stroke: rgba(255, 255, 255, 0.2);
   stroke-width: 2;
-  filter: drop-shadow(0 0 10px rgba(99, 102, 241, 0.3));
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.15));
 }
 
 .feature-icon {
@@ -77,25 +77,25 @@
 }
 
 .feature-document {
-  fill: rgba(99, 102, 241, 0.1);
-  stroke: rgba(99, 102, 241, 0.4);
+  fill: rgba(255, 255, 255, 0.05);
+  stroke: rgba(255, 255, 255, 0.2);
   stroke-width: 2;
 }
 
 .feature-chat {
-  fill: rgba(99, 102, 241, 0.1);
-  stroke: rgba(99, 102, 241, 0.4);
+  fill: rgba(255, 255, 255, 0.05);
+  stroke: rgba(255, 255, 255, 0.2);
   stroke-width: 2;
 }
 
 .feature-automation {
-  fill: rgba(99, 102, 241, 0.1);
-  stroke: rgba(99, 102, 241, 0.4);
+  fill: rgba(255, 255, 255, 0.05);
+  stroke: rgba(255, 255, 255, 0.2);
   stroke-width: 2;
 }
 
 .feature-dot {
-  fill: rgba(99, 102, 241, 0.8);
+  fill: rgba(255, 255, 255, 0.4);
   animation: dotPulse 2s ease-in-out infinite;
 }
 
@@ -140,24 +140,24 @@
 }
 
 .node-circle {
-  fill: rgba(99, 102, 241, 0.05);
-  stroke: rgba(99, 102, 241, 0.3);
+  fill: rgba(255, 255, 255, 0.03);
+  stroke: rgba(255, 255, 255, 0.15);
   stroke-width: 2;
-  filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.2));
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.1));
 }
 
 .node-dot {
-  fill: rgba(99, 102, 241, 0.6);
+  fill: rgba(255, 255, 255, 0.3);
   animation: dotPulse 2s ease-in-out infinite;
 }
 
 .connection-line {
-  stroke: rgba(99, 102, 241, 0.2);
+  stroke: rgba(255, 255, 255, 0.1);
   stroke-width: 1.5;
   stroke-dasharray: 5, 5;
   stroke-dashoffset: 0;
   transition: all 0.5s;
-  filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.2));
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.1));
 }
 
 .connection-line.animate {

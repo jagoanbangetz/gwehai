@@ -27,8 +27,8 @@
 }
 
 .glass-card:hover {
-  border-color: rgba(139, 92, 246, 0.25);
-  box-shadow: 0 12px 40px rgba(139, 92, 246, 0.12), var(--glass-shadow);
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 12px 40px rgba(255, 255, 255, 0.08), var(--glass-shadow);
   transform: translateY(-4px);
 }
 
@@ -38,7 +38,7 @@
   top: 0;
   left: 0;
   right: 0;
-  background: rgba(10, 10, 15, 0.85);
+  background: rgba(10, 10, 10, 0.85);
   backdrop-filter: blur(20px) saturate(180%);
   border-bottom: 1px solid var(--glass-border);
   z-index: 1000;
@@ -198,7 +198,7 @@
   display: inline-block;
   position: relative;
   overflow: hidden;
-  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.3);
+  box-shadow: 0 4px 16px rgba(255, 255, 255, 0.15);
 }
 
 .cta-button::before {
@@ -216,7 +216,7 @@
 
 .cta-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.4);
+  box-shadow: 0 8px 24px rgba(255, 255, 255, 0.2);
 }
 
 .cta-button:active {
@@ -328,7 +328,7 @@
 .hero-button.primary {
   background: var(--gradient-accent);
   color: #fff;
-  box-shadow: 0 4px 20px rgba(139, 92, 246, 0.35);
+  box-shadow: 0 4px 20px rgba(255, 255, 255, 0.15);
 }
 
 .hero-button.primary::before {
@@ -346,7 +346,7 @@
 
 .hero-button.primary:hover {
   transform: translateY(-3px) scale(1.02);
-  box-shadow: 0 8px 30px rgba(139, 92, 246, 0.5);
+  box-shadow: 0 8px 30px rgba(255, 255, 255, 0.2);
 }
 
 .hero-button.primary:active {
@@ -364,7 +364,7 @@
   background: var(--gradient-subtle);
   border-color: var(--primary-color);
   transform: translateY(-3px) scale(1.02);
-  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.15);
+  box-shadow: 0 8px 24px rgba(255, 255, 255, 0.1);
 }
 
 .hero-button.secondary:active {
@@ -450,6 +450,22 @@
   font-weight: 500;
 }
 
+/* --- Tablet Breakpoint --- */
+@media (max-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .feature-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .footer-links {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .hero-title {
+    font-size: clamp(2rem, 4.5vw, 3.5rem);
+  }
+}
+
 @media (max-width: 768px) {
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -473,7 +489,7 @@
 }
 
 .feature-section:nth-child(even) {
-  background: rgba(139, 92, 246, 0.02);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .feature-container {
@@ -553,7 +569,7 @@
 .feature-card:hover {
   border-color: var(--border-glow);
   transform: translateY(-4px);
-  box-shadow: 0 12px 40px rgba(139, 92, 246, 0.1);
+  box-shadow: 0 12px 40px rgba(255, 255, 255, 0.06);
 }
 
 .feature-card:hover::before {
@@ -652,8 +668,8 @@
 }
 
 .faq-item.open {
-  border-color: rgba(139, 92, 246, 0.25);
-  box-shadow: 0 4px 20px rgba(139, 92, 246, 0.08);
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 4px 20px rgba(255, 255, 255, 0.06);
 }
 
 .faq-question {
@@ -718,7 +734,7 @@
 
 /* --- Footer --- */
 .footer {
-  background: rgba(10, 10, 15, 0.9);
+  background: rgba(10, 10, 10, 0.9);
   backdrop-filter: blur(20px);
   color: var(--text-primary);
   padding: 4rem 2rem 2rem;
