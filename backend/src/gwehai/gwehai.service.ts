@@ -43,7 +43,7 @@ export class GwehAIService {
     messages: Array<{ role: string; content: string }>,
     stream: boolean = false,
     conversationId?: string,
-    modelKey?: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini',
+    modelKey?: string,
   ): Promise<any> {
     const payload = {
       messages,
@@ -68,8 +68,8 @@ export class GwehAIService {
     const limits = def.limits;
     // Normalize requested model key; all plans may use any model (Auto, DeepSeek, OpenAI GPT5, Claude).
     const requestedKey = payload.model_key;
-    const normalizedKey: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini' =
-      requestedKey && ['auto', 'deepseek', 'openai_gpt5', 'claude', 'gemini'].includes(requestedKey)
+    const normalizedKey: string =
+      requestedKey && ['auto', 'deepseek_v4', 'deepseek_v4_flash', 'deepseek_r1', 'deepseek_chat', 'deepseek_coder', 'openai_gpt55', 'openai_gpt5', 'openai_gpt4o', 'openai_o3', 'openai_o4mini', 'openai_codex', 'claude_fable5', 'claude_opus48', 'claude_sonnet4', 'claude_haiku4', 'gemini_31_pro', 'gemini_3_flash', 'gemini_25_pro', 'gemini_ultra'].includes(requestedKey)
         ? requestedKey
         : 'auto';
     const overrides = await this.policyOverrides.getOverrides();
@@ -105,7 +105,7 @@ export class GwehAIService {
     this.jobs.set(jobId, job);
 
     // Auto = DeepSeek. Always use a model key (default 'auto') so we never hit "Model not found".
-    const modelKey: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini' = normalizedKey;
+    const modelKey: string = normalizedKey;
     if (modelKey) {
       console.log('[gwehai] using model picker:', modelKey, modelKey === 'auto' ? '(DeepSeek)' : '');
     }
@@ -185,7 +185,7 @@ export class GwehAIService {
     userId: string,
     message: string,
     conversationId?: string,
-    modelKey?: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini',
+    modelKey?: string,
     forceSimple?: boolean,
     modelIdOverride?: string,
     maxAgentsForRun?: number,

@@ -147,6 +147,7 @@ export class ProviderRouterService {
       case 'anthropic':
         ({ text, provider, model, inputTokens, outputTokens } = await this.callAnthropic(effectiveOption, messages, caps));
         break;
+      case 'google':
       case 'gemini':
         ({ text, provider, model, inputTokens, outputTokens } = await this.callGemini(effectiveOption, messages, caps));
         break;
@@ -232,6 +233,7 @@ export class ProviderRouterService {
           tool_choice,
         ));
         break;
+      case 'google':
       case 'gemini':
         ({ content, tool_calls, provider, model, inputTokens, outputTokens } = await this.callGeminiWithTools(
           effectiveOption,
