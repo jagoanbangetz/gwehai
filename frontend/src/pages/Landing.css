@@ -326,27 +326,21 @@
 }
 
 .hero-button.primary {
-  background: var(--gradient-accent);
+  background: #000;
   color: #fff;
-  box-shadow: 0 4px 20px rgba(255, 255, 255, 0.15);
+  border: 1px solid #333;
+  box-shadow: none;
 }
 
 .hero-button.primary::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 50%);
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-.hero-button.primary:hover::before {
-  opacity: 1;
+  display: none;
 }
 
 .hero-button.primary:hover {
-  transform: translateY(-3px) scale(1.02);
-  box-shadow: 0 8px 30px rgba(255, 255, 255, 0.2);
+  background: #111;
+  border-color: #555;
+  transform: translateY(-2px);
+  box-shadow: none;
 }
 
 .hero-button.primary:active {
@@ -538,9 +532,27 @@
 
 .feature-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(6, 1fr);
   gap: 1.25rem;
   margin-top: 2rem;
+}
+
+@media (max-width: 1200px) {
+  .feature-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .feature-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .feature-card {

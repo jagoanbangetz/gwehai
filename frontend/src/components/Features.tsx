@@ -14,7 +14,7 @@ const Features = () => {
           description: 'Advanced AI algorithms recognize and classify exploits across multiple attack vectors including web applications, networks, and APIs.',
         },
         {
-          icon: 'fa-solid fa-radar',
+          icon: 'fa-solid fa-crosshairs',
           title: 'Vulnerability Scanning',
           description: 'Comprehensive automated scanning that identifies security weaknesses, misconfigurations, and potential attack surfaces.',
         },
