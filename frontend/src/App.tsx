@@ -41,6 +41,7 @@ const AdminPaymentSubscriptions = lazy(() => import('./pages/admin/AdminPaymentS
 const AdminPaymentPlans = lazy(() => import('./pages/admin/AdminPaymentPlans'))
 const AdminModels = lazy(() => import('./pages/admin/AdminModels'))
 const AdminSettings = lazy(() => import('./pages/admin/AdminSettings'))
+const AdminContact = lazy(() => import('./pages/admin/AdminContact'))
 const Forbidden = lazy(() => import('./pages/Forbidden'))
 
 function LazyFallback() {
@@ -126,6 +127,7 @@ function App() {
                 <Route path="audit" element={<AdminAudit />} />
                 <Route path="models" element={<AdminModels />} />
                 <Route path="settings" element={<AdminSettings />} />
+                <Route path="contact" element={<AdminContact />} />
                 <Route path="promotion" element={<AdminPromotion />} />
               </Route>
               <Route

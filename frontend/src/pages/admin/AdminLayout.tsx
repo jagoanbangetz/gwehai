@@ -20,6 +20,7 @@ const NAV_GROUPS: NavGroup[] = [
       { path: '/admin/conversations', label: 'Conversations' },
       { path: '/admin/hacktivity', label: 'Hacktivity' },
       { path: '/admin/reports', label: 'Reports' },
+      { path: '/admin/contact', label: 'Contact Inbox' },
       { path: '/admin/promotion', label: 'Promotion' },
     ],
   },
