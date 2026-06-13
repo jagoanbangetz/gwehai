@@ -551,6 +551,32 @@ export class AgentOrchestratorService {
             { tool_choice: toolChoice, max_tokens: maxTokensForTools },
           );
       if (!response) {
+        // CHECKLIST GUARD: dont break if pentest checklist incomplete
+        try {
+          const pentestState = await this.pentestJobs.getStateByConversationId(userId, cid);
+          if (pentestState) {
+            const checklist = pentestState.state.checklist ?? {};
+            const CHECKLIST_ORDER = ['recon', 'input_handling', 'auth_session', 'access_control', 'business_logic', 'other'];
+            const incomplete = CHECKLIST_ORDER.filter((s) => !checklist[s]);
+            if (incomplete.length > 0) {
+              const nextSection = incomplete[0];
+              push({
+                type: 'status',
+                data: {
+                  message: `⚠️ LLM returned empty but checklist incomplete (${incomplete.join(', ')}). Auto-continuing: ${nextSection}...`,
+                },
+              });
+              messages.push({
+                role: 'system',
+                content: `Checklist is NOT complete. Incomplete sections: ${incomplete.join(', ')}. Continue immediately with: "${nextSection}". Do NOT summarize — call tools until all sections are done.`,
+              });
+              push({ type: 'status', data: { message: 'Planning next plan...' } });
+              continue;
+            }
+          }
+        } catch (checkErr: any) {
+          push({ type: 'status', data: { message: `Empty-response guard skipped: ${checkErr?.message || 'unknown'}` } });
+        }
         finalContent = this.generateLocalResponse(message);
         break;
       }
