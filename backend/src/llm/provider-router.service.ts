@@ -87,32 +87,16 @@ export function normalizeLlmErrorMessage(raw: string): string {
 
 /** Sanitize OpenAI-style tool_calls: filter by name, ensure valid JSON arguments. */
 function sanitizeToolCalls(raw: any[]): Array<{ id: string; name: string; arguments: string }> {
+  // Direct mapping only — no JSON.parse validation (was corrupting valid args like nmap commands)
   return raw
     .filter((tc: any) => tc?.function?.name)
-    .map((tc: any) => {
-      const rawArgsType = typeof tc.function?.arguments;
-      let argsStr =
-        rawArgsType === 'string'
-          ? tc.function.arguments
-          : JSON.stringify(tc.function?.arguments ?? {});
-      let parseOk = true;
-      try {
-        JSON.parse(argsStr);
-      } catch (e: any) {
-        parseOk = false;
-        console.log(`[sanitizeToolCalls DEBUG] JSON.parse FAILED for ${tc.function?.name}: argsStr_len=${argsStr.length} argsStr_preview=${String(argsStr).substring(0, 150)} error=${e?.message}`);
-        argsStr = '{}';
-      }
-      const result = {
-        id: tc.id || tc.function?.name || `call_${Date.now()}`,
-        name: String(tc.function?.name ?? '').trim(),
-        arguments: argsStr,
-      };
-      if (!parseOk || rawArgsType !== 'string') {
-        console.log(`[sanitizeToolCalls DEBUG] tool=${result.name} rawArgsType=${rawArgsType} parseOk=${parseOk} finalArgs_len=${result.arguments.length}`);
-      }
-      return result;
-    });
+    .map((tc: any) => ({
+      id: tc.id || tc.function?.name || `call_${Date.now()}`,
+      name: String(tc.function?.name ?? '').trim(),
+      arguments: typeof tc.function?.arguments === 'string'
+        ? tc.function.arguments
+        : JSON.stringify(tc.function?.arguments ?? {}),
+    }));
 }
 
 @Injectable()
@@ -401,9 +385,7 @@ export class ProviderRouterService {
         args_len: typeof tc?.function?.arguments === 'string' ? tc.function.arguments.length : 0,
         args_preview: typeof tc?.function?.arguments === 'string' ? tc.function.arguments.substring(0, 120) : 'NOT_A_STRING',
       }));
-      console.log(`[DeepSeek DEBUG] raw tool_calls: ${JSON.stringify(summary)}`);
     } else {
-      console.log('[DeepSeek DEBUG] raw tool_calls: [] (no tools)');
     }
     // Also log sanitized result for comparison
     if (tool_calls.length > 0) {
@@ -412,7 +394,6 @@ export class ProviderRouterService {
         args_len: typeof tc.arguments === 'string' ? tc.arguments.length : 0,
         args_preview: typeof tc.arguments === 'string' ? tc.arguments.substring(0, 120) : JSON.stringify(tc.arguments).substring(0, 120),
       }));
-      console.log(`[DeepSeek DEBUG] sanitized tool_calls: ${JSON.stringify(sanitized)}`);
     }
     const usage = data?.usage || {};
     return {
@@ -529,9 +510,7 @@ export class ProviderRouterService {
         args_len: typeof tc?.function?.arguments === 'string' ? tc.function.arguments.length : 0,
         args_preview: typeof tc?.function?.arguments === 'string' ? tc.function.arguments.substring(0, 120) : 'NOT_A_STRING',
       }));
-      console.log(`[DeepSeek DEBUG] raw tool_calls: ${JSON.stringify(summary)}`);
     } else {
-      console.log('[DeepSeek DEBUG] raw tool_calls: [] (no tools)');
     }
     // Also log sanitized result for comparison
     if (tool_calls.length > 0) {
@@ -540,7 +519,6 @@ export class ProviderRouterService {
         args_len: typeof tc.arguments === 'string' ? tc.arguments.length : 0,
         args_preview: typeof tc.arguments === 'string' ? tc.arguments.substring(0, 120) : JSON.stringify(tc.arguments).substring(0, 120),
       }));
-      console.log(`[DeepSeek DEBUG] sanitized tool_calls: ${JSON.stringify(sanitized)}`);
     }
         const usage = data?.usage || {};
         return {
