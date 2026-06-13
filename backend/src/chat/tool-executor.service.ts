@@ -990,6 +990,7 @@ export class ToolExecutorService {
     conversationId: string | undefined,
     args: Record<string, any>,
     toolResult: string,
+    toolName?: string,
   ): Promise<void> {
     if (!userId) return;
 
@@ -1007,7 +1008,7 @@ export class ToolExecutorService {
         conversationId: conversationId ?? null,
         domain: domain ?? null,
         result: stripAnsi(toolResult),
-        toolArgs: args,
+        toolArgs: toolName ? { ...args, __tool_name: toolName } : args,
       });
     } catch (err: any) {
       console.warn('[Hacktivity] log failed', err?.message);

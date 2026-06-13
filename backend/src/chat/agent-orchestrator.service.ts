@@ -40,6 +40,57 @@ import { CveFeedService } from '../cve-feed/cve-feed.service';
 import type { TechFingerprint } from '../cve-feed/cve-feed.types';
 import { stripAnsi } from '../utils/ansi.util';
 
+/**
+ * Detect vulnerability indicators in tool output.
+ * Returns a short description of what was found, or null if nothing detected.
+ * Used to remind the LLM to call report_finding when exec output shows evidence.
+ */
+function detectVulnIndicators(toolName: string, output: string): string | null {
+  if (!output || toolName !== 'exec') return null;
+
+  // SQL errors — strong indicator of SQLi
+  if (/sql syntax|mysql_fetch|you have an error in your sql|unclosed quotation|sqlite3\.operational|postgresql.*error|ora-\d{5}|microsoft.*odbc.*driver|mssql|syntax error at or near/i.test(output)) {
+    return 'SQL error detected in output — likely SQL injection. Call report_finding with detail, poc (payload + error snippet), and severity.';
+  }
+
+  // XSS reflection — script tags or event handlers reflected
+  if (/<script[\s>]|onerror\s*=|onload\s*=|javascript\s*:|alert\s*\(\s*['"]?\d+['"]?\s*\)/i.test(output) && !output.includes('sanitizeToolCalls')) {
+    return 'Possible XSS reflection detected — script or event handler appears in response. Call report_finding with payload + evidence.';
+  }
+
+  // Stack trace / verbose error — information disclosure
+  if (/traceback \(most recent|at \S+\.java:\d+|at \S+\.js:\d+|stack trace|unhandled exception|internal server error|fatal error|warning:.*on line|notice:.*on line/i.test(output)) {
+    return 'Stack trace or verbose error detected — information disclosure. Call report_finding if this reveals sensitive paths, versions, or internals.';
+  }
+
+  // 500 Internal Server Error with details
+  if (/500 internal server error/i.test(output) && output.length > 200) {
+    return '500 error with detailed response detected. Check if it reveals sensitive info (stack trace, DB details). If so, call report_finding.';
+  }
+
+  // Directory traversal / LFI evidence
+  if (/\[boot loader\]|root:.*:0:0:|windows\\system32|etc\/passwd|etc\/shadow/i.test(output)) {
+    return 'Directory traversal / LFI evidence detected — file system content leaked. Call report_finding with path traversal payload + file content.';
+  }
+
+  // Authentication bypass
+  if (/welcome admin|logged in as admin|dashboard.*admin|set-cookie.*admin/i.test(output) && /bypass|unauthorized|without auth/i.test(output)) {
+    return 'Possible authentication bypass detected. Call report_finding with the bypass technique + evidence.';
+  }
+
+  // Sensitive data exposure
+  if (/api[_-]?key\s*[:=]\s*['"]?[a-z0-9]{20,}|secret[_-]?key\s*[:=]\s*['"]?[a-z0-9]{20,}|password\s*[:=]\s*['"]?[^\s'"]{8,}/i.test(output)) {
+    return 'Possible sensitive data (API key, secret, password) exposed in response. Call report_finding with the disclosure evidence.';
+  }
+
+  // Open redirect
+  if (/redirecting to|location:\s*https?:\/\/(?!target)/i.test(output)) {
+    return 'Possible open redirect detected. Verify arbitrary URL redirect, then call report_finding.';
+  }
+
+  return null;
+}
+
 /** Small delay so SSE client receives events over time and frontend typing effect can run */
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -408,6 +459,7 @@ export class AgentOrchestratorService {
     let staleChecklistTurns = 0;
     const CHECKLIST_STALE_THRESHOLD = 3;
     let continuationMode = false; // true = past step limit, checklist incomplete, auto-continuing
+    let reportFindingCalledThisRun = 0; // Track report_finding calls for enforcement
 
     while (turn < MAX_TURNS) {
       if (abortSignal?.aborted) throw new Error('Request was cancelled');
@@ -667,7 +719,7 @@ export class AgentOrchestratorService {
         for (const { tc } of parsedToolCalls) {
           const r = resultMap.get(tc.id);
           if (!r) continue;
-          await this.toolExecutor.logToolExecution(userId, cid, r.args, r.result);
+          await this.toolExecutor.logToolExecution(userId, cid, r.args, r.result, tc.name);
           messages.push({
             role: 'tool',
             tool_call_id: tc.id,
@@ -677,6 +729,32 @@ export class AgentOrchestratorService {
             type: 'tool_log',
             data: { tool: tc.name, output: clipTextPreserveHeadTail(stripAnsi(r.result), 4000) },
           });
+
+          // Track report_finding calls for enforcement
+          if (tc.name === 'report_finding') {
+            reportFindingCalledThisRun++;
+          }
+
+          // Layer 1: Vuln detection — if exec output shows vulnerability evidence, remind LLM to call report_finding
+          const vulnHint = detectVulnIndicators(tc.name, r.result);
+          if (vulnHint) {
+            messages.push({
+              role: 'user' as any,
+              content: `⚠️ VULNERABILITY INDICATOR DETECTED in exec output: ${vulnHint}`,
+            });
+            push({ type: 'status', data: { message: `⚠️ Vuln indicator found — remind to call report_finding` } });
+            console.log(`[VulnDetect] turn=${turn} tool=${tc.name} hint=${vulnHint.slice(0, 80)}`);
+          }
+        }
+
+        // Layer 3: Periodic enforcement — every 5 turns without report_finding, inject mandatory reminder
+        if (turn > 0 && turn % 5 === 0 && reportFindingCalledThisRun === 0) {
+          messages.push({
+            role: 'user' as any,
+            content: '⚠️ MANDATORY REMINDER: You have run multiple tool calls without calling report_finding. If ANY exec output showed SQL errors, XSS reflections, stack traces, 500 errors with details, or any other vulnerability evidence, you MUST call report_finding NOW before continuing with more scans. Every confirmed vulnerability must be reported via report_finding before the final summary.',
+          });
+          push({ type: 'status', data: { message: '⚠️ Enforcement: report_finding not yet called — injecting reminder' } });
+          console.log(`[ReportEnforcement] turn=${turn} report_finding_calls=${reportFindingCalledThisRun}`);
         }
 
         // ── Wait for parallel sub-agents (wait_for_reply=false) ───────────
@@ -785,6 +863,62 @@ export class AgentOrchestratorService {
       const tokensFinalTurn = Math.ceil((response.content?.length || 0) / 4) + 500;
       await this.planUsage.recordStep(userId, cid, tokensFinalTurn);
       break;
+    }
+
+    // ─── Final Enforcement: ensure report_finding was called ───────────────
+    // If agent ran >3 turns and never called report_finding, try once more with tool_choice=required
+    console.log(`[ReportFinding] run complete: turns=${turn} report_finding_calls=${reportFindingCalledThisRun} conversationId=${cid}`);
+    if (turn > 3 && reportFindingCalledThisRun === 0) {
+      console.log(`[ReportEnforcement] FINAL: agent ran ${turn} turns with 0 report_finding calls — attempting enforcement turn`);
+      push({ type: 'status', data: { message: '⚠️ Final check: ensuring findings are reported...' } });
+      try {
+        const enforceMessages = truncateMessagesForContext([
+          ...messages,
+          {
+            role: 'user' as any,
+            content: 'CRITICAL: You have completed your scans but called report_finding ZERO times. Review ALL exec outputs from this session. If ANY output contained SQL errors, XSS reflections, stack traces, sensitive data, auth bypasses, or other vulnerability evidence, you MUST call report_finding NOW for each one. This is mandatory — do NOT summarize without reporting findings. If you truly found zero vulnerabilities, respond with "No vulnerabilities confirmed." and skip report_finding.',
+          },
+        ]);
+        const enforceModelKey = options?.model_key || 'auto';
+        const enforceResponse = enforceModelKey
+          ? await this.providerRouter
+              .generateWithTools({
+                selectedModelKey: enforceModelKey,
+                selectedModelIdOverride: options?.modelIdOverride,
+                messages: enforceMessages,
+                tools: PENTEST_TOOL_DEFS,
+                mode: 'decision',
+                tool_choice: 'auto' as const,
+              })
+              .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
+          : null;
+
+        if (enforceResponse?.tool_calls?.length) {
+          const mkCtx = (): ToolExecutionContext => ({
+            jobId, conversationId: cid, userId, memoryScopeId,
+            nextAgentIndexRef, pushEvent: push, abortSignal,
+            modelKey: options?.model_key, maxAgentsForRun: options?.maxAgentsForRun,
+          });
+          for (const tc of enforceResponse.tool_calls) {
+            if (tc.name === 'report_finding') {
+              let args: Record<string, any> = {};
+              try {
+                const parsed = typeof tc.arguments === 'string' ? JSON.parse(tc.arguments) : tc.arguments;
+                args = parsed && typeof parsed === 'object' ? parsed : {};
+              } catch { args = {}; }
+              try {
+                const toolResult = await this.toolExecutor.runTool(tc.name, args, mkCtx());
+                reportFindingCalledThisRun++;
+                console.log(`[ReportEnforcement] report_finding called in enforcement turn: ${JSON.stringify(args).slice(0, 100)}`);
+              } catch (err: any) {
+                console.warn(`[ReportEnforcement] report_finding failed: ${err?.message}`);
+              }
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[ReportEnforcement] enforcement turn failed: ${err?.message}`);
+      }
     }
 
     // ─── Re-verify HIGH/CRITICAL findings before final report ───────────────
