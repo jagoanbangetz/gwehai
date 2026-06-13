@@ -86,6 +86,41 @@ export function normalizeLlmErrorMessage(raw: string): string {
 }
 
 /** Sanitize OpenAI-style tool_calls: filter by name, ensure valid JSON arguments. */
+
+/** Remove tool messages and assistant tool_calls that have no matching partner.
+ *  This prevents the DeepSeek API error "tool_calls must be followed by tool messages". */
+function fixToolCallPairing(openaiMessages: any[]): any[] {
+  // Collect all tool_call IDs from assistant messages
+  const toolCallIds = new Set<string>();
+  for (const m of openaiMessages) {
+    if (m.role === 'assistant' && Array.isArray(m.tool_calls)) {
+      for (const tc of m.tool_calls) {
+        if (tc.id) toolCallIds.add(tc.id);
+      }
+    }
+  }
+  // Build set of tool_call_ids that have matching tool responses
+  const pairedIds = new Set<string>();
+  for (const m of openaiMessages) {
+    if (m.role === 'tool' && m.tool_call_id && toolCallIds.has(m.tool_call_id)) {
+      pairedIds.add(m.tool_call_id);
+    }
+  }
+  return openaiMessages
+    .map((m) => {
+      // Drop tool messages without matching assistant tool_call
+      if (m.role === 'tool' && m.tool_call_id && !toolCallIds.has(m.tool_call_id)) return null;
+      // Strip unpaired tool_calls from assistant messages
+      if (m.role === 'assistant' && Array.isArray(m.tool_calls)) {
+        const valid = m.tool_calls.filter((tc: any) => tc.id && pairedIds.has(tc.id));
+        if (valid.length === 0 && !m.content?.trim()) return null; // drop empty assistant
+        if (valid.length !== m.tool_calls.length) return { ...m, tool_calls: valid };
+      }
+      return m;
+    })
+    .filter(Boolean);
+}
+
 function sanitizeToolCalls(raw: any[]): Array<{ id: string; name: string; arguments: string }> {
   // Direct mapping only — no JSON.parse validation (was corrupting valid args like nmap commands)
   return raw
@@ -307,6 +342,39 @@ export class ProviderRouterService {
     if (!res.ok) {
       const errText = await res.text();
       const message = parseApiErrorResponse(errText, 'DeepSeek', errText || 'DeepSeek API error');
+      // Retry ONCE with fixed messages if tool_calls pairing error
+      if (message.includes('tool_calls must be followed')) {
+        console.warn('[DeepSeek] tool_calls pairing error — retrying with fixed messages');
+        const fixed = fixToolCallPairing(this.llmMessagesToOpenAI(messages));
+        const retryRes = await fetch('https://api.deepseek.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({ ...body, messages: fixed }),
+        });
+        if (retryRes.ok) {
+          const retryData = await retryRes.json();
+          if (retryData?.error) {
+            const errBody = typeof retryData.error === 'string' ? retryData.error : JSON.stringify(retryData.error);
+            throw new HttpException(parseApiErrorResponse(errBody, 'DeepSeek', errBody || 'DeepSeek API error'), 400);
+          }
+          const retryMsg = retryData?.choices?.[0]?.message || {};
+          const retryContent = retryMsg.content ?? '';
+          const retryRawToolCalls = retryMsg.tool_calls || [];
+          const retryToolCalls = sanitizeToolCalls(retryRawToolCalls);
+          const retryUsage = retryData?.usage || {};
+          return {
+            content: retryContent,
+            tool_calls: retryToolCalls.length ? retryToolCalls : undefined,
+            provider: 'deepseek',
+            model: option.defaultModel,
+            inputTokens: retryUsage.prompt_tokens ?? 0,
+            outputTokens: retryUsage.completion_tokens ?? 0,
+          };
+        }
+        // Retry failed — throw original error
+        const retryErrText = await retryRes.text();
+        throw new HttpException(parseApiErrorResponse(retryErrText, 'DeepSeek', retryErrText || 'DeepSeek API error'), retryRes.status);
+      }
       throw new HttpException(message, res.status);
     }
     const data = await res.json();
@@ -365,6 +433,39 @@ export class ProviderRouterService {
     if (!res.ok) {
       const errText = await res.text();
       const message = parseApiErrorResponse(errText, 'DeepSeek', errText || 'DeepSeek API error');
+      // Retry ONCE with fixed messages if tool_calls pairing error
+      if (message.includes('tool_calls must be followed')) {
+        console.warn('[DeepSeek] tool_calls pairing error — retrying with fixed messages');
+        const fixed = fixToolCallPairing(this.llmMessagesToOpenAI(messages));
+        const retryRes = await fetch('https://api.deepseek.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({ ...body, messages: fixed }),
+        });
+        if (retryRes.ok) {
+          const retryData = await retryRes.json();
+          if (retryData?.error) {
+            const errBody = typeof retryData.error === 'string' ? retryData.error : JSON.stringify(retryData.error);
+            throw new HttpException(parseApiErrorResponse(errBody, 'DeepSeek', errBody || 'DeepSeek API error'), 400);
+          }
+          const retryMsg = retryData?.choices?.[0]?.message || {};
+          const retryContent = retryMsg.content ?? '';
+          const retryRawToolCalls = retryMsg.tool_calls || [];
+          const retryToolCalls = sanitizeToolCalls(retryRawToolCalls);
+          const retryUsage = retryData?.usage || {};
+          return {
+            content: retryContent,
+            tool_calls: retryToolCalls.length ? retryToolCalls : undefined,
+            provider: 'deepseek',
+            model: option.defaultModel,
+            inputTokens: retryUsage.prompt_tokens ?? 0,
+            outputTokens: retryUsage.completion_tokens ?? 0,
+          };
+        }
+        // Retry failed — throw original error
+        const retryErrText = await retryRes.text();
+        throw new HttpException(parseApiErrorResponse(retryErrText, 'DeepSeek', retryErrText || 'DeepSeek API error'), retryRes.status);
+      }
       throw new HttpException(message, res.status);
     }
     const data = await res.json();
@@ -378,23 +479,6 @@ export class ProviderRouterService {
     const content = msg.content ?? '';
     const rawToolCalls = msg.tool_calls || [];
     const tool_calls = sanitizeToolCalls(rawToolCalls);
-    // DEBUG: log raw tool_calls from DeepSeek API
-    if (rawToolCalls.length > 0) {
-      const summary = rawToolCalls.map((tc: any) => ({
-        name: tc?.function?.name || '(none)',
-        args_len: typeof tc?.function?.arguments === 'string' ? tc.function.arguments.length : 0,
-        args_preview: typeof tc?.function?.arguments === 'string' ? tc.function.arguments.substring(0, 120) : 'NOT_A_STRING',
-      }));
-    } else {
-    }
-    // Also log sanitized result for comparison
-    if (tool_calls.length > 0) {
-      const sanitized = tool_calls.map((tc: any) => ({
-        name: tc.name,
-        args_len: typeof tc.arguments === 'string' ? tc.arguments.length : 0,
-        args_preview: typeof tc.arguments === 'string' ? tc.arguments.substring(0, 120) : JSON.stringify(tc.arguments).substring(0, 120),
-      }));
-    }
     const usage = data?.usage || {};
     return {
       content,
