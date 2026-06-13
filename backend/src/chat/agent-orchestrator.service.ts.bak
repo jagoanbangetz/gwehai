@@ -91,6 +91,80 @@ function detectVulnIndicators(toolName: string, output: string): string | null {
   return null;
 }
 
+/**
+ * Validate and fix tool_calls message ordering before sending to LLM.
+ *
+ * LLM API requirement:
+ *   [assistant with tool_calls] → [tool response] → [tool response] → [next ANY]
+ *
+ * This function detects user/system messages incorrectly placed between
+ * assistant tool_calls and their tool responses, and reorders them.
+ *
+ * SAFETY NET: even if the root cause is fixed, this catches any future
+ * ordering violations from new code paths.
+ */
+function validateMessages(messages: LlmMessage[]): LlmMessage[] {
+  const result: LlmMessage[] = [];
+  let i = 0;
+  let reorderCount = 0;
+
+  while (i < messages.length) {
+    const msg = messages[i];
+    result.push(msg);
+    i++;
+
+    // If this is an assistant message with tool_calls, ensure next messages are tool responses
+    if (msg.role === 'assistant' && msg.tool_calls?.length) {
+      const toolCallIds = new Set(msg.tool_calls.map((tc) => tc.id).filter(Boolean));
+      if (toolCallIds.size === 0) continue;
+
+      // Collect tool responses and any misplaced non-tool messages
+      const toolResponses: LlmMessage[] = [];
+      const misplaced: LlmMessage[] = [];
+
+      while (i < messages.length) {
+        const next = messages[i];
+        // If it's a tool response for one of our tool_calls, it's in the right place
+        if (next.role === 'tool' && next.tool_call_id && toolCallIds.has(next.tool_call_id)) {
+          toolResponses.push(next);
+          toolCallIds.delete(next.tool_call_id);
+          i++;
+          continue;
+        }
+        // If it's another tool response (orphan) or a non-tool message, stop collecting
+        break;
+      }
+
+      // Check if there are non-tool messages BEFORE all tool responses are placed
+      // This would be the ordering violation
+      while (i < messages.length) {
+        const next = messages[i];
+        // If we still have unpaired tool_call IDs, and next message is NOT a tool response
+        if (toolCallIds.size > 0 && !(next.role === 'tool' && next.tool_call_id && toolCallIds.has(next.tool_call_id))) {
+          misplaced.push(next);
+          i++;
+          continue;
+        }
+        break;
+      }
+
+      // Push tool responses first, then misplaced messages after
+      result.push(...toolResponses);
+      if (misplaced.length > 0) {
+        reorderCount += misplaced.length;
+        console.warn(`[validateMessages] Reordered ${misplaced.length} message(s) that were between assistant tool_calls and tool responses`);
+        result.push(...misplaced);
+      }
+    }
+  }
+
+  if (reorderCount > 0) {
+    console.warn(`[validateMessages] Total reordered: ${reorderCount} message(s)`);
+  }
+
+  return result;
+}
+
 /** Small delay so SSE client receives events over time and frontend typing effect can run */
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -540,54 +614,31 @@ export class AgentOrchestratorService {
         console.warn(`[AgentOrchestrator] WARNING: ${toolCallsCount} assistant messages with tool_calls but 0 tool responses — may trigger protocol error`);
       }
 
+      // SAFETY NET: validate and fix message ordering before LLM call.
+      // Catches any user/system messages incorrectly placed between
+      // assistant tool_calls and their tool responses.
+      const validatedForLlm = validateMessages(truncatedForLlm);
+
       const toolsCap = this.costManager.getToolsOutputCap();
       const fallbackCaps = this.costManager.getCaps('auto', 'decision');
       const maxTokensForTools = toolsCap ?? fallbackCaps.maxOutputTokens;
-      let response: { content: string; tool_calls?: LlmToolCall[] } | null;
-      try {
-        response = modelKey
-          ? await this.providerRouter
-              .generateWithTools({
-                selectedModelKey: modelKey,
-                selectedModelIdOverride: options?.modelIdOverride,
-                messages: truncatedForLlm,
-                tools: PENTEST_TOOL_DEFS,
-                mode: 'decision',
-                tool_choice: toolChoice,
-              })
-              .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
-          : await this.llmService.generateWithTools(
-              model!,
-              truncatedForLlm,
-              PENTEST_TOOL_DEFS,
-              { tool_choice: toolChoice, max_tokens: maxTokensForTools },
-            );
-      } catch (err: any) {
-        if (this.getErrMsg(err).includes('tool_calls must be followed')) {
-          console.warn(`[AgentOrchestrator] tool_calls protocol error caught, retrying with stripped messages: ${err.message}`);
-          push({ type: 'status', data: { message: 'Retrying with fixed tool_calls...' } });
-          const fixed = this.stripUnpairedToolCalls(truncatedForLlm);
-          response = modelKey
-            ? await this.providerRouter
-                .generateWithTools({
-                  selectedModelKey: modelKey,
-                  selectedModelIdOverride: options?.modelIdOverride,
-                  messages: fixed,
-                  tools: PENTEST_TOOL_DEFS,
-                  mode: 'decision',
-                  tool_choice: toolChoice,
-                })
-                .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
-            : await this.llmService.generateWithTools(
-                model!,
-                fixed,
-                PENTEST_TOOL_DEFS,
-                { tool_choice: toolChoice, max_tokens: maxTokensForTools },
-              );
-        } else {
-          throw err;
-        }
-      }
+      let response = modelKey
+        ? await this.providerRouter
+            .generateWithTools({
+              selectedModelKey: modelKey,
+              selectedModelIdOverride: options?.modelIdOverride,
+              messages: validatedForLlm,
+              tools: PENTEST_TOOL_DEFS,
+              mode: 'decision',
+              tool_choice: toolChoice,
+            })
+            .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
+        : await this.llmService.generateWithTools(
+            model!,
+            validatedForLlm,
+            PENTEST_TOOL_DEFS,
+            { tool_choice: toolChoice, max_tokens: maxTokensForTools },
+          );
       if (!response) {
         // CHECKLIST GUARD: dont break if pentest checklist incomplete
         try {
@@ -625,52 +676,23 @@ export class AgentOrchestratorService {
         const overridePrompt = this.buildRefusalOverridePrompt(message);
         messages.push({ role: 'assistant', content: response.content });
         messages.push({ role: 'user', content: overridePrompt });
-        const retryMessages = truncateMessagesForContext(messages);
-        let retryResponse: { content: string; tool_calls?: LlmToolCall[] } | null;
-        try {
-          retryResponse = modelKey
-            ? await this.providerRouter
-                .generateWithTools({
-                  selectedModelKey: modelKey,
-                  selectedModelIdOverride: options?.modelIdOverride,
-                  messages: retryMessages,
-                  tools: PENTEST_TOOL_DEFS,
-                  mode: 'decision',
-                  tool_choice: 'required' as const,
-                })
-                .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
-            : await this.llmService.generateWithTools(
-                model!,
-                retryMessages,
-                PENTEST_TOOL_DEFS,
-                { tool_choice: 'required' as const, max_tokens: maxTokensForTools },
-              );
-        } catch (retryErr: any) {
-          if (this.getErrMsg(retryErr).includes('tool_calls must be followed')) {
-            console.warn(`[AgentOrchestrator] tool_calls protocol error in refusal retry, stripping: ${retryErr.message}`);
-            push({ type: 'status', data: { message: 'Retrying refusal override with fixed tool_calls...' } });
-            const fixedRetry = this.stripUnpairedToolCalls(retryMessages);
-            retryResponse = modelKey
-              ? await this.providerRouter
-                  .generateWithTools({
-                    selectedModelKey: modelKey,
-                    selectedModelIdOverride: options?.modelIdOverride,
-                    messages: fixedRetry,
-                    tools: PENTEST_TOOL_DEFS,
-                    mode: 'decision',
-                    tool_choice: 'required' as const,
-                  })
-                  .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
-              : await this.llmService.generateWithTools(
-                  model!,
-                  fixedRetry,
-                  PENTEST_TOOL_DEFS,
-                  { tool_choice: 'required' as const, max_tokens: maxTokensForTools },
-                );
-          } else {
-            throw retryErr;
-          }
-        }
+        const retryResponse = modelKey
+          ? await this.providerRouter
+              .generateWithTools({
+                selectedModelKey: modelKey,
+                selectedModelIdOverride: options?.modelIdOverride,
+                messages: validateMessages(truncateMessagesForContext(messages)),
+                tools: PENTEST_TOOL_DEFS,
+                mode: 'decision',
+                tool_choice: 'required' as const,
+              })
+              .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
+          : await this.llmService.generateWithTools(
+              model!,
+              validateMessages(truncateMessagesForContext(messages)),
+              PENTEST_TOOL_DEFS,
+              { tool_choice: 'required' as const, max_tokens: maxTokensForTools },
+            );
         if (retryResponse && (retryResponse.tool_calls?.length || !this.isRefusalResponse(retryResponse.content || ''))) {
           response = retryResponse;
           push({ type: 'status', data: { message: 'Override successful - proceeding with pentest.' } });
@@ -809,6 +831,9 @@ export class AgentOrchestratorService {
         const resultMap = new Map<string, { tc: LlmToolCall; args: Record<string, any>; result: string }>();
         for (const r of [...regularResults, ...sendResults]) resultMap.set(r.tc.id, r);
 
+        // Collect vuln hints — push AFTER all tool responses to preserve tool_calls protocol ordering
+        const vulnHints: { hint: string; toolName: string }[] = [];
+
         for (const { tc } of parsedToolCalls) {
           const r = resultMap.get(tc.id);
           if (!r) continue;
@@ -828,16 +853,25 @@ export class AgentOrchestratorService {
             reportFindingCalledThisRun++;
           }
 
-          // Layer 1: Vuln detection — if exec output shows vulnerability evidence, remind LLM to call report_finding
+          // Layer 1: Vuln detection — COLLECT hints, don't push yet (would break tool_calls protocol)
           const vulnHint = detectVulnIndicators(tc.name, r.result);
           if (vulnHint) {
-            messages.push({
-              role: 'user' as any,
-              content: `⚠️ VULNERABILITY INDICATOR DETECTED in exec output: ${vulnHint}`,
-            });
-            push({ type: 'status', data: { message: `⚠️ Vuln indicator found — remind to call report_finding` } });
+            vulnHints.push({ hint: vulnHint, toolName: tc.name });
+            push({ type: 'status', data: { message: `⚠️ Vuln indicator found (${tc.name}) — will remind after all tool responses` } });
             console.log(`[VulnDetect] turn=${turn} tool=${tc.name} hint=${vulnHint.slice(0, 80)}`);
           }
+        }
+
+        // Push vuln hints AFTER all tool responses — preserves tool_calls protocol ordering
+        // (assistant with tool_calls → ALL tool responses → then user/system messages)
+        if (vulnHints.length > 0) {
+          const hintContent = vulnHints.length === 1
+            ? `⚠️ VULNERABILITY INDICATOR DETECTED in ${vulnHints[0].toolName} output: ${vulnHints[0].hint}`
+            : `⚠️ VULNERABILITY INDICATORS DETECTED in tool outputs:\n${vulnHints.map((v, i) => `${i + 1}. [${v.toolName}] ${v.hint}`).join('\n')}`;
+          messages.push({
+            role: 'user' as any,
+            content: hintContent,
+          });
         }
 
         // Layer 3: Periodic enforcement — every 5 turns without report_finding, inject mandatory reminder
@@ -965,49 +999,26 @@ export class AgentOrchestratorService {
       console.log(`[ReportEnforcement] FINAL: agent ran ${turn} turns with 0 report_finding calls — attempting enforcement turn`);
       push({ type: 'status', data: { message: '⚠️ Final check: ensuring findings are reported...' } });
       try {
-        const enforceMessages = truncateMessagesForContext([
+        const enforceMessages = validateMessages(truncateMessagesForContext([
           ...messages,
           {
             role: 'user' as any,
             content: 'CRITICAL: You have completed your scans but called report_finding ZERO times. Review ALL exec outputs from this session. If ANY output contained SQL errors, XSS reflections, stack traces, sensitive data, auth bypasses, or other vulnerability evidence, you MUST call report_finding NOW for each one. This is mandatory — do NOT summarize without reporting findings. If you truly found zero vulnerabilities, respond with "No vulnerabilities confirmed." and skip report_finding.',
           },
-        ]);
+        ]));
         const enforceModelKey = options?.model_key || 'auto';
-        let enforceResponse: { content: string; tool_calls?: LlmToolCall[] } | null;
-        try {
-          enforceResponse = enforceModelKey
-            ? await this.providerRouter
-                .generateWithTools({
-                  selectedModelKey: enforceModelKey,
-                  selectedModelIdOverride: options?.modelIdOverride,
-                  messages: enforceMessages,
-                  tools: PENTEST_TOOL_DEFS,
-                  mode: 'decision',
-                  tool_choice: 'auto' as const,
-                })
-                .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
-            : null;
-        } catch (enforceErr: any) {
-          if (this.getErrMsg(enforceErr).includes('tool_calls must be followed')) {
-            console.warn(`[AgentOrchestrator] tool_calls protocol error in enforcement, stripping: ${enforceErr.message}`);
-            push({ type: 'status', data: { message: 'Retrying enforcement with fixed tool_calls...' } });
-            const fixedEnforce = this.stripUnpairedToolCalls(enforceMessages);
-            enforceResponse = enforceModelKey
-              ? await this.providerRouter
-                  .generateWithTools({
-                    selectedModelKey: enforceModelKey,
-                    selectedModelIdOverride: options?.modelIdOverride,
-                    messages: fixedEnforce,
-                    tools: PENTEST_TOOL_DEFS,
-                    mode: 'decision',
-                    tool_choice: 'auto' as const,
-                  })
-                  .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
-              : null;
-          } else {
-            throw enforceErr;
-          }
-        }
+        const enforceResponse = enforceModelKey
+          ? await this.providerRouter
+              .generateWithTools({
+                selectedModelKey: enforceModelKey,
+                selectedModelIdOverride: options?.modelIdOverride,
+                messages: enforceMessages,
+                tools: PENTEST_TOOL_DEFS,
+                mode: 'decision',
+                tool_choice: 'auto' as const,
+              })
+              .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
+          : null;
 
         if (enforceResponse?.tool_calls?.length) {
           const mkCtx = (): ToolExecutionContext => ({
@@ -1069,49 +1080,23 @@ export class AgentOrchestratorService {
         ? `Step limit for this session was reached. Summarize what you found so far (list each report_finding). In <final>, also list which checklist areas you did NOT get to test (e.g. XSS, LFI, auth) so the user knows.${reVerifyContext} Reply only with <think>brief</think> then <final>summary + unchecked areas + re-verify status</final>. No tool calls.`
         : `Summarize what you did so far.${reVerifyContext} Reply only with <think>brief reasoning</think> then <final>your summary for the user (include re-verification status if any)</final>. No tool calls.`;
       const summaryMessage: LlmMessage = { role: 'user', content: summaryPrompt };
-      const summaryMessages = truncateMessagesForContext([...messages, summaryMessage]);
+      const summaryMessages = validateMessages(truncateMessagesForContext([...messages, summaryMessage]));
       const summaryCaps = this.costManager.getToolsOutputCap() ?? this.costManager.getCaps('auto', 'decision').maxOutputTokens;
-      let summaryResponse: { content: string } | null;
-      try {
-        summaryResponse = modelKeySummary
-          ? await this.providerRouter
-              .generateWithTools({
-                selectedModelKey: modelKeySummary,
-                selectedModelIdOverride: options?.modelIdOverride,
-                messages: summaryMessages,
-                tools: PENTEST_TOOL_DEFS,
-                mode: 'decision',
-                tool_choice: 'none',
-              })
-              .then((r) => ({ content: r.content }))
-          : await this.llmService.generateWithTools(model!, summaryMessages, PENTEST_TOOL_DEFS, {
+      const summaryResponse = modelKeySummary
+        ? await this.providerRouter
+            .generateWithTools({
+              selectedModelKey: modelKeySummary,
+              selectedModelIdOverride: options?.modelIdOverride,
+              messages: summaryMessages,
+              tools: PENTEST_TOOL_DEFS,
+              mode: 'decision',
               tool_choice: 'none',
-              max_tokens: summaryCaps,
-            });
-      } catch (summaryErr: any) {
-        if (this.getErrMsg(summaryErr).includes('tool_calls must be followed')) {
-          console.warn(`[AgentOrchestrator] tool_calls protocol error in summary, stripping: ${summaryErr.message}`);
-          push({ type: 'status', data: { message: 'Retrying summary with fixed tool_calls...' } });
-          const fixedSummary = this.stripUnpairedToolCalls(summaryMessages);
-          summaryResponse = modelKeySummary
-            ? await this.providerRouter
-                .generateWithTools({
-                  selectedModelKey: modelKeySummary,
-                  selectedModelIdOverride: options?.modelIdOverride,
-                  messages: fixedSummary,
-                  tools: PENTEST_TOOL_DEFS,
-                  mode: 'decision',
-                  tool_choice: 'none',
-                })
-                .then((r) => ({ content: r.content }))
-            : await this.llmService.generateWithTools(model!, fixedSummary, PENTEST_TOOL_DEFS, {
-                tool_choice: 'none',
-                max_tokens: summaryCaps,
-              });
-        } else {
-          throw summaryErr;
-        }
-      }
+            })
+            .then((r) => ({ content: r.content }))
+        : await this.llmService.generateWithTools(model!, summaryMessages, PENTEST_TOOL_DEFS, {
+            tool_choice: 'none',
+            max_tokens: summaryCaps,
+          });
       if (summaryResponse?.content?.trim()) {
         finalContent = summaryResponse.content;
       } else {
@@ -1461,65 +1446,6 @@ export class AgentOrchestratorService {
     parts.push('');
     parts.push('Proceed with the security testing immediately. Use exec to run tools.');
     return parts.join('\n');
-  }
-
-  /**
-   * Strip unpaired tool_calls and orphan tool responses from messages.
-   * Defense-in-depth: when truncation leaves assistant tool_calls without
-   * matching tool responses, the API returns "tool_calls must be followed
-   * by tool messages" error. This helper fixes the messages so the retry works.
-   */
-  /** Extract error message from NestJS HttpException (where .message = HTTP status, not real msg) */
-  private getErrMsg(err: any): string {
-    if (!err) return "";
-    if (typeof err.getResponse === "function") {
-      const r = err.getResponse();
-      if (typeof r === "string") return r;
-      if (r?.message) return typeof r.message === "string" ? r.message : String(r.message);
-      return String(r);
-    }
-    return err?.message ?? String(err);
-  }
-
-  private stripUnpairedToolCalls(messages: LlmMessage[]): LlmMessage[] {
-    // 1. Collect all tool_call IDs requested by assistant messages
-    const requestedIds = new Set<string>();
-    for (const m of messages) {
-      if (m.role === 'assistant' && m.tool_calls?.length) {
-        for (const tc of m.tool_calls) {
-          if (tc.id) requestedIds.add(tc.id);
-        }
-      }
-    }
-
-    return messages
-      .map((m) => {
-        // 2. Drop tool responses that don't have a matching tool_call
-        if (m.role === 'tool' && m.tool_call_id && !requestedIds.has(m.tool_call_id)) {
-          return null;
-        }
-        // 3. Drop tool_calls from assistant that have no matching tool response
-        if (m.role === 'assistant' && m.tool_calls?.length) {
-          const toolResponseIds = new Set(
-            messages
-              .filter((x) => x.role === 'tool' && x.tool_call_id && requestedIds.has(x.tool_call_id!))
-              .map((x) => x.tool_call_id!),
-          );
-          const validToolCalls = m.tool_calls.filter((tc) => tc.id && toolResponseIds.has(tc.id));
-          if (validToolCalls.length !== m.tool_calls.length) {
-            return { ...m, tool_calls: validToolCalls.length > 0 ? validToolCalls : undefined };
-          }
-        }
-        return m;
-      })
-      .filter((m): m is LlmMessage => {
-        if (!m) return false;
-        // 4. Drop assistant messages that became empty (no content, no tool_calls)
-        if (m.role === 'assistant' && !m.content?.trim() && !m.tool_calls?.length) {
-          return false;
-        }
-        return true;
-      });
   }
 
 }
