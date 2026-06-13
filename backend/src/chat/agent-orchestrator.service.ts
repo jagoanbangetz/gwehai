@@ -545,6 +545,9 @@ export class AgentOrchestratorService {
       const toolsCap = this.costManager.getToolsOutputCap();
       const fallbackCaps = this.costManager.getCaps('auto', 'decision');
       const maxTokensForTools = toolsCap ?? fallbackCaps.maxOutputTokens;
+      // PREVENTIVE: strip unpaired tool_calls/tool_responses BEFORE sending to LLM
+      // (catch+retry is backup — this prevents the error from happening at all)
+      const validatedForLlm = this.stripUnpairedToolCalls(truncatedForLlm);
       let response: { content: string; tool_calls?: LlmToolCall[] } | null;
       try {
         response = modelKey
@@ -552,7 +555,7 @@ export class AgentOrchestratorService {
               .generateWithTools({
                 selectedModelKey: modelKey,
                 selectedModelIdOverride: options?.modelIdOverride,
-                messages: truncatedForLlm,
+                messages: validatedForLlm,
                 tools: PENTEST_TOOL_DEFS,
                 mode: 'decision',
                 tool_choice: toolChoice,
@@ -568,7 +571,7 @@ export class AgentOrchestratorService {
         if (this.getErrMsg(err).includes('tool_calls must be followed')) {
           console.warn(`[AgentOrchestrator] tool_calls protocol error caught, retrying with stripped messages: ${err.message}`);
           push({ type: 'status', data: { message: 'Retrying with fixed tool_calls...' } });
-          const fixed = this.stripUnpairedToolCalls(truncatedForLlm);
+          const fixed = this.stripUnpairedToolCalls(validatedForLlm);
           response = modelKey
             ? await this.providerRouter
                 .generateWithTools({
