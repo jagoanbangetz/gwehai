@@ -35,6 +35,30 @@ const GROUP_LABELS: Record<ModelKey, string> = {
   meta: 'Llama',
 }
 
+/** Provider config: icon (FA class) + accent color + CSS class */
+interface ProviderConfig {
+  icon: string
+  color: string
+  cssClass: string
+}
+
+const PROVIDER_CONFIG: Record<ModelKey, ProviderConfig> = {
+  auto:              { icon: 'fa-solid fa-wand-magic-sparkles', color: '#a78bfa', cssClass: 'provider-auto' },
+  deepseek_v4:       { icon: 'fa-solid fa-water',              color: '#38bdf8', cssClass: 'provider-deepseek' },
+  deepseek_v4_pro:   { icon: 'fa-solid fa-water',              color: '#38bdf8', cssClass: 'provider-deepseek' },
+  deepseek_reasoner: { icon: 'fa-solid fa-water',              color: '#38bdf8', cssClass: 'provider-deepseek' },
+  openai_gpt5:       { icon: 'fa-solid fa-bolt',               color: '#4ade80', cssClass: 'provider-openai' },
+  openai_o:          { icon: 'fa-solid fa-bolt',               color: '#4ade80', cssClass: 'provider-openai' },
+  claude:            { icon: 'fa-solid fa-shield-halved',      color: '#c084fc', cssClass: 'provider-claude' },
+  gemini:            { icon: 'fa-solid fa-star',               color: '#fb923c', cssClass: 'provider-gemini' },
+  xai:               { icon: 'fa-solid fa-x',                  color: '#e2e8f0', cssClass: 'provider-grok' },
+  meta:              { icon: 'fa-solid fa-paw',                color: '#22d3ee', cssClass: 'provider-llama' },
+}
+
+export function getProviderConfig(key: ModelKey): ProviderConfig {
+  return PROVIDER_CONFIG[key] || PROVIDER_CONFIG.auto
+}
+
 export function getStoredModelKey(): ModelKey {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
@@ -117,6 +141,7 @@ export interface ModelPickerProps {
 
 /**
  * Compact pill/dropdown for model selection (Auto, OpenAI GPT5, Claude). Auto uses DeepSeek.
+ * Grouped by provider with icons + color accents.
  * Persists to localStorage; parent should sync to backend user preference if available.
  */
 const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, className, planId }) => {
@@ -130,6 +155,7 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
   const currentModel = models.find(m => m.id === selectedModelId) || null
   const fallbackLabel = getModelLabel(value)
   const currentLabel = currentModel ? (currentModel.displayName || currentModel.name || fallbackLabel) : fallbackLabel
+  const currentProvider = getProviderConfig(value)
   const isFreePlan = (planId ?? '').toUpperCase() === 'FREE'
 
   const searchLower = search.trim().toLowerCase()
@@ -214,10 +240,8 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
         aria-expanded={open}
         aria-label={`Model: ${currentLabel}`}
       >
-        <span className="model-picker-icon" aria-hidden>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z" />
-          </svg>
+        <span className="model-picker-trigger-icon" style={{ color: currentProvider.color }} aria-hidden>
+          <i className={currentProvider.icon} />
         </span>
         <span className="model-picker-label">{currentLabel}</span>
         <span className="model-picker-chevron" aria-hidden>
@@ -258,30 +282,40 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
                   : `No models match "${search}"`}
               </div>
             ) : (
-              grouped.map(({ key: groupKey, label: groupLabel, models: groupModels }) => (
-                <div key={groupKey} className="model-picker-group">
-                  <div className="model-picker-group-label">{groupLabel}</div>
-                  {groupModels.map(m => {
-                    const key = getModelKeyForRow(m)
-                    const locked = isFreePlan && key !== 'auto'
-                    const selected = selectedModelId === m.id
-                    return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        role="option"
-                        aria-selected={selected}
-                        aria-disabled={locked}
-                        className={`model-picker-option ${selected ? 'selected' : ''} ${locked ? 'locked' : ''}`}
-                        onClick={() => selectModel(m)}
-                      >
-                        <span className="model-picker-option-label">{m.displayName || m.name}</span>
-                        {locked && <span className="model-picker-option-tag">Pro</span>}
-                      </button>
-                    )
-                  })}
-                </div>
-              ))
+              grouped.map(({ key: groupKey, label: groupLabel, models: groupModels }) => {
+                const pConfig = getProviderConfig(groupKey)
+                return (
+                  <div key={groupKey} className={`model-picker-group ${pConfig.cssClass}`}>
+                    <div className="model-picker-group-label" style={{ color: pConfig.color }}>
+                      <span className="model-picker-group-icon" style={{ color: pConfig.color }} aria-hidden>
+                        <i className={pConfig.icon} />
+                      </span>
+                      <span>{groupLabel}</span>
+                    </div>
+                    {groupModels.map(m => {
+                      const key = getModelKeyForRow(m)
+                      const locked = isFreePlan && key !== 'auto'
+                      const selected = selectedModelId === m.id
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          role="option"
+                          aria-selected={selected}
+                          aria-disabled={locked}
+                          className={`model-picker-option ${selected ? 'selected' : ''} ${locked ? 'locked' : ''}`}
+                          onClick={() => selectModel(m)}
+                          style={selected ? { '--option-accent': pConfig.color } as React.CSSProperties : undefined}
+                        >
+                          <span className="model-picker-option-dot" style={{ background: pConfig.color }} aria-hidden />
+                          <span className="model-picker-option-label">{m.displayName || m.name}</span>
+                          {locked && <span className="model-picker-option-tag">Pro</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )
+              })
             )}
           </div>
         </div>
