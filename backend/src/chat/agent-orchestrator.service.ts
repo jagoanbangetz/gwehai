@@ -747,6 +747,40 @@ export class AgentOrchestratorService {
         continue;
       }
 
+      // ═══════════════════════════════════════════════════════════
+      // BEFORE BREAKING: Check pentest checklist completeness.
+      // Don't let the agent stop just because it output text —
+      // verify ALL checklist sections are actually done.
+      // ═══════════════════════════════════════════════════════════
+      try {
+        const pentestState = await this.pentestJobs.getStateByConversationId(userId, cid);
+        if (pentestState) {
+          const checklist = pentestState.state.checklist ?? {};
+          const CHECKLIST_ORDER = ['recon', 'input_handling', 'auth_session', 'access_control', 'business_logic', 'other'];
+          const incomplete = CHECKLIST_ORDER.filter((s) => !checklist[s]);
+          if (incomplete.length > 0) {
+            const nextSection = incomplete[0];
+            push({
+              type: 'status',
+              data: {
+                message: `⚠️ Agent stopped but checklist incomplete (${incomplete.join(', ')}). Auto-continuing: ${nextSection}...`,
+              },
+            });
+            messages.push({
+              role: 'system',
+              content: `Checklist is NOT complete. Incomplete sections: ${incomplete.join(', ')}. Continue immediately with: "${nextSection}". Do NOT summarize or output text-only — keep calling tools until every section is done. Call update_pentest_phase when sections are complete.`,
+            });
+            // Reset the response so we stay in the tool loop
+            response = { content: '', tool_calls: [] };
+            push({ type: 'status', data: { message: 'Planning next plan...' } });
+            continue;
+          }
+        }
+      } catch (checkErr: any) {
+        // Non-blocking: if state lookup fails, proceed normally
+        push({ type: 'status', data: { message: `Checklist guard skipped: ${checkErr?.message || 'unknown'}` } });
+      }
+
       finalContent = response.content || '';
       const tokensFinalTurn = Math.ceil((response.content?.length || 0) / 4) + 500;
       await this.planUsage.recordStep(userId, cid, tokensFinalTurn);
