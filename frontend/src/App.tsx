@@ -38,6 +38,7 @@ import AdminBilling from './pages/admin/AdminBilling'
 import AdminPaymentSubscriptions from './pages/admin/AdminPaymentSubscriptions'
 import AdminPaymentPlans from './pages/admin/AdminPaymentPlans'
 import AdminModels from './pages/admin/AdminModels'
+import AdminPlans from './pages/admin/AdminPlans'
 import Forbidden from './pages/Forbidden'
 
 function ScrollToHash() {
@@ -109,6 +110,7 @@ function App() {
               <Route path="system" element={<AdminSystem />} />
               <Route path="audit" element={<AdminAudit />} />
               <Route path="models" element={<AdminModels />} />
+              <Route path="plans" element={<AdminPlans />} />
               <Route path="promotion" element={<AdminPromotion />} />
             </Route>
             <Route 

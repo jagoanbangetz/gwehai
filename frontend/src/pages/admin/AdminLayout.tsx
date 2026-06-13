@@ -30,6 +30,7 @@ const NAV_GROUPS: NavGroup[] = [
       { path: '/admin/billing', label: 'Billing & pricing' },
       { path: '/admin/payment/subscriptions', label: 'Subscriptions' },
       { path: '/admin/payment/plans', label: 'Plan actions' },
+      { path: '/admin/plans', label: 'Plans' },
     ],
   },
   {
