@@ -386,6 +386,26 @@ export class ProviderRouterService {
     const content = msg.content ?? '';
     const rawToolCalls = msg.tool_calls || [];
     const tool_calls = sanitizeToolCalls(rawToolCalls);
+    // DEBUG: log raw tool_calls from DeepSeek API
+    if (rawToolCalls.length > 0) {
+      const summary = rawToolCalls.map((tc: any) => ({
+        name: tc?.function?.name || '(none)',
+        args_len: typeof tc?.function?.arguments === 'string' ? tc.function.arguments.length : 0,
+        args_preview: typeof tc?.function?.arguments === 'string' ? tc.function.arguments.substring(0, 120) : 'NOT_A_STRING',
+      }));
+      console.log(`[DeepSeek DEBUG] raw tool_calls: ${JSON.stringify(summary)}`);
+    } else {
+      console.log('[DeepSeek DEBUG] raw tool_calls: [] (no tools)');
+    }
+    // Also log sanitized result for comparison
+    if (tool_calls.length > 0) {
+      const sanitized = tool_calls.map((tc: any) => ({
+        name: tc.name,
+        args_len: typeof tc.arguments === 'string' ? tc.arguments.length : 0,
+        args_preview: typeof tc.arguments === 'string' ? tc.arguments.substring(0, 120) : JSON.stringify(tc.arguments).substring(0, 120),
+      }));
+      console.log(`[DeepSeek DEBUG] sanitized tool_calls: ${JSON.stringify(sanitized)}`);
+    }
     const usage = data?.usage || {};
     return {
       content,
@@ -494,6 +514,26 @@ export class ProviderRouterService {
         const content = msg.content ?? '';
         const rawToolCalls = msg.tool_calls || [];
         const tool_calls = sanitizeToolCalls(rawToolCalls);
+    // DEBUG: log raw tool_calls from DeepSeek API
+    if (rawToolCalls.length > 0) {
+      const summary = rawToolCalls.map((tc: any) => ({
+        name: tc?.function?.name || '(none)',
+        args_len: typeof tc?.function?.arguments === 'string' ? tc.function.arguments.length : 0,
+        args_preview: typeof tc?.function?.arguments === 'string' ? tc.function.arguments.substring(0, 120) : 'NOT_A_STRING',
+      }));
+      console.log(`[DeepSeek DEBUG] raw tool_calls: ${JSON.stringify(summary)}`);
+    } else {
+      console.log('[DeepSeek DEBUG] raw tool_calls: [] (no tools)');
+    }
+    // Also log sanitized result for comparison
+    if (tool_calls.length > 0) {
+      const sanitized = tool_calls.map((tc: any) => ({
+        name: tc.name,
+        args_len: typeof tc.arguments === 'string' ? tc.arguments.length : 0,
+        args_preview: typeof tc.arguments === 'string' ? tc.arguments.substring(0, 120) : JSON.stringify(tc.arguments).substring(0, 120),
+      }));
+      console.log(`[DeepSeek DEBUG] sanitized tool_calls: ${JSON.stringify(sanitized)}`);
+    }
         const usage = data?.usage || {};
         return {
           content,
