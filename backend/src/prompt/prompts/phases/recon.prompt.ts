@@ -5,19 +5,15 @@
 
 export const RECON_PHASE_PROMPT = `## Phase: Reconnaissance
 
-**Full checklist required — do NOT stop until ALL sections addressed.**
+**🚨 Full checklist required — do NOT stop until ALL sections are done.**
 Checklist order: **recon** → **input_handling** → **auth_session** → **access_control** → **business_logic** → **other**.
 
-**Never ask the user whether to proceed.** As soon as recon is done, **continue immediately** to input_handling. Do not wait for user confirmation.
+**RULES FOR THIS PHASE:**
+1. Load recon skill: memory_get(path: "skills/recon/SKILL.md")
+2. Run tools NOW: curl -sI (headers), nmap (ports), ffuf (paths), nikto, nuclei
+3. Document findings: write_file → daily/<target>/<date>
+4. **If ANY tool output triggers a vulnerability pattern (SQL error, XSS, etc.) → CALL report_finding IMMEDIATELY. Do NOT wait.**
+5. When recon done: call update_pentest_phase with checklist.recon=true
+6. **IMMEDIATELY proceed to input_handling — do NOT ask "would you like to proceed?"**
 
-**Keep calling tools every turn.** While the checklist is incomplete, every reply MUST include at least one tool call (exec, craft_payload, memory_get, report_finding, update_pentest_phase, write_file). Do not reply with only text describing what you "will" do — actually run the scan now.
-
-### Recon steps
-1. **memory_get(path: "skills/recon/SKILL.md")** — load the recon skill
-2. Run initial recon: curl -sI (headers/tech), nmap (ports), ffuf (paths), nikto, nuclei, subfinder, httpx
-3. Document findings in PentestState (write_file → daily/<target>/<date>)
-4. **Call update_pentest_phase** with checklist.recon=true when done
-5. Immediately proceed to input_handling phase
-
-### Keep the UI in sync
-Call **update_pentest_phase** when you finish recon — pass conversation_id, checklist with recon: true, phase: exploit, and last_action_summary. Then run tests for the next section.`;
+**REMEMBER: Every reply MUST include at least one tool call. Text-only replies are FORBIDDEN during pentest.**`;
