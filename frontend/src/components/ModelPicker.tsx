@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react'
 import apiClient from '../utils/api'
 import './ModelPicker.css'
 
-export type ModelKey = 'auto' | 'deepseek_v4' | 'deepseek_v4_pro' | 'openai_gpt5' | 'openai_o' | 'claude' | 'gemini' | 'xai' | 'meta'
+export type ModelKey = 'auto' | 'deepseek_v4' | 'deepseek_v4_pro' | 'deepseek_reasoner' | 'openai_gpt5' | 'openai_o' | 'claude' | 'gemini' | 'xai' | 'meta'
 
 /** Auto uses DeepSeek V4 Pro under the hood. */
 export const MODEL_OPTIONS: { key: ModelKey; label: string }[] = [
@@ -28,6 +28,7 @@ const MODEL_ICON: Record<ModelKey, string> = {
   auto: 'fa-solid fa-shuffle',
   deepseek_v4: 'fa-solid fa-water',
   deepseek_v4_pro: 'fa-solid fa-water',
+  deepseek_reasoner: 'fa-solid fa-brain',
   openai_gpt5: 'fa-solid fa-bolt',
   openai_o: 'fa-solid fa-bolt',
   claude: 'fa-solid fa-shield-halved',
@@ -39,12 +40,12 @@ const MODEL_ICON: Record<ModelKey, string> = {
 export function getStoredModelKey(): ModelKey {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw === 'deepseek' || raw === 'auto') return 'auto'
+    if (raw === 'deepseek' || raw === 'auto') return 'deepseek_v4'
     // Migrate removed keys
-    if (raw === 'deepseek_reasoner' || raw === 'deepseek_v3') return 'auto'
+    if (raw === 'deepseek_reasoner' || raw === 'deepseek_v3') return 'deepseek_v4'
     if (raw && MODEL_OPTIONS.some(o => o.key === raw)) return raw as ModelKey
   } catch (_) {}
-  return 'auto'
+  return 'deepseek_v4'
 }
 
 export function getStoredModelId(): string | null {
@@ -82,11 +83,19 @@ function getModelKeyForRow(row: BackendModelRow): ModelKey | null {
   if (metaKey && isValidModelKey(metaKey)) return metaKey
   // Fallback: guess by provider
   const provider = (row.provider || '').toLowerCase()
+  const name = (row.name || '').toLowerCase()
+  if (provider === 'deepseek' || (provider === 'custom' && name.includes('deepseek'))) return 'deepseek_v4'
   if (provider === 'anthropic') return 'claude'
   if (provider === 'openai') return 'openai_gpt5'
   if (provider === 'gemini' || provider === 'google') return 'gemini'
   if (provider === 'xai') return 'xai'
   if (provider === 'meta') return 'meta'
+  if (name.includes('claude') || name.includes('anthropic')) return 'claude'
+  if (name.includes('gpt') || name.includes('openai')) return 'openai_gpt5'
+  if (name.includes('gemini')) return 'gemini'
+  if (name.includes('grok') || name.includes('xai')) return 'xai'
+  if (name.includes('llama') || name.includes('meta')) return 'meta'
+  if (name.includes('deepseek') || name.includes('reasoner') || name.includes('coder')) return 'deepseek_v4'
   return null
 }
 
