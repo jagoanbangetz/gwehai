@@ -20,6 +20,7 @@ const NAV_GROUPS: NavGroup[] = [
       { path: '/admin/conversations', label: 'Conversations' },
       { path: '/admin/hacktivity', label: 'Hacktivity' },
       { path: '/admin/reports', label: 'Reports' },
+      { path: '/admin/contact', label: 'Contact Inbox' },
       { path: '/admin/promotion', label: 'Promotion' },
     ],
   },
@@ -50,6 +51,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'System',
     items: [
       { path: '/admin/system', label: 'System' },
+      { path: '/admin/settings', label: 'Settings' },
       { path: '/admin/audit', label: 'Audit' },
       { path: '/admin/models', label: 'Models' },
     ],

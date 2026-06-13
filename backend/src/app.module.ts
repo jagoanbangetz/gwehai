@@ -28,6 +28,7 @@ import { UserPlan } from './entities/user-plan.entity';
 import { PlanUsageDaily } from './entities/plan-usage-daily.entity';
 import { ConversationMemory } from './entities/conversation-memory.entity';
 import { Hacktivity } from './entities/hacktivity.entity';
+import { GlobalMemory } from './entities/global-memory.entity';
 import { AdminModule } from './admin/admin.module';
 import { HacktivityModule } from './hacktivity/hacktivity.module';
 import { ReportsModule } from './reports/reports.module';
@@ -36,6 +37,9 @@ import { GwehAIModule } from './gwehai/gwehai.module';
 import { ToolsModule } from './tools/tools.module';
 import { PentestJobsModule } from './pentest-jobs/pentest-jobs.module';
 import { MailModule } from './mail/mail.module';
+import { CveFeedModule } from './cve-feed/cve-feed.module';
+import { HealthModule } from './health/health.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -68,9 +72,11 @@ import { MailModule } from './mail/mail.module';
       PlanUsageDaily,
       ConversationMemory,
       Hacktivity,
+      GlobalMemory,
     ]),
     MailModule,
     ChatModule,
+    CveFeedModule,
     AuthModule,
     PointsModule,
     PaymentsModule,
@@ -82,6 +88,8 @@ import { MailModule } from './mail/mail.module';
     ToolsModule,
     PentestJobsModule,
     HacktivityModule,
+    HealthModule,
+    StorageModule,
   ],
   controllers: [AppController],
   providers: [AppService],

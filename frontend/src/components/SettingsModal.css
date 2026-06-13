@@ -58,7 +58,7 @@
   font-weight: 600;
   color: rgba(255, 255, 255, 0.95);
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans);
   letter-spacing: -0.02em;
 }
 
@@ -115,7 +115,7 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin: 0 0 16px 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans);
 }
 
 .settings-modal__fields {
@@ -134,14 +134,14 @@
   font-size: 13px;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.88);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans);
 }
 
 .settings-modal__help {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.5);
   margin-top: 2px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans);
 }
 
 /* Inputs - dark theme */
@@ -155,7 +155,7 @@
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 12px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
   box-sizing: border-box;
 }
@@ -198,7 +198,7 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 12px;
   cursor: pointer;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans);
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
@@ -225,7 +225,7 @@
   border: 1px solid rgba(220, 60, 60, 0.45);
   border-radius: 12px;
   cursor: pointer;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans);
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
@@ -238,7 +238,7 @@
   font-size: 15px;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.9);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans);
 }
 
 /* CustomSelect inside settings modal - dark theme override */
@@ -254,7 +254,7 @@
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 12px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans);
 }
 
 .settings-modal .custom-select-trigger:hover {
@@ -305,7 +305,7 @@
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.10);
   color: rgba(255, 255, 255, 0.92);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans);
 }
 
 .settings-modal .custom-select-search-input::placeholder {
@@ -332,7 +332,7 @@
   border: none;
   border-radius: 12px;
   cursor: pointer;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans);
   transition: background 0.15s ease, transform 0.1s ease;
 }
 

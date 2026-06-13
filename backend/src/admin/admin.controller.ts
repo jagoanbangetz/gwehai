@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Patch, Body, Query, Param, UseGuards, Req, HttpException, HttpStatus, Sse } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Body, Query, Param, UseGuards, Req, HttpException, HttpStatus, Sse, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, MoreThanOrEqual } from 'typeorm';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -19,6 +20,8 @@ import { AdminSetting } from '../entities/admin-setting.entity';
 import { AbuseEvent } from '../entities/abuse-event.entity';
 import { Request } from 'express';
 import { AdminService } from './admin.service';
+import { AdminSettingsService } from './admin-settings.service';
+import { ObjectStorageService } from '../storage/object-storage.service';
 import { GwehAIService } from '../gwehai/gwehai.service';
 import { HacktivityService } from '../hacktivity/hacktivity.service';
 import { GwehAISSEGuard } from '../gwehai/gwehai-sse.guard';
@@ -27,6 +30,7 @@ import { getPlanDefinition, type PlanId } from '../config/plans.config';
 import { Observable } from 'rxjs';
 import { MailService } from '../mail/mail.service';
 import { PentestJobsService } from '../pentest-jobs/pentest-jobs.service';
+import { DbBackupService } from './db-backup.service';
 import * as bcrypt from 'bcrypt';
 
 const WIPE_CONFIRM_PHRASE = 'WIPE_ALL_DATA';
@@ -70,11 +74,14 @@ export class AdminController {
     @InjectRepository(AbuseEvent)
     private readonly abuseRepo: Repository<AbuseEvent>,
     private readonly adminService: AdminService,
+    private readonly adminSettingsService: AdminSettingsService,
+    private readonly objectStorageService: ObjectStorageService,
     private readonly gwehaiService: GwehAIService,
     private readonly hacktivityService: HacktivityService,
     private readonly planUsageService: PlanUsageService,
     private readonly mailService: MailService,
     private readonly pentestJobsService: PentestJobsService,
+    private readonly dbBackupService: DbBackupService,
   ) {}
 
   @Get('dashboard')
@@ -662,12 +669,240 @@ export class AdminController {
     return rows;
   }
 
+  /**
+   * GET /admin/settings — return all settings in the format the frontend expects:
+   * { settings: Record<string, SettingMeta>, groups: Record<string, GroupMeta> }
+   *
+   * Each setting merges DB values (admin_settings table) with env fallbacks.
+   */
   @Get('settings')
   async getSettings(@Req() req: Request) {
-    return {
-      environment: process.env.NODE_ENV || 'development',
-      apiBaseUrl: process.env.API_BASE_URL || '/api',
+    // Setting registry: key → { group, label, envVar }
+    const REGISTRY: Record<string, { group: string; label: string; envVar?: string }> = {
+      // AI
+      OPENAI_API_KEY:        { group: 'ai', label: 'OpenAI API Key', envVar: 'OPENAI_API_KEY' },
+      GEMINI_API_KEY:        { group: 'ai', label: 'Gemini API Key', envVar: 'GEMINI_API_KEY' },
+      GROQ_API_KEY:          { group: 'ai', label: 'Groq API Key', envVar: 'GROQ_API_KEY' },
+      ANTHROPIC_API_KEY:     { group: 'ai', label: 'Anthropic API Key', envVar: 'ANTHROPIC_API_KEY' },
+      DEEPSEEK_API_KEY:      { group: 'ai', label: 'DeepSeek API Key', envVar: 'DEEPSEEK_API_KEY' },
+      OPENAI_BASE_URL:       { group: 'ai', label: 'OpenAI Base URL', envVar: 'OPENAI_BASE_URL' },
+
+      // Email
+      SMTP_HOST:             { group: 'email', label: 'SMTP Host', envVar: 'SMTP_HOST' },
+      SMTP_PORT:             { group: 'email', label: 'SMTP Port', envVar: 'SMTP_PORT' },
+      SMTP_USER:             { group: 'email', label: 'SMTP User', envVar: 'SMTP_USER' },
+      SMTP_PASS:             { group: 'email', label: 'SMTP Password', envVar: 'SMTP_PASS' },
+      SMTP_FROM:             { group: 'email', label: 'SMTP From Address', envVar: 'SMTP_FROM' },
+      // Security
+      CORS_ORIGINS:          { group: 'security', label: 'CORS Origins', envVar: 'CORS_ORIGINS' },
+      RATE_LIMIT_WINDOW:     { group: 'security', label: 'Rate Limit Window (sec)', envVar: 'RATE_LIMIT_WINDOW' },
+      RATE_LIMIT_MAX:        { group: 'security', label: 'Rate Limit Max Requests', envVar: 'RATE_LIMIT_MAX' },
+      // Auth
+      GOOGLE_CLIENT_ID:      { group: 'auth', label: 'Google Client ID', envVar: 'GOOGLE_CLIENT_ID' },
+      GOOGLE_CLIENT_SECRET:  { group: 'auth', label: 'Google Client Secret', envVar: 'GOOGLE_CLIENT_SECRET' },
+      GOOGLE_CALLBACK_URL:   { group: 'auth', label: 'Google Callback URL', envVar: 'GOOGLE_CALLBACK_URL' },
+      JWT_SECRET:            { group: 'auth', label: 'JWT Secret', envVar: 'JWT_SECRET' },
+      JWT_EXPIRES_IN:        { group: 'auth', label: 'JWT Expires In', envVar: 'JWT_EXPIRES_IN' },
+      // General
+      NODE_ENV:              { group: 'general', label: 'Environment', envVar: 'NODE_ENV' },
+      PORT:                  { group: 'general', label: 'Server Port', envVar: 'PORT' },
+      FRONTEND_URL:          { group: 'general', label: 'Frontend URL', envVar: 'FRONTEND_URL' },
+      API_BASE_URL:          { group: 'general', label: 'API Base URL', envVar: 'API_BASE_URL' },
+      // Branding
+      site_logo_url:         { group: 'branding', label: 'Site Logo URL' },
+      site_favicon_url:      { group: 'branding', label: 'Site Favicon URL' },
     };
+
+    // Query all DB rows
+    const dbRows = await this.settingsRepo.find();
+    const dbMap = new Map(dbRows.map((r) => [r.key, r.value]));
+
+    // Build settings map
+    const settings: Record<string, { value: string; hasValue: boolean; source: 'db' | 'env'; label: string; group: string }> = {};
+    const groupFields: Record<string, string[]> = {};
+
+    for (const [key, meta] of Object.entries(REGISTRY)) {
+      const dbVal = dbMap.get(key);
+      const envVal = meta.envVar ? (process.env[meta.envVar] ?? '') : '';
+      const hasDb = dbVal != null && dbVal !== '';
+      const hasEnv = envVal !== '';
+
+      settings[key] = {
+        value: hasDb ? dbVal! : envVal,
+        hasValue: hasDb || hasEnv,
+        source: hasDb ? 'db' : 'env',
+        label: meta.label,
+        group: meta.group,
+      };
+
+      if (!groupFields[meta.group]) groupFields[meta.group] = [];
+      groupFields[meta.group].push(key);
+    }
+
+    // Also include any extra DB keys not in the registry (custom settings)
+    for (const [key, value] of dbMap.entries()) {
+      if (!settings[key]) {
+        settings[key] = {
+          value: value ?? '',
+          hasValue: value != null && value !== '',
+          source: 'db',
+          label: key,
+          group: 'general',
+        };
+        if (!groupFields['general']) groupFields['general'] = [];
+        groupFields['general'].push(key);
+      }
+    }
+
+    // Build groups meta
+    const GROUP_LABELS: Record<string, string> = {
+      ai: 'AI',
+      payment: 'Payment',
+      email: 'Email',
+      security: 'Security',
+      auth: 'Authentication',
+      general: 'General',
+      branding: 'Branding',
+    };
+
+    const groups: Record<string, { label: string; fields: string[] }> = {};
+    for (const [groupKey, fields] of Object.entries(groupFields)) {
+      groups[groupKey] = {
+        label: GROUP_LABELS[groupKey] ?? groupKey,
+        fields,
+      };
+    }
+
+    return { settings, groups };
+  }
+
+  /**
+   * PUT /admin/settings — upsert settings from the admin UI.
+   * Body: Record<string, string> (key → value).
+   */
+  @Put('settings')
+  async updateSettings(@Body() body: Record<string, string>, @Req() req: Request) {
+    const adminUser = req.user as { id: string };
+    const ip = this.adminService.getClientIp(req);
+
+    const entries = Object.entries(body);
+    if (entries.length === 0) {
+      throw new HttpException('No settings provided', HttpStatus.BAD_REQUEST);
+    }
+
+    for (const [key, value] of entries) {
+      if (typeof key !== 'string' || typeof value !== 'string') continue;
+      await this.settingsRepo.upsert(
+        { key, value, updatedAt: new Date() },
+        { conflictPaths: ['key'] },
+      );
+
+      // Sync API keys to process.env so services that still read env directly keep working
+      if (key.endsWith('_API_KEY') || key.endsWith('_BASE_URL')) {
+        process.env[key] = value;
+      }
+
+      // Invalidate cache so ProviderRouter picks up the new value immediately
+      this.adminSettingsService.invalidate(key);
+    }
+
+    await this.adminService.log(adminUser.id, 'settings_update', {
+      resource: 'admin/settings',
+      details: JSON.stringify({ keys: entries.map(([k]) => k) }),
+      ipAddress: ip,
+    });
+
+    return { ok: true, updated: entries.length };
+  }
+
+  /**
+   * POST /admin/settings/upload — upload logo or favicon image.
+   * Accepts multipart form with field "file" and "type" (logo | favicon).
+   * Validates: max 2MB, allowed formats (png, jpg, jpeg, ico, svg).
+   * Uploads to S3-compatible storage (Vultr) or local fallback.
+   * Saves the URL in admin_settings (site_logo_url / site_favicon_url).
+   */
+  @Post('settings/upload')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadSettingImage(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('type') type: string,
+    @Req() req: Request,
+  ) {
+    const adminUser = req.user as { id: string };
+    const ip = this.adminService.getClientIp(req);
+
+    // Validate type
+    if (!type || !['logo', 'favicon'].includes(type)) {
+      throw new HttpException(
+        'type must be "logo" or "favicon"',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Validate file exists
+    if (!file || !file.buffer || file.buffer.length === 0) {
+      throw new HttpException(
+        'No file uploaded. Use multipart form with field "file".',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Validate file size (max 2MB)
+    const MAX_SIZE = 2 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      throw new HttpException(
+        `File too large. Max size: 2MB, got: ${(file.size / 1024 / 1024).toFixed(2)}MB`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Validate file format
+    const ALLOWED_MIMES = [
+      'image/png',
+      'image/jpeg',
+      'image/jpg',
+      'image/x-icon',
+      'image/vnd.microsoft.icon',
+      'image/svg+xml',
+    ];
+    const ALLOWED_EXTS = ['.png', '.jpg', '.jpeg', '.ico', '.svg'];
+    const ext = file.originalname
+      ? require('path').extname(file.originalname).toLowerCase()
+      : '';
+
+    if (!ALLOWED_MIMES.includes(file.mimetype) && !ALLOWED_EXTS.includes(ext)) {
+      throw new HttpException(
+        `Invalid file format. Allowed: PNG, JPG, ICO, SVG. Got: ${file.mimetype}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Upload to storage
+    const folder = type === 'logo' ? 'branding/logo' : 'branding/favicon';
+    const { url } = await this.objectStorageService.upload(
+      file.buffer,
+      file.originalname || `${type}${ext || '.png'}`,
+      file.mimetype,
+      folder,
+    );
+
+    // Save URL in admin_settings
+    const settingKey = type === 'logo' ? 'site_logo_url' : 'site_favicon_url';
+    await this.settingsRepo.upsert(
+      { key: settingKey, value: url, updatedAt: new Date() },
+      { conflictPaths: ['key'] },
+    );
+    this.adminSettingsService.invalidate(settingKey);
+
+    // Audit log
+    await this.adminService.log(adminUser.id, 'settings_upload', {
+      resource: `admin/settings/${type}`,
+      details: JSON.stringify({ type, url, filename: file.originalname, size: file.size }),
+      ipAddress: ip,
+    });
+
+    return { ok: true, type, url, settingKey };
   }
 
   @Get('cost/summary')
@@ -1098,5 +1333,67 @@ export class AdminController {
         conversations: deletedConversations.affected ?? 0,
       },
     };
+  }
+
+  // ─── DB Backup & Restore ────────────────────────────────────────
+
+  @Post('db/backup')
+  async createDbBackup(@Req() req: Request) {
+    const adminUser = req.user as { id: string };
+    const ip = this.adminService.getClientIp(req);
+
+    const result = await this.dbBackupService.createBackup();
+
+    await this.adminService.log(adminUser.id, 'db_backup_create', {
+      resource: result.filename,
+      details: JSON.stringify({ size: result.size }),
+      ipAddress: ip,
+    });
+
+    return { ok: true, ...result };
+  }
+
+  @Get('db/backups')
+  async listDbBackups() {
+    const backups = this.dbBackupService.listBackups();
+    return { ok: true, count: backups.length, backups };
+  }
+
+  @Post('db/restore/:filename')
+  async restoreDbBackup(
+    @Param('filename') filename: string,
+    @Body() body: { token?: string },
+    @Req() req: Request,
+  ) {
+    const adminUser = req.user as { id: string };
+    const ip = this.adminService.getClientIp(req);
+
+    if (!body?.token) {
+      // No token — generate one and return it for the admin to confirm
+      const { token, expiresAt } = this.dbBackupService.generateRestoreToken(filename);
+      await this.adminService.log(adminUser.id, 'db_restore_token_generated', {
+        resource: filename,
+        details: JSON.stringify({ expiresAt }),
+        ipAddress: ip,
+      });
+      return {
+        ok: true,
+        requiresConfirmation: true,
+        message: 'Send this token in body.token to confirm restore. Token expires in 5 minutes.',
+        token,
+        expiresAt,
+      };
+    }
+
+    // Token provided — execute restore
+    const result = await this.dbBackupService.restoreBackup(body.token);
+
+    await this.adminService.log(adminUser.id, 'db_restore_executed', {
+      resource: result.filename,
+      details: JSON.stringify({ message: result.message }),
+      ipAddress: ip,
+    });
+
+    return { ok: true, ...result };
   }
 }

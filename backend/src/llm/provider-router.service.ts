@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { generateText } from 'ai';
 import { getOptionByKey, getModelOptions, type ModelOptionKey } from '../config/model-options.config';
 import { CostManagerService, type CostMode } from './cost-manager.service';
+import { AdminSettingsService } from '../admin/admin-settings.service';
 import type { LlmMessage, LlmResponse, LlmToolDef } from './llm.types';
 
 export interface ChatCompletionMeta {
@@ -111,6 +112,7 @@ export class ProviderRouterService {
   constructor(
     private readonly config: ConfigService,
     private readonly costManager: CostManagerService,
+    private readonly adminSettings: AdminSettingsService,
   ) {}
 
   /**
@@ -147,6 +149,12 @@ export class ProviderRouterService {
         break;
       case 'gemini':
         ({ text, provider, model, inputTokens, outputTokens } = await this.callGemini(effectiveOption, messages, caps));
+        break;
+      case 'xai':
+        ({ text, provider, model, inputTokens, outputTokens } = await this.callXAI(effectiveOption, messages, caps));
+        break;
+      case 'meta':
+        ({ text, provider, model, inputTokens, outputTokens } = await this.callMeta(effectiveOption, messages, caps));
         break;
       default:
         throw new HttpException(`Unsupported provider: ${option.provider}`, HttpStatus.BAD_REQUEST);
@@ -233,6 +241,24 @@ export class ProviderRouterService {
           tool_choice,
         ));
         break;
+      case 'xai':
+        ({ content, tool_calls, provider, model, inputTokens, outputTokens } = await this.callXAIWithTools(
+          effectiveOption,
+          messages,
+          tools,
+          caps,
+          tool_choice,
+        ));
+        break;
+      case 'meta':
+        ({ content, tool_calls, provider, model, inputTokens, outputTokens } = await this.callMetaWithTools(
+          effectiveOption,
+          messages,
+          tools,
+          caps,
+          tool_choice,
+        ));
+        break;
       default:
         throw new HttpException(`Unsupported provider: ${option.provider}`, HttpStatus.BAD_REQUEST);
     }
@@ -267,7 +293,7 @@ export class ProviderRouterService {
     messages: LlmMessage[],
     caps: { maxOutputTokens: number },
   ): Promise<{ text: string; provider: string; model: string; inputTokens: number; outputTokens: number }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
     if (!apiKey) {
       throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
     }
@@ -315,7 +341,7 @@ export class ProviderRouterService {
     inputTokens: number;
     outputTokens: number;
   }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
     if (!apiKey) {
       throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
     }
@@ -331,7 +357,7 @@ export class ProviderRouterService {
       model: option.defaultModel,
       messages: this.llmMessagesToOpenAI(messages),
       tools: apiTools,
-      tool_choice: tool_choice === 'required' ? 'required' : tool_choice === 'none' ? 'none' : 'auto',
+      // tool_choice NOT sent — DeepSeek V4 Pro rejects "thinking mode does not support tool_choice"
       max_tokens: caps.maxOutputTokens,
     };
     const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
@@ -376,11 +402,11 @@ export class ProviderRouterService {
     messages: LlmMessage[],
     caps: { maxOutputTokens: number },
   ): Promise<{ text: string; provider: string; model: string; inputTokens: number; outputTokens: number }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
     if (!apiKey) {
       throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
     }
-    const baseUrl = this.config.get<string>('OPENAI_BASE_URL') || 'https://api.openai.com/v1';
+    const baseUrl = await this.adminSettings.getApiKey('OPENAI_BASE_URL') || 'https://api.openai.com/v1';
     const url = baseUrl.replace(/\/?$/, '') + '/chat/completions';
     const headers = {
       'Content-Type': 'application/json',
@@ -432,11 +458,11 @@ export class ProviderRouterService {
     inputTokens: number;
     outputTokens: number;
   }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
     if (!apiKey) {
       throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
     }
-    const baseUrl = this.config.get<string>('OPENAI_BASE_URL') || 'https://api.openai.com/v1';
+    const baseUrl = await this.adminSettings.getApiKey('OPENAI_BASE_URL') || 'https://api.openai.com/v1';
     const url = baseUrl.replace(/\/?$/, '') + '/chat/completions';
     const headers = {
       'Content-Type': 'application/json',
@@ -492,7 +518,7 @@ export class ProviderRouterService {
     messages: LlmMessage[],
     caps: { maxOutputTokens: number },
   ): Promise<{ text: string; provider: string; model: string; inputTokens: number; outputTokens: number }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
     if (!apiKey) {
       throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
     }
@@ -544,7 +570,7 @@ export class ProviderRouterService {
     inputTokens: number;
     outputTokens: number;
   }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
     if (!apiKey) {
       throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
     }
@@ -670,7 +696,7 @@ export class ProviderRouterService {
     messages: LlmMessage[],
     caps: { maxOutputTokens: number },
   ): Promise<{ text: string; provider: string; model: string; inputTokens: number; outputTokens: number }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
     if (!apiKey) {
       throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
     }
@@ -724,7 +750,7 @@ export class ProviderRouterService {
     inputTokens: number;
     outputTokens: number;
   }> {
-    const apiKey = this.config.get<string>(option.apiKeyEnv);
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
     if (!apiKey) {
       throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
     }
@@ -778,6 +804,210 @@ export class ProviderRouterService {
       model: option.defaultModel,
       inputTokens: usage.promptTokenCount ?? 0,
       outputTokens: usage.candidatesTokenCount ?? 0,
+    };
+  }
+
+  // --- xAI (OpenAI-compatible API at api.x.ai) ---
+  private async callXAI(
+    option: { defaultModel: string; apiKeyEnv: string },
+    messages: LlmMessage[],
+    caps: { maxOutputTokens: number },
+  ): Promise<{ text: string; provider: string; model: string; inputTokens: number; outputTokens: number }> {
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
+    if (!apiKey) {
+      throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
+    }
+    const baseUrl = await this.adminSettings.getApiKey('XAI_BASE_URL') || 'https://api.x.ai/v1';
+    const url = baseUrl.replace(/\/?$/, '') + '/chat/completions';
+    const body = {
+      model: option.defaultModel,
+      messages: this.llmMessagesToOpenAI(messages),
+      max_tokens: caps.maxOutputTokens,
+    };
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      const message = parseApiErrorResponse(errText, 'xAI', errText || 'xAI API error');
+      throw new HttpException(message, res.status);
+    }
+    const data = await res.json();
+    const content = data?.choices?.[0]?.message?.content ?? '';
+    const usage = data?.usage || {};
+    return {
+      text: content,
+      provider: 'xai',
+      model: option.defaultModel,
+      inputTokens: usage.prompt_tokens ?? 0,
+      outputTokens: usage.completion_tokens ?? 0,
+    };
+  }
+
+  private async callXAIWithTools(
+    option: { defaultModel: string; apiKeyEnv: string },
+    messages: LlmMessage[],
+    tools: LlmToolDef[],
+    caps: { maxOutputTokens: number },
+    tool_choice?: 'auto' | 'required' | 'none',
+  ): Promise<{
+    content: string;
+    tool_calls: LlmResponse['tool_calls'];
+    provider: string;
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+  }> {
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
+    if (!apiKey) {
+      throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
+    }
+    const baseUrl = await this.adminSettings.getApiKey('XAI_BASE_URL') || 'https://api.x.ai/v1';
+    const url = baseUrl.replace(/\/?$/, '') + '/chat/completions';
+    const apiTools = tools.map((t) => ({
+      type: 'function' as const,
+      function: { name: t.function.name, description: t.function.description, parameters: t.function.parameters },
+    }));
+    const body = {
+      model: option.defaultModel,
+      messages: this.llmMessagesToOpenAI(messages),
+      tools: apiTools,
+      tool_choice: tool_choice === 'required' ? 'required' : tool_choice === 'none' ? 'none' : 'auto',
+      max_tokens: caps.maxOutputTokens,
+    };
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      const message = parseApiErrorResponse(errText, 'xAI', errText || 'xAI API error');
+      throw new HttpException(message, res.status);
+    }
+    const data = await res.json();
+    if (data?.error) {
+      const errBody = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+      throw new HttpException(parseApiErrorResponse(errBody, 'xAI', errBody), 400);
+    }
+    const msg = data?.choices?.[0]?.message || {};
+    const content = msg.content ?? '';
+    const tool_calls = sanitizeToolCalls(msg.tool_calls || []);
+    const usage = data?.usage || {};
+    return {
+      content,
+      tool_calls: tool_calls.length ? tool_calls : undefined,
+      provider: 'xai',
+      model: option.defaultModel,
+      inputTokens: usage.prompt_tokens ?? 0,
+      outputTokens: usage.completion_tokens ?? 0,
+    };
+  }
+
+  // --- Meta Llama (OpenAI-compatible via Groq/Together/Fireworks/etc.) ---
+  private async callMeta(
+    option: { defaultModel: string; apiKeyEnv: string },
+    messages: LlmMessage[],
+    caps: { maxOutputTokens: number },
+  ): Promise<{ text: string; provider: string; model: string; inputTokens: number; outputTokens: number }> {
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
+    if (!apiKey) {
+      throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
+    }
+    const baseUrl = await this.adminSettings.getApiKey('META_BASE_URL');
+    if (!baseUrl) {
+      throw new HttpException('META_BASE_URL not configured. Set it to your Llama provider (e.g. https://api.groq.com/openai/v1)', HttpStatus.BAD_REQUEST);
+    }
+    const url = baseUrl.replace(/\/?$/, '') + '/chat/completions';
+    const body = {
+      model: option.defaultModel,
+      messages: this.llmMessagesToOpenAI(messages),
+      max_tokens: caps.maxOutputTokens,
+    };
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      const message = parseApiErrorResponse(errText, 'Meta/Llama', errText || 'Meta API error');
+      throw new HttpException(message, res.status);
+    }
+    const data = await res.json();
+    const content = data?.choices?.[0]?.message?.content ?? '';
+    const usage = data?.usage || {};
+    return {
+      text: content,
+      provider: 'meta',
+      model: option.defaultModel,
+      inputTokens: usage.prompt_tokens ?? 0,
+      outputTokens: usage.completion_tokens ?? 0,
+    };
+  }
+
+  private async callMetaWithTools(
+    option: { defaultModel: string; apiKeyEnv: string },
+    messages: LlmMessage[],
+    tools: LlmToolDef[],
+    caps: { maxOutputTokens: number },
+    tool_choice?: 'auto' | 'required' | 'none',
+  ): Promise<{
+    content: string;
+    tool_calls: LlmResponse['tool_calls'];
+    provider: string;
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+  }> {
+    const apiKey = await this.adminSettings.getApiKey(option.apiKeyEnv);
+    if (!apiKey) {
+      throw new HttpException(`Missing ${option.apiKeyEnv}`, HttpStatus.BAD_REQUEST);
+    }
+    const baseUrl = this.config.get<string>('META_BASE_URL');
+    if (!baseUrl) {
+      throw new HttpException('META_BASE_URL not configured. Set it to your Llama provider (e.g. https://api.groq.com/openai/v1)', HttpStatus.BAD_REQUEST);
+    }
+    const url = baseUrl.replace(/\/?$/, '') + '/chat/completions';
+    const apiTools = tools.map((t) => ({
+      type: 'function' as const,
+      function: { name: t.function.name, description: t.function.description, parameters: t.function.parameters },
+    }));
+    const body = {
+      model: option.defaultModel,
+      messages: this.llmMessagesToOpenAI(messages),
+      tools: apiTools,
+      tool_choice: tool_choice === 'required' ? 'required' : tool_choice === 'none' ? 'none' : 'auto',
+      max_tokens: caps.maxOutputTokens,
+    };
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      const message = parseApiErrorResponse(errText, 'Meta/Llama', errText || 'Meta API error');
+      throw new HttpException(message, res.status);
+    }
+    const data = await res.json();
+    if (data?.error) {
+      const errBody = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+      throw new HttpException(parseApiErrorResponse(errBody, 'Meta/Llama', errBody), 400);
+    }
+    const msg = data?.choices?.[0]?.message || {};
+    const content = msg.content ?? '';
+    const tool_calls = sanitizeToolCalls(msg.tool_calls || []);
+    const usage = data?.usage || {};
+    return {
+      content,
+      tool_calls: tool_calls.length ? tool_calls : undefined,
+      provider: 'meta',
+      model: option.defaultModel,
+      inputTokens: usage.prompt_tokens ?? 0,
+      outputTokens: usage.completion_tokens ?? 0,
     };
   }
 

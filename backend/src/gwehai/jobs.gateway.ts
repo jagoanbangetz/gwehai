@@ -7,7 +7,8 @@ import {
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { Server, WebSocket } from 'ws';
+import { Server } from 'ws';
+import WebSocket = require('ws');
 import { JobsEventsService } from './jobs-events.service';
 import { ChatEventsService } from './chat-events.service';
 import { GwehAIService } from './gwehai.service';

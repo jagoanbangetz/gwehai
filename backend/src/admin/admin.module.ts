@@ -6,11 +6,13 @@ import { AdminController } from './admin.controller';
 import { AdminBillingController } from './admin-billing.controller';
 import { AdminBillingConfigController } from './admin-billing-config.controller';
 import { AdminModelsController } from './admin-models.controller';
+import { AdminPlansController } from './admin-plans.controller';
 import { User } from '../entities/user.entity';
 import { LlmModel } from '../entities/llm-model.entity';
 import { BillingPolicy } from '../entities/billing-policy.entity';
 import { PlanBillingRule } from '../entities/plan-billing-rule.entity';
 import { Model } from '../entities/model.entity';
+import { Plan } from '../entities/plan.entity';
 import { CreditOrder } from '../entities/credit-order.entity';
 import { Report } from '../entities/report.entity';
 import { UsageEvent } from '../entities/usage-event.entity';
@@ -29,12 +31,16 @@ import { PentestJobsModule } from '../pentest-jobs/pentest-jobs.module';
 import { PlansModule } from '../plans/plans.module';
 import { BillingModule } from '../billing/billing.module';
 import { AdminService } from './admin.service';
+import { AdminSettingsService } from './admin-settings.service';
+import { DbBackupService } from './db-backup.service';
 import { HacktivityModule } from '../hacktivity/hacktivity.module';
 import { AuthModule } from '../auth/auth.module';
 import { MailModule } from '../mail/mail.module';
 import { PaypalModule } from '../paypal/paypal.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { GwehAISSEGuard } from '../gwehai/gwehai-sse.guard';
+import { CveFeedModule } from '../cve-feed/cve-feed.module';
+import { AdminOpsController } from './admin-ops.controller';
 
 @Module({
   imports: [
@@ -57,11 +63,12 @@ import { GwehAISSEGuard } from '../gwehai/gwehai-sse.guard';
       AdminSetting,
       AbuseEvent,
       Subscription,
+      Plan,
     ]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') || 'your-super-secret-jwt-key',
+        secret: configService.get<string>('JWT_SECRET'),
       }),
       inject: [ConfigService],
     }),
@@ -74,9 +81,9 @@ import { GwehAISSEGuard } from '../gwehai/gwehai-sse.guard';
     BillingModule,
     PaypalModule,
     SubscriptionsModule,
+    CveFeedModule,
   ],
-  controllers: [AdminController, AdminBillingController, AdminBillingConfigController, AdminModelsController],
-  providers: [AdminService, GwehAISSEGuard],
+  controllers: [AdminController, AdminBillingController, AdminBillingConfigController, AdminModelsController, AdminOpsController, AdminPlansController],
+  providers: [AdminService, AdminSettingsService, DbBackupService, GwehAISSEGuard],
 })
 export class AdminModule {}
-

@@ -77,6 +77,18 @@ This coordination layer is used by the orchestrator (main agent) together with `
 ### ReportAgent (Agent H — optional)
 
 - **Single-owner** for Report stage: compiles final report from Work Registry and Pentest State; confirms all Findings.confirmed have report_finding; no **exec** or new tests.
+- **Re-verification step (MANDATORY before final report):**
+  1. Read all `report_finding` entries from Work Registry
+  2. Filter HIGH/CRITICAL severity findings
+  3. For each finding: re-run minimal verification
+     - SQLi: `sqlmap --batch` ulang
+     - XSS: `curl` payload ulang
+     - IDOR: `curl` endpoint ulang dengan user lain
+     - Other: endpoint reachability check
+  4. If evidence doesn't match → flag `verificationStatus=FAILED`, jangan masuk report
+  5. If evidence matches → mark `verificationStatus=PASSED` → masuk report
+  6. Max 3 re-verify attempts per finding; after 3 FAILED → flag as DISPUTED (excluded)
+- **Backend enforcement:** `re_verify_findings` tool auto-runs before summary compilation. Disputed findings are automatically excluded.
 - May be a dedicated session or the Orchestrator acting as report owner.
 
 ---
@@ -87,6 +99,7 @@ When the Orchestrator spawns a worker (B/C/D/E/F/G or H), the worker’s instruc
 
 - **You are a worker agent. You MUST NOT call sessions_spawn, sessions_list, sessions_send, sessions_history, or session_status. If you need help, create a HELP_REQUEST task in the Work Registry (see MULTI_AGENT_COORDINATION.md) for the Orchestrator.**
 - **Before any exec(...) or craft_payload(...), you MUST claim the corresponding task in the Work Registry (daily/<target>/<YYYY-MM-DD>). If the task is already IN_PROGRESS or DONE, skip it.**
+- **When calling report_finding, you MUST provide confidence (0-100) and confidence_reason (min 20 chars). Self-assess honestly — confidence <50 with weak evidence gets blocked by the backend.**
 - **Write your results only to the Work Registry: update Task Queue status, Claims, and Completed with result_summary and artifact_refs. Do not update # Checklist progress or # Tested vectors; the Orchestrator will merge and update those.**
 - Role-specific: target, stage, assigned TASK_IDs, safety caps, and which skill file(s) to use.
 
@@ -171,6 +184,36 @@ Before calling **report_finding** for a confirmed vulnerability:
 4. If it **does not exist**: call **report_finding(..., finding_key: FINDING_KEY)** so the backend can dedup by key (one finding per key per conversation). Add the FINDING_KEY to `Findings.confirmed`.
 
 **Backend dedup:** report_finding is deduplicated by (conversationId, detail, target, poc) and by optional **finding_key** — when finding_key is provided, the system returns the existing finding if that key already exists for the conversation.
+
+---
+
+## Confidence Score & Anti-Hallucination (REQUIRED)
+
+Every `report_finding` call MUST include **confidence** (0-100 integer) and **confidence_reason** (min 20 chars). This is enforced by the backend — calls without these fields are rejected.
+
+### Confidence Scale
+
+| Range | Label | Meaning |
+|-------|-------|---------|
+| 80-100 | High | Strong evidence: tool output confirms the vuln, POC is reproducible, multiple signals align |
+| 50-79 | Medium | Normal: confirmed via tool but edge cases possible (e.g. filter bypass might be flaky) |
+| 0-49 | Low | Needs manual review: evidence is weak, only heuristic signals, or single unverified indicator |
+
+### Rules for Sub-Agents (All Workers B-H)
+
+- **Self-assess confidence honestly.** Do not inflate confidence to avoid the backend gate. If you're unsure, say so.
+- **Confidence < 50 + weak POC = do NOT report.** The backend blocks this. Re-verify with additional tools first.
+- **Confidence < 50 + strong POC = report allowed** but flagged as `low` — needs manual review.
+- **Always explain your reasoning in confidence_reason.** Good: "sqlmap confirmed injection with --dbs flag, db name 'acutest' dumped". Bad: "looks like injection".
+
+### Rules for Orchestrator (Merge & Quality Gate)
+
+When merging results from sub-agents:
+
+1. **Check confidence scores** on all findings. Flag any finding with confidence < 50 for manual review.
+2. **Cross-reference low-confidence findings.** If multiple agents saw similar evidence for the same endpoint, aggregate confidence may be higher.
+3. **Reject findings with confidence < 30.** These are likely hallucinations or noise. Remove from the final report and note in Work Registry.
+4. **Include confidence in the final report summary.** Group findings by confidence tier (high → medium → low) so reviewers know where to focus.
 
 ---
 
@@ -319,7 +362,7 @@ Sub-agents must respond with:
 
 - Status per TASK_ID (`DONE`, `FAILED`, `BLOCKED`).
 - Paths to any artifacts (files/logs) they wrote.
-- Any confirmed findings (ensuring **report_finding** was called).
+- Any confirmed findings (ensuring **report_finding** was called with **confidence** and **confidence_reason**).
 
 ---
 
@@ -339,6 +382,7 @@ The orchestrator should periodically:
      - Update `# Checklist progress` and `# Tested vectors` so they reflect what the **whole team** has already covered (per TASK_ID).
 4. For each confirmed vulnerability:
    - Ensure a **single** `FINDING_KEY` entry exists in the Confirmed set (see below).
+   - **Check confidence score:** flag findings with confidence < 50 for manual review; reject findings with confidence < 30 (likely hallucinations). Include confidence tier (high/medium/low) in the final report summary.
 
 ### Finding De-duplication
 

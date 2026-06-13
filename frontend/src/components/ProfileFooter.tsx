@@ -24,6 +24,7 @@ export interface ProfileFooterProps {
   onSettings: () => void
   onHelp: () => void
   onLogout: () => void
+  onRestartTour?: () => void
 }
 
 const ProfileFooter: React.FC<ProfileFooterProps> = ({
@@ -35,6 +36,7 @@ const ProfileFooter: React.FC<ProfileFooterProps> = ({
   onSettings,
   onHelp,
   onLogout,
+  onRestartTour,
 }) => {
   const [menuOpen, setMenuOpen] = React.useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -88,37 +90,34 @@ const ProfileFooter: React.FC<ProfileFooterProps> = ({
         <div className="profile-footer-dropdown" role="menu">
           <button type="button" className="profile-footer-menu-item" onClick={() => runAndClose(onUpgrade)} role="menuitem">
             <span className="profile-footer-menu-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                <path d="M2 17l10 5 10-5M2 12l10 5 10-5" />
-              </svg>
+              <i className="fa-solid fa-layer-group" />
             </span>
             Upgrade Plan
           </button>
           <button type="button" className="profile-footer-menu-item" onClick={() => runAndClose(onSettings)} role="menuitem">
             <span className="profile-footer-menu-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24" />
-              </svg>
+              <i className="fa-solid fa-gear" />
             </span>
             Settings
           </button>
           <button type="button" className="profile-footer-menu-item" onClick={() => runAndClose(onHelp)} role="menuitem">
             <span className="profile-footer-menu-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01" />
-              </svg>
+              <i className="fa-solid fa-circle-question" />
             </span>
             Help
           </button>
+          {onRestartTour && (
+            <button type="button" className="profile-footer-menu-item" onClick={() => runAndClose(onRestartTour)} role="menuitem">
+              <span className="profile-footer-menu-icon">
+                <i className="fa-solid fa-rotate-right" />
+              </span>
+              Restart Tour
+            </button>
+          )}
           <div className="profile-footer-menu-divider" />
           <button type="button" className="profile-footer-menu-item" onClick={() => runAndClose(onLogout)} role="menuitem">
             <span className="profile-footer-menu-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
-              </svg>
+              <i className="fa-solid fa-right-from-bracket" />
             </span>
             Log out
           </button>

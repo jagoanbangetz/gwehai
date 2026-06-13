@@ -17,6 +17,13 @@ export enum ReportStatus {
   FAILED = 'failed',
 }
 
+export enum VerificationStatus {
+  PENDING = 'PENDING',
+  PASSED = 'PASSED',
+  FAILED = 'FAILED',
+  SKIPPED = 'SKIPPED',
+}
+
 @Entity('reports')
 @Index(['userId', 'createdAt'])
 export class Report {
@@ -57,6 +64,19 @@ export class Report {
 
   @Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, any>;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  verifiedAt: Date | null;
+
+  @Column({
+    type: 'varchar',
+    length: 16,
+    default: VerificationStatus.PENDING,
+  })
+  verificationStatus: VerificationStatus;
+
+  @Column({ type: 'int', default: 0 })
+  verificationAttempts: number;
 
   @Column({ type: 'timestamptz', nullable: true })
   startedAt: Date | null;

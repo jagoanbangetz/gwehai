@@ -2,6 +2,7 @@ import { HttpException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ProviderRouterService, normalizeLlmErrorMessage } from '../../src/llm/provider-router.service';
 import { CostManagerService } from '../../src/llm/cost-manager.service';
+import { AdminSettingsService } from '../../src/admin/admin-settings.service';
 
 const mockGenerateText = jest.fn();
 jest.mock('ai', () => ({
@@ -21,6 +22,14 @@ describe('ProviderRouterService', () => {
     estimateCost: jest.fn(() => null),
     isCostDebug: jest.fn(() => false),
   };
+  const mockAdminSettings = {
+    getApiKey: jest.fn((key: string) => {
+      if (key === 'DEEPSEEK_API_KEY') return Promise.resolve('test-deepseek-key');
+      return Promise.resolve(undefined);
+    }),
+    invalidate: jest.fn(),
+    invalidateAll: jest.fn(),
+  };
 
   let service: ProviderRouterService;
   let fetchMock: jest.Mock;
@@ -36,6 +45,7 @@ describe('ProviderRouterService', () => {
     service = new ProviderRouterService(
       mockConfig as unknown as ConfigService,
       mockCostManager as unknown as CostManagerService,
+      mockAdminSettings as unknown as AdminSettingsService,
     );
   });
 

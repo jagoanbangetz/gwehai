@@ -1,0 +1,74 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.STAGING_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H 45.77.250.83 >> ~/.ssh/known_hosts
+
+      - name: Build backend
+        run: cd backend && npm ci && npm run build
+
+      - name: Build frontend
+        run: cd frontend && npm ci && npx vite build
+
+      - name: Deploy to staging server
+        run: |
+          rsync -avz --delete -e 'ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no' \
+            --exclude '.git' \
+            --exclude '.env*' \
+            --exclude 'src/' \
+            --exclude '.trigger-test' \
+            ./ root@45.77.250.83:/home/www/gwehai/
+
+      - name: Restart PM2
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no root@45.77.250.83 "
+            set -e
+            cd /home/www/gwehai
+
+            test -f backend/.env || cp /home/www/gwehai_bak/backend/.env backend/.env 2>/dev/null || echo 'WARNING: no .env found'
+
+            pm2 restart gwehai-api --update-env || pm2 start backend/dist/src/main.js --name gwehai-api
+            pm2 save --force
+
+            echo '=== DEPLOY COMPLETE ==='
+          "
+
+      - name: Health check
+        run: |
+          sleep 8
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no root@45.77.250.83 "
+            curl -sSf http://127.0.0.1:3100/api/health | jq -e '.status == \"ok\"'
+            echo '✅ Health check passed'
+          "
+
+      - name: Verify frontend
+        run: |
+          curl -sSf -o /dev/null -w "Frontend HTTP %{http_code}\n" https://dev.gweh.sh/

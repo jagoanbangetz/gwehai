@@ -1,0 +1,160 @@
+/* ─── GwehAI Onboarding Tour — Driver.js Theme Override ─── */
+/* Warm monochrome (hue 60) — no purple, no blue */
+
+.gwehai-tour-popover.driver-popover {
+  background: var(--bg-card, oklch(0.12 0.006 60));
+  border: 1px solid var(--border-color, oklch(0.22 0.006 60));
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg, 0 8px 24px oklch(0 0 0 / 0.3)), 0 0 0 1px oklch(0.22 0.006 60 / 0.1);
+  color: var(--text-primary, oklch(0.98 0.003 60));
+  max-width: 360px;
+  min-width: 280px;
+  font-family: var(--font-sans, inherit);
+}
+
+.gwehai-tour-popover .driver-popover-title {
+  color: var(--text-primary, oklch(0.98 0.003 60));
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  letter-spacing: -0.01em;
+}
+
+.gwehai-tour-popover .driver-popover-description {
+  color: var(--text-secondary, oklch(0.72 0.005 60));
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.gwehai-tour-popover .driver-popover-progress-text {
+  color: var(--text-muted, oklch(0.52 0.005 60));
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.gwehai-tour-popover .driver-popover-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle, oklch(0.16 0.005 60));
+  margin-top: 4px;
+}
+
+.gwehai-tour-popover .driver-popover-btn {
+  border-radius: var(--radius-sm, 8px);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 16px;
+  cursor: pointer;
+  transition: all var(--duration-fast, 0.15s) var(--ease-out, ease);
+  border: none;
+  font-family: inherit;
+}
+
+.gwehai-tour-popover .driver-popover-close-btn {
+  color: var(--text-muted, oklch(0.52 0.005 60));
+  background: transparent;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-xs, 4px);
+  font-size: 18px;
+  line-height: 1;
+  border: none;
+  cursor: pointer;
+  transition: all var(--duration-fast, 0.15s) var(--ease-out, ease);
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.gwehai-tour-popover .driver-popover-close-btn:hover {
+  color: var(--text-primary, oklch(0.98 0.003 60));
+  background: oklch(1 0 0 / 0.06);
+}
+
+.gwehai-tour-popover .driver-popover-btn-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.gwehai-tour-popover .driver-popover-prev-btn {
+  background: oklch(1 0 0 / 0.06);
+  color: var(--text-secondary, oklch(0.72 0.005 60));
+  border: 1px solid var(--border-subtle, oklch(0.16 0.005 60));
+}
+
+.gwehai-tour-popover .driver-popover-prev-btn:hover:not(.driver-popover-btn-disabled) {
+  background: oklch(1 0 0 / 0.1);
+  color: var(--text-primary, oklch(0.98 0.003 60));
+}
+
+.gwehai-tour-popover .driver-popover-next-btn {
+  background: var(--accent-color, oklch(0.8 0 0));
+  color: var(--accent-foreground, oklch(0 0 0));
+  border: none;
+  font-weight: 600;
+}
+
+.gwehai-tour-popover .driver-popover-next-btn:hover:not(.driver-popover-btn-disabled) {
+  background: oklch(0.88 0 0);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md, 0 4px 12px oklch(0 0 0 / 0.25));
+}
+
+/* Skip button styling (close btn doubles as skip) */
+.gwehai-tour-popover .driver-popover-close-btn::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+
+/* Highlighted stage */
+.gwehai-tour-popover-active-stage {
+  border-radius: var(--radius-sm, 8px) !important;
+}
+
+/* Arrow color — match popover background */
+.gwehai-tour-popover .driver-popover-arrow {
+  border-color: var(--bg-card, oklch(0.12 0.006 60));
+}
+
+.gwehai-tour-popover .driver-popover-arrow-side-over::after,
+.gwehai-tour-popover .driver-popover-arrow-side-left::after,
+.gwehai-tour-popover .driver-popover-arrow-side-right::after,
+.gwehai-tour-popover .driver-popover-arrow-side-bottom::after {
+  border-bottom-color: var(--bg-card, oklch(0.12 0.006 60));
+}
+
+.gwehai-tour-popover .driver-popover-arrow-side-top::after {
+  border-top-color: var(--bg-card, oklch(0.12 0.006 60));
+}
+
+/* Stage highlight border — warm, not blue */
+.driver-highlighted-element {
+  outline: 2px solid var(--accent-color, oklch(0.8 0 0)) !important;
+  outline-offset: 2px;
+}
+
+/* Mobile responsive */
+@media (max-width: 640px) {
+  .gwehai-tour-popover.driver-popover {
+    max-width: calc(100vw - 32px);
+    min-width: unset;
+    margin: 0 16px;
+  }
+
+  .gwehai-tour-popover .driver-popover-title {
+    font-size: 15px;
+  }
+
+  .gwehai-tour-popover .driver-popover-description {
+    font-size: 13px;
+  }
+}

@@ -46,6 +46,9 @@ describe('AdminController', () => {
   const planUsageService = {} as any;
   const mailService = { isConfigured: jest.fn().mockReturnValue(false), sendPromotionEmail: jest.fn().mockResolvedValue(true) } as any;
   const pentestJobsService = { listRecentForAdmin: jest.fn().mockResolvedValue([]) } as any;
+  const dbBackupService = { createBackup: jest.fn(), listBackups: jest.fn().mockReturnValue([]), generateRestoreToken: jest.fn(), restoreBackup: jest.fn() } as any;
+  const adminSettingsService = { getApiKey: jest.fn(), invalidate: jest.fn(), invalidateAll: jest.fn() } as any;
+  const objectStorageService = { upload: jest.fn().mockResolvedValue({ url: 'https://example.com/test.png', key: 'branding/logo/test.png' }), delete: jest.fn() } as any;
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -64,11 +67,14 @@ describe('AdminController', () => {
       settingsRepo,
       abuseRepo,
       adminService as any,
+      adminSettingsService,
+      objectStorageService,
       gwehaiService as any,
       hacktivityService as any,
       planUsageService,
       mailService,
       pentestJobsService,
+      dbBackupService,
     );
   });
 
@@ -163,10 +169,18 @@ describe('AdminController', () => {
     expect(result).toHaveLength(1);
   });
 
-  it('returns settings', async () => {
+  it('returns settings in { settings, groups } format', async () => {
+    settingsRepo.find.mockResolvedValue([
+      { key: 'OPENAI_API_KEY', value: 'sk-test', updatedAt: new Date() },
+    ]);
     const result = await controller.getSettings({} as any);
-    expect(result.environment).toBeDefined();
-    expect(result.apiBaseUrl).toBeDefined();
+    expect(result.settings).toBeDefined();
+    expect(result.groups).toBeDefined();
+    expect(result.settings.OPENAI_API_KEY).toBeDefined();
+    expect(result.settings.OPENAI_API_KEY.source).toBe('db');
+    expect(result.settings.OPENAI_API_KEY.value).toBe('sk-test');
+    expect(result.groups.ai).toBeDefined();
+    expect(result.groups.ai.fields).toContain('OPENAI_API_KEY');
   });
 
   it('returns health', async () => {

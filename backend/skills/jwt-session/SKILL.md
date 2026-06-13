@@ -71,10 +71,40 @@ Test JWT and session handling: algorithm confusion (alg: none / RS256→HS256), 
 - **craft_payload**: Script to decode JWT (base64), build JWT with alg:none or sign with weak secret (e.g. node or python); 30s max.
 - **write_file**: Path main or daily/website/YYYY-MM-DD; append "Tested vectors" and "Checklist progress".
 
+## Error Recovery & Fallback
+
+### Primary Tool
+**craft_payload + exec (curl)** — build JWT manipulations and test with curl.
+
+### Fallback Tool
+**manual JWT decode + python/node one-liner** — when craft_payload fails, decode and manipulate tokens manually.
+
+### Error Patterns & Recovery
+
+| Error Pattern | Detection | Recovery Action |
+|---|---|---|
+| **Timeout** | curl hangs >30s on auth endpoint | Retry with `--connect-timeout 10 --max-time 20`. If still timeout, skip endpoint. |
+| **Connection refused** | `curl: (7) Couldn't connect` | Skip endpoint, log "auth endpoint unreachable". Escalate if all endpoints fail. |
+| **WAF/Rate limit** | HTTP 403/429 on login or protected endpoint | Stop brute-force immediately. Try one clean request. Log and move to next vector. |
+| **Login fails** | 401 on login with test creds | Try common default creds once (admin/admin, test/test). If still 401, note "no valid creds" and test public endpoints only. |
+| **JWT decode fails** | Malformed token, base64 decode error | Try manual decode: `echo "TOKEN" | base64 -d 2>/dev/null`. If still fails, token may be opaque/session — skip JWT vectors, test cookie-based auth. |
+| **alg:none rejected** | 401/403 with alg:none token | Expected — server validates signature. Log "alg:none rejected", move to weak secret test. |
+| **Weak secret brute-force blocked** | 429/WAF after few attempts | Stop immediately. Only try 2-3 common secrets ("secret", "password", "key"). Log as "insufficient testing — rate limited". |
+| **Token refresh mechanism** | Modified token gets refreshed/replaced | Note the refresh mechanism. Test if refresh endpoint validates old token. |
+
+### Manual Fallback Workflow (when craft_payload fails)
+1. **exec**(curl -s -X POST -d "user=test&pass=test" LOGIN_URL) — capture token.
+2. **exec**(echo "PAYLOAD_PART" | base64 -d) — manual JWT decode.
+3. **exec**(python3 -c "import json,base64; print(json.dumps(json.loads(base64.urlsafe_b64decode('PAYLOAD'+'==')),indent=2))") — decode payload.
+4. **craft_payload** to build alg:none JWT: `{"alg":"none","typ":"JWT"}.{"role":"admin"}.` — test with curl.
+5. If craft_payload unavailable: **exec**(python3/node one-liner to sign JWT with weak secret).
+6. If nothing works, log "JWT testing incomplete — tool limitations" and move on.
+
 ## Safety limits
 
 - **Stop**: 429, lockout, or WAF; log and continue. **No brute-force**: try only alg:none and one or two common secrets; no mass secret guessing.
 - **In-scope only**. **PoC only**: role change to test value; no destructive privilege use.
+- If all tools fail (timeout, crash, WAF): log error details, mark endpoint as "skipped — tool failure", and move on. Never leave endpoint unlogged.
 
 ## Output fields for report_finding
 

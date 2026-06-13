@@ -6,12 +6,16 @@ import { Conversation } from '../entities/conversation.entity';
 import { PentestJob } from '../entities/pentest-job.entity';
 import { ReportsService } from './reports.service';
 import { ReportsController } from './reports.controller';
+import { ReVerifyService } from './re-verify.service';
+import { ToolsModule } from '../tools/tools.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Report, User, Conversation, PentestJob])],
-  providers: [ReportsService],
+  imports: [
+    TypeOrmModule.forFeature([Report, User, Conversation, PentestJob]),
+    ToolsModule,
+  ],
+  providers: [ReportsService, ReVerifyService],
   controllers: [ReportsController],
-  exports: [ReportsService],
+  exports: [ReportsService, ReVerifyService],
 })
 export class ReportsModule {}
-

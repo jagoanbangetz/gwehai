@@ -211,7 +211,7 @@ export class GwehAIController {
       .map((m) => {
         const meta = (m.metadata || {}) as Record<string, any>;
         const key = (meta.key as string) || '';
-        if (!['auto', 'deepseek', 'openai_gpt5', 'claude', 'gemini'].includes(key)) return null;
+        if (!['auto', 'deepseek', 'deepseek_v4', 'deepseek_v4_pro', 'openai_gpt5', 'openai_o', 'claude', 'gemini', 'xai', 'meta', 'deepseek_reasoner'].includes(key)) return null;
         return {
           key,
           label: m.displayName || m.name || key,
@@ -284,6 +284,29 @@ export class GwehAIController {
 
     // Resume from next event after Last-Event-ID when EventSource reconnects.
     let lastSentIndex = Math.max(0, Math.floor(lastEventId));
+
+    // ── State sync on fresh connect (Last-Event-ID=0) ──
+    // When user switches chats & reconnects, replay the last status/reasoning
+    // event so the frontend can show current agent step instead of a generic
+    // "Resuming pentest" placeholder.
+    if (lastSentIndex === 0) {
+      const events = job.events ?? [];
+      // Find the most recent status or reasoning event
+      let lastStatusOrReasoning: { type: string; data: any } | null = null;
+      for (let i = events.length - 1; i >= 0; i--) {
+        if (events[i].type === 'status' || events[i].type === 'reasoning') {
+          lastStatusOrReasoning = events[i];
+          break;
+        }
+      }
+      sendEvent('state_sync', {
+        stream_id: job.id,
+        current_step: lastStatusOrReasoning?.data?.message ?? 'Running...',
+        status: 'running',
+        event_count: events.length,
+      });
+    }
+
     const POLL_MS = 50;
 
     const pollInterval = setInterval(() => {

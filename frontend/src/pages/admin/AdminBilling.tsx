@@ -578,7 +578,7 @@ export default function AdminBilling() {
                                   .filter(Boolean),
                               })
                             }
-                            placeholder="deepseek-chat, gpt-4o"
+                            placeholder="deepseek-v3, gpt-5"
                           />
                         </label>
                       </div>

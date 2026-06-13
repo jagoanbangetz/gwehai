@@ -56,10 +56,37 @@ Identify and verify Reflected and Stored XSS. Use only proof-of-concept payloads
 - No destructive or phishing payloads; only PoC (e.g. alert(1)). No cookie theft payloads unless user explicitly approved.
 - In-scope only; no mass fuzzing without approval.
 
+## Error Recovery & Fallback
+
+### Primary Tool
+**curl + browser** — send payloads via curl, verify execution in browser context.
+
+### Fallback Tool
+**craft_payload + manual inspection** — when curl/browser fails, build custom request scripts.
+
+### Error Patterns & Recovery
+
+| Error Pattern | Detection | Recovery Action |
+|---|---|---|
+| **Timeout** | curl hangs >30s, page won't load | Retry with `--connect-timeout 10 --max-time 20`. If still timeout, try different parameter or skip. |
+| **Connection refused** | `curl: (7) Couldn't connect` | Skip input, log "target unreachable", move to next input. If all fail, escalate to user. |
+| **WAF block** | HTTP 403/406, payload stripped from response | Pivot to **memory_get**(path: "skills/waf-bypass/SKILL.md"). Try: HTML entity encoding, mixed case (`<ScRiPt>`), event handlers (`onerror`), or SVG-based payloads. |
+| **CSP blocks execution** | `Content-Security-Policy` header present, script won't execute | Still report if payload appears unescaped in response (note CSP in detail). Try inline event handlers or data URI as fallback vectors. |
+| **Rate limit (429)** | HTTP 429 | Stop immediately, log tested inputs, report partial results. |
+| **Payload filtered/encoded** | Payload appears HTML-encoded or stripped in response | Try encoding bypass: `&#x3C;script&#x3E;`, `%3Cscript%3E`, double encoding, or different tag vectors (`<img onerror=...>`, `<svg onload=...>`). |
+| **No reflection found** | Payload never appears in response | Log input as "not reflected", move to next input. Don't retry same payload type. |
+
+### Manual Fallback Workflow (when primary approach fails)
+1. **exec**(curl -s "URL?param=<test123>") — check if input reflects at all.
+2. If reflects: try **craft_payload** with encoded variants (`%3Cscript%3Ealert(1)%3C/script%3E`).
+3. Try event handler vectors: `<img src=x onerror=alert(1)>`, `<svg/onload=alert(1)>`.
+4. If nothing works after 3-4 vector types, log "not exploitable" and move on.
+
 ## When to Escalate or Pivot
 
 - If WAF blocks: **memory_get**(path: "skills/waf-bypass/SKILL.md"); try minimal payloads.
 - If CSP blocks execution: still report reflected/stored if payload appears in response unescaped (note CSP in detail).
+- If all tools fail (timeout, crash, WAF): log error details, mark input as "skipped — tool failure", and move on. Never leave input unlogged.
 
 ---
 

@@ -1,65 +1,159 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
 import AnimatedBackground from '../components/AnimatedBackground'
+import { ToastContainer, type Toast } from '../components/Toast'
+import apiClient from '../utils/api'
 import './Contact.css'
 
-const Contact = () => {
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    subject: '',
-    message: '',
-  })
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle')
+interface FormData {
+  name: string
+  email: string
+  subject: string
+  message: string
+}
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    })
+interface FormErrors {
+  name?: string
+  email?: string
+  subject?: string
+  message?: string
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+const validate = (data: FormData): FormErrors => {
+  const errors: FormErrors = {}
+  if (!data.name.trim()) errors.name = 'Name is required'
+  if (!data.email.trim()) errors.email = 'Email is required'
+  else if (!EMAIL_RE.test(data.email)) errors.email = 'Please enter a valid email'
+  if (!data.subject) errors.subject = 'Please select a subject'
+  if (!data.message.trim()) errors.message = 'Message is required'
+  else if (data.message.trim().length < 10) errors.message = 'Message must be at least 10 characters'
+  return errors
+}
+
+const SUBJECTS = [
+  { value: '', label: 'Select a subject' },
+  { value: 'support', label: 'Technical Support' },
+  { value: 'billing', label: 'Billing Question' },
+  { value: 'feature', label: 'Feature Request' },
+  { value: 'bug', label: 'Report a Bug' },
+  { value: 'partnership', label: 'Partnership' },
+  { value: 'other', label: 'Other' },
+]
+
+const Contact = () => {
+  const [formData, setFormData] = useState<FormData>({
+    name: '', email: '', subject: '', message: '',
+  })
+  const [errors, setErrors] = useState<FormErrors>({})
+  const [touched, setTouched] = useState<Record<string, boolean>>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [toasts, setToasts] = useState<Toast[]>([])
+
+  const addToast = useCallback((message: string, type: Toast['type'] = 'info', duration = 4000) => {
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
+    setToasts((prev) => [...prev, { id, message, type, duration }])
+  }, [])
+
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id))
+  }, [])
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target
+    setFormData((prev) => ({ ...prev, [name]: value }))
+    // Clear error on change
+    if (errors[name as keyof FormErrors]) {
+      setErrors((prev) => ({ ...prev, [name]: undefined }))
+    }
+  }
+
+  const handleBlur = (
+    e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
+    const { name } = e.target
+    setTouched((prev) => ({ ...prev, [name]: true }))
+    // Validate single field on blur
+    const fieldErrors = validate(formData)
+    setErrors((prev) => ({ ...prev, [name]: fieldErrors[name as keyof FormErrors] }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsSubmitting(true)
-    setSubmitStatus('idle')
+    setTouched({ name: true, email: true, subject: true, message: true })
 
-    // Simulate form submission
-    setTimeout(() => {
-      setIsSubmitting(false)
-      setSubmitStatus('success')
+    const validationErrors = validate(formData)
+    setErrors(validationErrors)
+    if (Object.keys(validationErrors).length > 0) return
+
+    setIsSubmitting(true)
+    try {
+      await apiClient.post('/contact', {
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        subject: formData.subject,
+        message: formData.message.trim(),
+      })
+      addToast('Message sent successfully! We\'ll get back to you soon.', 'success', 5000)
       setFormData({ name: '', email: '', subject: '', message: '' })
-      
-      setTimeout(() => {
-        setSubmitStatus('idle')
-      }, 5000)
-    }, 1000)
+      setTouched({})
+      setErrors({})
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'response' in err) {
+        const axiosErr = err as { response: { status: number; data?: { message?: string } } }
+        const status = axiosErr.response.status
+        if (status === 429) {
+          addToast('Too many requests. Please wait a moment and try again.', 'warning', 6000)
+        } else {
+          addToast(
+            axiosErr.response.data?.message || 'Failed to send message. Please try again.',
+            'error'
+          )
+        }
+      } else {
+        addToast('Network error. Please check your connection and try again.', 'error')
+      }
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const getFieldClass = (field: keyof FormErrors) => {
+    if (touched[field] && errors[field]) return 'form-input form-input-error'
+    if (touched[field] && !errors[field] && formData[field]) return 'form-input form-input-valid'
+    return 'form-input'
   }
 
   return (
     <div className="contact-page dark-theme">
       <AnimatedBackground variant="full" intensity="low" />
       <Header />
+      <ToastContainer toasts={toasts} onClose={removeToast} />
+
       <main className="contact-content">
         <div className="contact-container">
+          {/* Hero header */}
           <div className="contact-header">
-            <h1 className="contact-title">Contact Us</h1>
+            <div className="contact-header-icon">
+              <i className="fa-solid fa-paper-plane" />
+            </div>
+            <h1 className="contact-title">Get in Touch</h1>
             <p className="contact-subtitle">
-              Have questions? We'd love to hear from you. Send us a message and we'll respond as soon as possible.
+              Have questions about GwehAI? We&apos;d love to hear from you.
+              Send us a message and our security team will respond within 24 hours.
             </p>
           </div>
 
           <div className="contact-grid">
+            {/* Left: info cards */}
             <div className="contact-info">
-              <h2>Get in Touch</h2>
-              <div className="info-item">
+              <div className="info-card">
                 <div className="info-icon">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                    <polyline points="22,6 12,13 2,6"/>
-                  </svg>
+                  <i className="fa-solid fa-envelope" />
                 </div>
                 <div>
                   <h3>Email</h3>
@@ -67,109 +161,136 @@ const Contact = () => {
                 </div>
               </div>
 
-              <div className="info-item">
+              <div className="info-card">
                 <div className="info-icon">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-                  </svg>
+                  <i className="fa-solid fa-clock" />
                 </div>
                 <div>
-                  <h3>Phone</h3>
-                  <p>+1 (555) 123-4567</p>
+                  <h3>Response Time</h3>
+                  <p>Within 24 hours</p>
                 </div>
               </div>
 
-              <div className="info-item">
+              <div className="info-card">
                 <div className="info-icon">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                    <circle cx="12" cy="10" r="3"/>
-                  </svg>
+                  <i className="fa-solid fa-shield-halved" />
                 </div>
                 <div>
-                  <h3>Office</h3>
-                  <p>123 Tech Street<br />San Francisco, CA 94105<br />United States</p>
+                  <h3>Security</h3>
+                  <p>Report vulnerabilities<br />to security@gwehai.ai</p>
+                </div>
+              </div>
+
+              <div className="info-card">
+                <div className="info-icon">
+                  <i className="fa-solid fa-comments" />
+                </div>
+                <div>
+                  <h3>Live Chat</h3>
+                  <p>Available for Pro users<br />inside the dashboard</p>
                 </div>
               </div>
             </div>
 
-            <form className="contact-form" onSubmit={handleSubmit}>
+            {/* Right: form */}
+            <form className="contact-form" onSubmit={handleSubmit} noValidate>
               <div className="form-group">
-                <label htmlFor="name">Name</label>
+                <label htmlFor="contact-name">
+                  <i className="fa-solid fa-user" /> Name
+                </label>
                 <input
                   type="text"
-                  id="name"
+                  id="contact-name"
                   name="name"
                   value={formData.name}
                   onChange={handleChange}
-                  required
-                  className="form-input"
+                  onBlur={handleBlur}
+                  placeholder="Your full name"
+                  className={getFieldClass('name')}
+                  autoComplete="name"
                 />
+                {touched.name && errors.name && (
+                  <span className="field-error"><i className="fa-solid fa-circle-exclamation" /> {errors.name}</span>
+                )}
               </div>
 
               <div className="form-group">
-                <label htmlFor="email">Email</label>
+                <label htmlFor="contact-email">
+                  <i className="fa-solid fa-at" /> Email
+                </label>
                 <input
                   type="email"
-                  id="email"
+                  id="contact-email"
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
-                  required
-                  className="form-input"
+                  onBlur={handleBlur}
+                  placeholder="you@company.com"
+                  className={getFieldClass('email')}
+                  autoComplete="email"
                 />
+                {touched.email && errors.email && (
+                  <span className="field-error"><i className="fa-solid fa-circle-exclamation" /> {errors.email}</span>
+                )}
               </div>
 
               <div className="form-group">
-                <label htmlFor="subject">Subject</label>
+                <label htmlFor="contact-subject">
+                  <i className="fa-solid fa-tag" /> Subject
+                </label>
                 <select
-                  id="subject"
+                  id="contact-subject"
                   name="subject"
                   value={formData.subject}
                   onChange={handleChange}
-                  required
-                  className="form-input"
+                  onBlur={handleBlur}
+                  className={getFieldClass('subject')}
                 >
-                  <option value="">Select a subject</option>
-                  <option value="support">Technical Support</option>
-                  <option value="billing">Billing Question</option>
-                  <option value="feature">Feature Request</option>
-                  <option value="bug">Report a Bug</option>
-                  <option value="other">Other</option>
+                  {SUBJECTS.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
                 </select>
+                {touched.subject && errors.subject && (
+                  <span className="field-error"><i className="fa-solid fa-circle-exclamation" /> {errors.subject}</span>
+                )}
               </div>
 
               <div className="form-group">
-                <label htmlFor="message">Message</label>
+                <label htmlFor="contact-message">
+                  <i className="fa-solid fa-message" /> Message
+                </label>
                 <textarea
-                  id="message"
+                  id="contact-message"
                   name="message"
                   value={formData.message}
                   onChange={handleChange}
-                  required
+                  onBlur={handleBlur}
+                  placeholder="Tell us how we can help..."
                   rows={6}
-                  className="form-input"
+                  className={getFieldClass('message')}
                 />
+                {touched.message && errors.message && (
+                  <span className="field-error"><i className="fa-solid fa-circle-exclamation" /> {errors.message}</span>
+                )}
+                <span className="char-count">{formData.message.length} characters</span>
               </div>
-
-              {submitStatus === 'success' && (
-                <div className="form-success">
-                  ✓ Message sent successfully! We'll get back to you soon.
-                </div>
-              )}
-
-              {submitStatus === 'error' && (
-                <div className="form-error">
-                  ✗ Failed to send message. Please try again.
-                </div>
-              )}
 
               <button
                 type="submit"
                 className="form-submit"
                 disabled={isSubmitting}
               >
-                {isSubmitting ? 'Sending...' : 'Send Message'}
+                {isSubmitting ? (
+                  <>
+                    <span className="btn-spinner" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-paper-plane" />
+                    Send Message
+                  </>
+                )}
               </button>
             </form>
           </div>

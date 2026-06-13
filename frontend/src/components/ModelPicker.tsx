@@ -2,31 +2,43 @@ import React, { useState, useRef, useEffect, useMemo } from 'react'
 import apiClient from '../utils/api'
 import './ModelPicker.css'
 
-export type ModelKey = 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini'
+export type ModelKey = 'auto' | 'deepseek_v4' | 'deepseek_v4_pro' | 'openai_gpt5' | 'openai_o' | 'claude' | 'gemini' | 'xai' | 'meta' | 'deepseek_reasoner'
 
-/** Auto uses DeepSeek under the hood; DeepSeek is not shown as a separate option. */
+/** Auto uses DeepSeek V4 Pro under the hood. */
 export const MODEL_OPTIONS: { key: ModelKey; label: string }[] = [
   { key: 'auto', label: 'Auto' },
-  { key: 'openai_gpt5', label: 'OpenAI GPT5' },
+  { key: 'deepseek_v4', label: 'DeepSeek V4' },
+  { key: 'deepseek_v4_pro', label: 'DeepSeek V4 Pro' },
+  { key: 'deepseek_reasoner', label: 'DeepSeek R1' },
+  { key: 'openai_gpt5', label: 'OpenAI GPT-5' },
+  { key: 'openai_o', label: 'OpenAI o4-mini' },
   { key: 'claude', label: 'Claude' },
   { key: 'gemini', label: 'Gemini' },
+  { key: 'xai', label: 'Grok' },
+  { key: 'meta', label: 'Llama' },
 ]
 
 const STORAGE_KEY = 'gwehai_model_key'
 const STORAGE_MODEL_ID_KEY = 'gwehai_model_id'
 
-const GROUP_ORDER: ModelKey[] = ['auto', 'openai_gpt5', 'claude', 'gemini']
+const GROUP_ORDER: ModelKey[] = ['auto', 'deepseek_v4', 'deepseek_v4_pro', 'deepseek_reasoner', 'openai_gpt5', 'openai_o', 'claude', 'gemini', 'xai', 'meta']
 const GROUP_LABELS: Record<ModelKey, string> = {
   auto: 'Auto',
+  deepseek_v4: 'DeepSeek V4',
+  deepseek_v4_pro: 'DeepSeek V4 Pro',
+  deepseek_reasoner: 'DeepSeek R1',
   openai_gpt5: 'OpenAI',
+  openai_o: 'OpenAI O-Series',
   claude: 'Claude',
   gemini: 'Gemini',
+  xai: 'Grok',
+  meta: 'Llama',
 }
 
 export function getStoredModelKey(): ModelKey {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw === 'deepseek') return 'auto' // Auto uses DeepSeek; migrate stored deepseek to auto
+    if (raw === 'deepseek' || raw === 'auto') return 'auto'
     if (raw && MODEL_OPTIONS.some(o => o.key === raw)) return raw as ModelKey
   } catch (_) {}
   return 'auto'
@@ -46,7 +58,6 @@ export function setStoredModelKey(key: ModelKey): void {
 }
 
 export function getModelLabel(key: ModelKey): string {
-  if (key === 'deepseek') return 'Auto' // Auto uses DeepSeek; treat stored "deepseek" as Auto
   return MODEL_OPTIONS.find(o => o.key === key)?.label ?? key
 }
 
@@ -56,18 +67,25 @@ interface BackendModelRow {
   displayName: string
   provider: string
   isActive: boolean
+  metadata?: Record<string, any>
 }
 
 function getModelKeyForRow(row: BackendModelRow): ModelKey {
-  const name = (row.name || '').toLowerCase()
+  // Use metadata.key from DB — seeded by model-options.config
+  const metaKey = row.metadata?.key as string | undefined
+  if (metaKey && isValidModelKey(metaKey)) return metaKey
+  // Fallback: guess by provider
   const provider = (row.provider || '').toLowerCase()
-  if (name.includes('deepseek')) return 'auto'
   if (provider === 'anthropic') return 'claude'
   if (provider === 'openai') return 'openai_gpt5'
-  if (provider === 'google') return name.includes('gemini') ? 'gemini' : 'openai_gpt5'
-  if (provider === 'gemini') return 'gemini'
-  if (provider === 'custom') return name.includes('grok') ? 'openai_gpt5' : name.includes('gemini') ? 'gemini' : 'auto'
+  if (provider === 'gemini' || provider === 'google') return 'gemini'
+  if (provider === 'xai') return 'xai'
+  if (provider === 'meta') return 'meta'
   return 'auto'
+}
+
+function isValidModelKey(k: string): k is ModelKey {
+  return ['auto', 'deepseek_v4', 'deepseek_v4_pro', 'openai_gpt5', 'openai_o', 'claude', 'gemini', 'xai', 'meta', 'deepseek_reasoner'].includes(k)
 }
 
 /** Group models by provider key for Select2-style sections. */

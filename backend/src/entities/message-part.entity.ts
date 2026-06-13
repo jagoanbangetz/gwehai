@@ -12,6 +12,8 @@ export enum MessagePartType {
   TEXT = 'text',
   CODE = 'code',
   IMAGE = 'image',
+  DETAILS = 'details',
+  THINKING = 'thinking',
 }
 
 @Entity('message_parts')

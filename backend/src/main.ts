@@ -7,6 +7,16 @@ import { WsAdapter } from '@nestjs/platform-ws';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
+  // Security: reject insecure JWT_SECRET at startup
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret || jwtSecret === 'your-super-secret-jwt-key') {
+    console.error(
+      '🔴 FATAL: JWT_SECRET is not set or uses the insecure default "your-super-secret-jwt-key". ' +
+      'Set a strong, unique JWT_SECRET in your .env file. Server will NOT start.',
+    );
+    process.exit(1);
+  }
+
   const app = await NestFactory.create(AppModule);
   app.useWebSocketAdapter(new WsAdapter(app));
 

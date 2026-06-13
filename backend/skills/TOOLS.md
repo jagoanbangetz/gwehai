@@ -111,7 +111,7 @@ The agent must be able to write to conversation memory (database). Use **write_f
 - **Purpose:** In-scope recon: open a URL, get HTML, take a snapshot or screenshot. Agent uses it for mapping, form discovery, link enumeration.
 - **Input:** URL, optional options (e.g. wait for selector, screenshot).
 - **Output:** HTML text, or screenshot path, or accessibility tree. **Enforce scope:** only allow URLs that are in SCOPE.md (or your scope allowlist).
-- **Implementation:** Puppeteer/Playwright, or a simple HTTP fetch (no JS). Check URL against in-scope list before running.
+- **Implementation:** Playwright (headless Chromium, see Browser section below), or a simple HTTP fetch (no JS). Check URL against in-scope list before running.
 
 ### 6. `exec(command)` or `run_shell(command)`
 
@@ -161,9 +161,35 @@ When the backend runs **exec** inside the **gwehai-pentest-tools** container, th
 | **SQLi** | sqlmap | verify_sqli (e.g. sqlmap -u "URL" --level=1 --risk=1 --batch) |
 | **SSL/TLS** | sslyze | SSL/TLS analysis |
 | **Other** | git-dumper, rg (ripgrep) | Git dump; grep (rg). John (JOHN=/opt/john/run) for hashes. theHarvester pip package is present but may not expose a CLI in this image. |
-| **Browser** | **node /opt/browser/capture-requests.js &lt;url&gt;** | Intercept **everything**: all requests, all **forms** (action, method, inputs), all **links**, cookies. One JSON output so the AI can decide next step (login script, curl, ffuf, etc.). |
-| | **node /opt/browser/login-and-capture.js &lt;login_url&gt; &lt;username&gt; &lt;password&gt;** | Submit login form; returns cookies and requests. Use when user provides credentials. |
-| | **write_script + node /opt/browser/scripts/&lt;name&gt;.js** | When built-in scripts are not enough, the AI can **write_script(filename, content)** to create a custom JS file (e.g. Puppeteer) under `/opt/browser/scripts/`, then run it with **exec**: `node /opt/browser/scripts/&lt;name&gt;.js [args]`. Use for multi-step flows, custom automation, or site-specific logic. |
+| **Browser** | **navigate(url, options?)** | Open URL with Playwright (headless Chromium). Returns: screenshot, page analysis (forms, links, inputs, cookies, CSRF detection). Options: `waitForSelector`, `timeout`, `scope`. Auto rate-limited (1 req/sec). |
+| | **auto_login(login_url, username, password, options?)** | Auto-detect login form, fill credentials, submit, capture full auth state (cookies, localStorage, sessionStorage, JWT/bearer token). Returns screenshots (before/after) + auth state. Options: `usernameSelector`, `passwordSelector`, `submitSelector`. |
+| | **click(selector, options?)** | Click element on page. Options: `waitForNavigation` (waits for networkidle). Returns screenshot + page analysis. |
+| | **type(selector, value, options?)** | Type text into form field. Auto-clears field first. Options: `delay` (typing speed), `clear` (false to append). |
+| | **extract(options?)** | Extract content from page. Options: `selector` (CSS selector), `attribute`. Without selector: returns title, URL, body text (5k chars). |
+| | **screenshot(options?)** | Capture current page screenshot. Options: `fullPage`. Saves to `$PENTEST_WORKSPACE/screenshots/`. |
+| | **analyze_page()** | Full page analysis: detect all forms (action, method, inputs, CSRF tokens), links (with same-origin flag), standalone inputs, cookies. |
+| | **test_reflected_xss(formSelector, payload, options?)** | Test reflected XSS via form submission. Fills payload, submits, checks if reflected + if script executed (alert dialog). Returns isReflected + scriptExecuted booleans. |
+| | **check_csrf_tokens()** | Scan all forms on current page for CSRF tokens. POST forms without token = HIGH risk. |
+| | **get/set/save/load_auth_state** | Auth state persistence: get current state, set from stored creds, save to `storageState` JSON file, load from file for session reuse. |
+
+**Browser config (Playwright):**
+- Engine: **Playwright** with `chromium` channel
+- Executable: `PLAYWRIGHT_CHROMIUM_PATH` env var, default `/usr/bin/chromium`
+- Launch args: `--no-sandbox`, `--disable-setuid-sandbox`, `--disable-dev-shm-usage`, `--disable-gpu`, `--disable-web-security`
+- Viewport: 1920×1080
+- User-Agent: Chrome 120 on Windows 10
+- Rate limit: 1 request/second per session
+- Session timeout: 30 minutes idle
+- Downloads: **blocked** for safety
+- Retry: 3 attempts on browser launch failure (2s delay between retries)
+
+**Troubleshooting — Playwright Chrome not found:**
+1. Check `PLAYWRIGHT_CHROMIUM_PATH` env var is set correctly
+2. Install Chromium: `npx playwright install chromium` or `apt install chromium-browser`
+3. In Docker: ensure `chromium` is in the image (`/usr/bin/chromium`)
+4. If launch fails after 3 retries → `BrowserLaunchError` is thrown with attempt count
+5. Check `--no-sandbox` flag is present (required for root/Docker)
+6. Verify `/dev/shm` is large enough (`--disable-dev-shm-usage` helps, but 2GB+ `/dev/shm` is recommended)
 
 \* Optional (installed from apt if available). **wfuzz** and **dirsearch** are **not** in the Docker image — use **ffuf** for fuzzing and path discovery.
 

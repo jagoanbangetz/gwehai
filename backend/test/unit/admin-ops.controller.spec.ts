@@ -11,12 +11,17 @@ describe('AdminOpsController', () => {
     log: jest.fn().mockResolvedValue(undefined),
     getClientIp: jest.fn().mockReturnValue('127.0.0.1'),
   } as any;
+  const cveFeedService = {
+    getStatus: jest.fn().mockReturnValue({ entries: 100, lastUpdated: '2026-06-10T00:00:00Z', isStale: false }),
+    forceRefresh: jest.fn().mockResolvedValue({ entries: 150, updated: '2026-06-10T06:00:00Z' }),
+    search: jest.fn().mockReturnValue([]),
+  } as any;
 
   let controller: AdminOpsController;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    controller = new AdminOpsController(gwehaiService, planUsageService, adminService);
+    controller = new AdminOpsController(gwehaiService, planUsageService, adminService, cveFeedService);
   });
 
   describe('getJobsLive', () => {
@@ -82,6 +87,40 @@ describe('AdminOpsController', () => {
 
       expect(result.ok).toBe(true);
       expect(adminService.log).toHaveBeenCalledWith('admin-1', 'ops_workers_restart', expect.any(Object));
+    });
+  });
+
+  describe('getCveFeedStatus', () => {
+    it('returns CVE feed status', async () => {
+      const result = await controller.getCveFeedStatus();
+      expect(result.entries).toBe(100);
+      expect(result.isStale).toBe(false);
+      expect(cveFeedService.getStatus).toHaveBeenCalled();
+    });
+  });
+
+  describe('postCveFeedRefresh', () => {
+    it('forces refresh and logs', async () => {
+      const req = { user: { id: 'admin-1' }, headers: {}, socket: {} } as any;
+      const result = await controller.postCveFeedRefresh(req);
+      expect(result.ok).toBe(true);
+      expect(result.entries).toBe(150);
+      expect(cveFeedService.forceRefresh).toHaveBeenCalled();
+      expect(adminService.log).toHaveBeenCalledWith('admin-1', 'ops_cve_feed_refresh', expect.any(Object));
+    });
+  });
+
+  describe('searchCveFeed', () => {
+    it('returns 400 when q parameter missing', async () => {
+      await expect(controller.searchCveFeed('')).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST });
+    });
+
+    it('returns search results', async () => {
+      cveFeedService.search.mockReturnValue([{ id: 'CVE-2026-1234', description: 'test' }]);
+      const result = await controller.searchCveFeed('wordpress', '10');
+      expect(result.query).toBe('wordpress');
+      expect(result.count).toBe(1);
+      expect(cveFeedService.search).toHaveBeenCalledWith('wordpress', 10);
     });
   });
 });

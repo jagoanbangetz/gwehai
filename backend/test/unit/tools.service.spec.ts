@@ -203,17 +203,96 @@ describe('ToolsService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('rejects exec when target is required but missing', async () => {
+  it('extracts target from args when not explicitly provided', async () => {
+    // nmap -sV example.com — target extractable from positional arg, should NOT throw
+    (execFile as unknown as jest.Mock).mockImplementation(
+      (_cmd: string, _args: string[], _opts: any, cb: any) =>
+        cb(null, 'mock output', ''),
+    );
+    const result = await service.execCommand({
+      command: 'nmap',
+      args: ['-sV', 'example.com'],
+    });
+    expect(result).toBeDefined();
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('extracts target from args skipping flag values like -oN', async () => {
+    // nmap -sV -oN output.nmap example.com — should extract example.com, not output.nmap
+    (execFile as unknown as jest.Mock).mockImplementation(
+      (_cmd: string, _args: string[], _opts: any, cb: any) =>
+        cb(null, 'mock output', ''),
+    );
+    const result = await service.execCommand({
+      command: 'nmap',
+      args: ['-sV', '-oN', 'output.nmap', 'example.com'],
+    });
+    expect(result).toBeDefined();
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('extracts target from commandLine fallback when args is missing', async () => {
+    // Simulate REST API call with commandLine but no args array
+    (execFile as unknown as jest.Mock).mockImplementation(
+      (_cmd: string, _args: string[], _opts: any, cb: any) =>
+        cb(null, 'mock output', ''),
+    );
+    const result = await service.execCommand({
+      command: 'nmap',
+      commandLine: 'nmap -sV example.com',
+    });
+    expect(result).toBeDefined();
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('extracts IP target from args', async () => {
+    (execFile as unknown as jest.Mock).mockImplementation(
+      (_cmd: string, _args: string[], _opts: any, cb: any) =>
+        cb(null, 'mock output', ''),
+    );
+    const result = await service.execCommand({
+      command: 'nmap',
+      args: ['-sV', '192.168.1.1'],
+    });
+    expect(result).toBeDefined();
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('extracts CIDR target from args', async () => {
+    (execFile as unknown as jest.Mock).mockImplementation(
+      (_cmd: string, _args: string[], _opts: any, cb: any) =>
+        cb(null, 'mock output', ''),
+    );
+    const result = await service.execCommand({
+      command: 'masscan',
+      args: ['10.0.0.0/24', '-p80'],
+    });
+    expect(result).toBeDefined();
+    expect(result.exitCode).toBe(0);
+  });
+
+  it('rejects exec when target is truly missing and not extractable', async () => {
+    // nmap with no positional target arg — should still throw
     await expect(
       service.execCommand({
         command: 'nmap',
-        args: ['-sV', 'example.com'],
+        args: ['-sV'],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
     await expect(
       service.execCommand({
         command: 'nmap',
-        args: ['-sV', 'example.com'],
+        args: ['-sV'],
+      }),
+    ).rejects.toThrow(/target is required/);
+  });
+
+  it('rejects exec when only non-target flag values are present', async () => {
+    // nmap -oN output.nmap — no actual target, should throw
+    await expect(
+      service.execCommand({
+        command: 'nmap',
+        args: ['-oN', 'output.nmap'],
       }),
     ).rejects.toThrow(/target is required/);
   });

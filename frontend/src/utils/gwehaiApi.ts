@@ -123,10 +123,11 @@ export class GwehAIClient {
     message: string,
     stream: boolean = true,
     jobId?: string,
-    modelKey?: 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini',
+    modelKey?: 'auto' | 'deepseek_v4' | 'deepseek_v4_pro' | 'openai_gpt5' | 'openai_o' | 'claude' | 'gemini' | 'xai' | 'meta' | 'deepseek_reasoner',
     mode?: 'agent' | 'ask',
     modelId?: string,
-    maxAgents?: number
+    maxAgents?: number,
+    signal?: AbortSignal
   ): Promise<GwehAIJobResponse> {
     const user = localStorage.getItem('scout_user');
     const token = user ? JSON.parse(user).token : null;
@@ -146,6 +147,7 @@ export class GwehAIClient {
         ...(modelId && { model_id: modelId }), // Optional: specific model from DB (e.g. GPT-5.4, Gemini 2.5 Flash)
         ...(maxAgents != null && maxAgents >= 1 && maxAgents <= 20 && { max_agents: maxAgents }),
       }),
+      signal,
     });
 
     if (!response.ok) {
@@ -486,6 +488,7 @@ export class GwehAIClient {
     // Register listeners for all SSE event types from GwehAI API spec
     [
       'connected',        // Stream connection established
+      'state_sync',       // State replay on fresh reconnect (current step, status)
       'message_delta',    // Assistant text streaming (one chunk at a time)
       'message_done',     // Assistant message finished
       'simple_response', // Structured reply/details/followUps for simple conversation

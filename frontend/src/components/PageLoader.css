@@ -65,7 +65,7 @@
 
 .page-loading-text {
   font-size: 1.1rem;
-  color: oklch(0.8 0 0);
+  color: oklch(0.82 0.003 60);
   font-weight: 500;
   letter-spacing: 0.05em;
   animation: pulse 2s ease-in-out infinite;

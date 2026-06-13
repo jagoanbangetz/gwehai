@@ -78,9 +78,9 @@
   gap: 8px;
   padding: 10px 14px;
   background: oklch(0.12 0.02 260);
-  border: 1px solid oklch(0.3 0 0);
+  border: 1px solid oklch(0.33 0.006 60);
   border-radius: 10px;
-  color: oklch(0.95 0 0);
+  color: oklch(0.96 0.003 60);
   cursor: pointer;
   font-size: 0.9rem;
   font-family: inherit;

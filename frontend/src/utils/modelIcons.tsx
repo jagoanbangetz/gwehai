@@ -4,8 +4,8 @@ export const getModelIcon = (provider: string, name?: string): React.ReactNode =
   const lowerName = name?.toLowerCase() || ''
   const lowerProvider = provider?.toLowerCase() || ''
 
-  // OpenAI / ChatGPT
-  if (lowerProvider === 'openai' || lowerName.includes('gpt') || lowerName.includes('chatgpt')) {
+  // OpenAI / ChatGPT / O-Series
+  if (lowerProvider === 'openai' || lowerName.includes('gpt') || lowerName.includes('chatgpt') || lowerName.includes('o4') || lowerName.includes('o3')) {
     return (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
         <path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.2773-2.4702a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-3.9348 4.5355 4.4942 4.4942 0 0 1-.0187-.0047zM4.9807 2.94a4.4755 4.4755 0 0 1 2.3655 1.2968l-.1419.0804L3.4107 6.3978a.7948.7948 0 0 0-.3927.6813v6.7369l-2.02-1.1686a.071.071 0 0 1-.038-.052V7.4712a4.504 4.504 0 0 1 3.9348-4.5355 4.4942 4.4942 0 0 1 .0187.0047zm14.1582 3.7548a.7949.7949 0 0 0-.3926-.6814l-4.2773-2.47-.1419-.0804a4.4755 4.4755 0 0 1 .18-2.8449 4.504 4.504 0 0 1 3.9348-1.5044 4.4942 4.4942 0 0 1 .0187.0047 4.504 4.504 0 0 1 3.9348 4.5355v5.5825a.071.071 0 0 1-.038.052l-2.02 1.1686V7.4712a.7948.7948 0 0 0-.3927-.6813zm-2.3766 3.8553L16.7458 8.43v5.5826a.071.071 0 0 1-.038.052l-2.02 1.1685V7.4712a.7948.7948 0 0 0-.3926-.6813l-4.2773-2.47-.142-.0808a4.4755 4.4755 0 0 1 1.8212-2.3108 4.504 4.504 0 0 1 3.9348-1.5044 4.4942 4.4942 0 0 1 .0187.0047 4.504 4.504 0 0 1 3.9348 4.5355v5.5825a.071.071 0 0 1-.038.052zM2.9401 7.9206a4.4755 4.4755 0 0 1 1.8212-2.3108l.142.0808 4.2772 2.47a.7948.7948 0 0 0 .3927.6813v6.7369l2.02-1.1685a.071.071 0 0 1 .038-.052V8.43l-3.395-1.96v5.5826a.071.071 0 0 1-.038.052l-2.02 1.1686V7.4711a.7948.7948 0 0 0-.3926-.6813L3.4107 4.3197l-.1419-.0804z"/>
@@ -56,10 +56,14 @@ export const getModelIcon = (provider: string, name?: string): React.ReactNode =
 
 export const isProModel = (name?: string): boolean => {
   const lowerName = name?.toLowerCase() || ''
-  // Mark premium models as Pro
+  // Mark premium/reasoning models as Pro
   return lowerName.includes('pro') || 
          lowerName.includes('opus') || 
          lowerName.includes('gpt-5') ||
          lowerName.includes('grok 4') ||
-         lowerName.includes('gemini 3 pro')
+         lowerName.includes('gemini 3 pro') ||
+         lowerName.includes('o4-mini') ||
+         lowerName.includes('o3') ||
+         lowerName.includes('deepseek-r1') ||
+         lowerName.includes('deepseek-reasoner')
 }
