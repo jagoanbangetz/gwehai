@@ -543,23 +543,51 @@ export class AgentOrchestratorService {
       const toolsCap = this.costManager.getToolsOutputCap();
       const fallbackCaps = this.costManager.getCaps('auto', 'decision');
       const maxTokensForTools = toolsCap ?? fallbackCaps.maxOutputTokens;
-      let response = modelKey
-        ? await this.providerRouter
-            .generateWithTools({
-              selectedModelKey: modelKey,
-              selectedModelIdOverride: options?.modelIdOverride,
-              messages: truncatedForLlm,
-              tools: PENTEST_TOOL_DEFS,
-              mode: 'decision',
-              tool_choice: toolChoice,
-            })
-            .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
-        : await this.llmService.generateWithTools(
-            model!,
-            truncatedForLlm,
-            PENTEST_TOOL_DEFS,
-            { tool_choice: toolChoice, max_tokens: maxTokensForTools },
-          );
+      let response: { content: string; tool_calls?: LlmToolCall[] } | null;
+      try {
+        response = modelKey
+          ? await this.providerRouter
+              .generateWithTools({
+                selectedModelKey: modelKey,
+                selectedModelIdOverride: options?.modelIdOverride,
+                messages: truncatedForLlm,
+                tools: PENTEST_TOOL_DEFS,
+                mode: 'decision',
+                tool_choice: toolChoice,
+              })
+              .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
+          : await this.llmService.generateWithTools(
+              model!,
+              truncatedForLlm,
+              PENTEST_TOOL_DEFS,
+              { tool_choice: toolChoice, max_tokens: maxTokensForTools },
+            );
+      } catch (err: any) {
+        if (err?.message?.includes('tool_calls must be followed')) {
+          console.warn(`[AgentOrchestrator] tool_calls protocol error caught, retrying with stripped messages: ${err.message}`);
+          push({ type: 'status', data: { message: 'Retrying with fixed tool_calls...' } });
+          const fixed = this.stripUnpairedToolCalls(truncatedForLlm);
+          response = modelKey
+            ? await this.providerRouter
+                .generateWithTools({
+                  selectedModelKey: modelKey,
+                  selectedModelIdOverride: options?.modelIdOverride,
+                  messages: fixed,
+                  tools: PENTEST_TOOL_DEFS,
+                  mode: 'decision',
+                  tool_choice: toolChoice,
+                })
+                .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
+            : await this.llmService.generateWithTools(
+                model!,
+                fixed,
+                PENTEST_TOOL_DEFS,
+                { tool_choice: toolChoice, max_tokens: maxTokensForTools },
+              );
+        } else {
+          throw err;
+        }
+      }
       if (!response) {
         // CHECKLIST GUARD: dont break if pentest checklist incomplete
         try {
@@ -597,23 +625,52 @@ export class AgentOrchestratorService {
         const overridePrompt = this.buildRefusalOverridePrompt(message);
         messages.push({ role: 'assistant', content: response.content });
         messages.push({ role: 'user', content: overridePrompt });
-        const retryResponse = modelKey
-          ? await this.providerRouter
-              .generateWithTools({
-                selectedModelKey: modelKey,
-                selectedModelIdOverride: options?.modelIdOverride,
-                messages: truncateMessagesForContext(messages),
-                tools: PENTEST_TOOL_DEFS,
-                mode: 'decision',
-                tool_choice: 'required' as const,
-              })
-              .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
-          : await this.llmService.generateWithTools(
-              model!,
-              truncateMessagesForContext(messages),
-              PENTEST_TOOL_DEFS,
-              { tool_choice: 'required' as const, max_tokens: maxTokensForTools },
-            );
+        const retryMessages = truncateMessagesForContext(messages);
+        let retryResponse: { content: string; tool_calls?: LlmToolCall[] } | null;
+        try {
+          retryResponse = modelKey
+            ? await this.providerRouter
+                .generateWithTools({
+                  selectedModelKey: modelKey,
+                  selectedModelIdOverride: options?.modelIdOverride,
+                  messages: retryMessages,
+                  tools: PENTEST_TOOL_DEFS,
+                  mode: 'decision',
+                  tool_choice: 'required' as const,
+                })
+                .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
+            : await this.llmService.generateWithTools(
+                model!,
+                retryMessages,
+                PENTEST_TOOL_DEFS,
+                { tool_choice: 'required' as const, max_tokens: maxTokensForTools },
+              );
+        } catch (retryErr: any) {
+          if (retryErr?.message?.includes('tool_calls must be followed')) {
+            console.warn(`[AgentOrchestrator] tool_calls protocol error in refusal retry, stripping: ${retryErr.message}`);
+            push({ type: 'status', data: { message: 'Retrying refusal override with fixed tool_calls...' } });
+            const fixedRetry = this.stripUnpairedToolCalls(retryMessages);
+            retryResponse = modelKey
+              ? await this.providerRouter
+                  .generateWithTools({
+                    selectedModelKey: modelKey,
+                    selectedModelIdOverride: options?.modelIdOverride,
+                    messages: fixedRetry,
+                    tools: PENTEST_TOOL_DEFS,
+                    mode: 'decision',
+                    tool_choice: 'required' as const,
+                  })
+                  .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
+              : await this.llmService.generateWithTools(
+                  model!,
+                  fixedRetry,
+                  PENTEST_TOOL_DEFS,
+                  { tool_choice: 'required' as const, max_tokens: maxTokensForTools },
+                );
+          } else {
+            throw retryErr;
+          }
+        }
         if (retryResponse && (retryResponse.tool_calls?.length || !this.isRefusalResponse(retryResponse.content || ''))) {
           response = retryResponse;
           push({ type: 'status', data: { message: 'Override successful - proceeding with pentest.' } });
@@ -916,18 +973,41 @@ export class AgentOrchestratorService {
           },
         ]);
         const enforceModelKey = options?.model_key || 'auto';
-        const enforceResponse = enforceModelKey
-          ? await this.providerRouter
-              .generateWithTools({
-                selectedModelKey: enforceModelKey,
-                selectedModelIdOverride: options?.modelIdOverride,
-                messages: enforceMessages,
-                tools: PENTEST_TOOL_DEFS,
-                mode: 'decision',
-                tool_choice: 'auto' as const,
-              })
-              .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
-          : null;
+        let enforceResponse: { content: string; tool_calls?: LlmToolCall[] } | null;
+        try {
+          enforceResponse = enforceModelKey
+            ? await this.providerRouter
+                .generateWithTools({
+                  selectedModelKey: enforceModelKey,
+                  selectedModelIdOverride: options?.modelIdOverride,
+                  messages: enforceMessages,
+                  tools: PENTEST_TOOL_DEFS,
+                  mode: 'decision',
+                  tool_choice: 'auto' as const,
+                })
+                .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
+            : null;
+        } catch (enforceErr: any) {
+          if (enforceErr?.message?.includes('tool_calls must be followed')) {
+            console.warn(`[AgentOrchestrator] tool_calls protocol error in enforcement, stripping: ${enforceErr.message}`);
+            push({ type: 'status', data: { message: 'Retrying enforcement with fixed tool_calls...' } });
+            const fixedEnforce = this.stripUnpairedToolCalls(enforceMessages);
+            enforceResponse = enforceModelKey
+              ? await this.providerRouter
+                  .generateWithTools({
+                    selectedModelKey: enforceModelKey,
+                    selectedModelIdOverride: options?.modelIdOverride,
+                    messages: fixedEnforce,
+                    tools: PENTEST_TOOL_DEFS,
+                    mode: 'decision',
+                    tool_choice: 'auto' as const,
+                  })
+                  .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
+              : null;
+          } else {
+            throw enforceErr;
+          }
+        }
 
         if (enforceResponse?.tool_calls?.length) {
           const mkCtx = (): ToolExecutionContext => ({
@@ -991,21 +1071,47 @@ export class AgentOrchestratorService {
       const summaryMessage: LlmMessage = { role: 'user', content: summaryPrompt };
       const summaryMessages = truncateMessagesForContext([...messages, summaryMessage]);
       const summaryCaps = this.costManager.getToolsOutputCap() ?? this.costManager.getCaps('auto', 'decision').maxOutputTokens;
-      const summaryResponse = modelKeySummary
-        ? await this.providerRouter
-            .generateWithTools({
-              selectedModelKey: modelKeySummary,
-              selectedModelIdOverride: options?.modelIdOverride,
-              messages: summaryMessages,
-              tools: PENTEST_TOOL_DEFS,
-              mode: 'decision',
+      let summaryResponse: { content: string } | null;
+      try {
+        summaryResponse = modelKeySummary
+          ? await this.providerRouter
+              .generateWithTools({
+                selectedModelKey: modelKeySummary,
+                selectedModelIdOverride: options?.modelIdOverride,
+                messages: summaryMessages,
+                tools: PENTEST_TOOL_DEFS,
+                mode: 'decision',
+                tool_choice: 'none',
+              })
+              .then((r) => ({ content: r.content }))
+          : await this.llmService.generateWithTools(model!, summaryMessages, PENTEST_TOOL_DEFS, {
               tool_choice: 'none',
-            })
-            .then((r) => ({ content: r.content }))
-        : await this.llmService.generateWithTools(model!, summaryMessages, PENTEST_TOOL_DEFS, {
-            tool_choice: 'none',
-            max_tokens: summaryCaps,
-          });
+              max_tokens: summaryCaps,
+            });
+      } catch (summaryErr: any) {
+        if (summaryErr?.message?.includes('tool_calls must be followed')) {
+          console.warn(`[AgentOrchestrator] tool_calls protocol error in summary, stripping: ${summaryErr.message}`);
+          push({ type: 'status', data: { message: 'Retrying summary with fixed tool_calls...' } });
+          const fixedSummary = this.stripUnpairedToolCalls(summaryMessages);
+          summaryResponse = modelKeySummary
+            ? await this.providerRouter
+                .generateWithTools({
+                  selectedModelKey: modelKeySummary,
+                  selectedModelIdOverride: options?.modelIdOverride,
+                  messages: fixedSummary,
+                  tools: PENTEST_TOOL_DEFS,
+                  mode: 'decision',
+                  tool_choice: 'none',
+                })
+                .then((r) => ({ content: r.content }))
+            : await this.llmService.generateWithTools(model!, fixedSummary, PENTEST_TOOL_DEFS, {
+                tool_choice: 'none',
+                max_tokens: summaryCaps,
+              });
+        } else {
+          throw summaryErr;
+        }
+      }
       if (summaryResponse?.content?.trim()) {
         finalContent = summaryResponse.content;
       } else {
@@ -1355,6 +1461,53 @@ export class AgentOrchestratorService {
     parts.push('');
     parts.push('Proceed with the security testing immediately. Use exec to run tools.');
     return parts.join('\n');
+  }
+
+  /**
+   * Strip unpaired tool_calls and orphan tool responses from messages.
+   * Defense-in-depth: when truncation leaves assistant tool_calls without
+   * matching tool responses, the API returns "tool_calls must be followed
+   * by tool messages" error. This helper fixes the messages so the retry works.
+   */
+  private stripUnpairedToolCalls(messages: LlmMessage[]): LlmMessage[] {
+    // 1. Collect all tool_call IDs requested by assistant messages
+    const requestedIds = new Set<string>();
+    for (const m of messages) {
+      if (m.role === 'assistant' && m.tool_calls?.length) {
+        for (const tc of m.tool_calls) {
+          if (tc.id) requestedIds.add(tc.id);
+        }
+      }
+    }
+
+    return messages
+      .map((m) => {
+        // 2. Drop tool responses that don't have a matching tool_call
+        if (m.role === 'tool' && m.tool_call_id && !requestedIds.has(m.tool_call_id)) {
+          return null;
+        }
+        // 3. Drop tool_calls from assistant that have no matching tool response
+        if (m.role === 'assistant' && m.tool_calls?.length) {
+          const toolResponseIds = new Set(
+            messages
+              .filter((x) => x.role === 'tool' && x.tool_call_id && requestedIds.has(x.tool_call_id!))
+              .map((x) => x.tool_call_id!),
+          );
+          const validToolCalls = m.tool_calls.filter((tc) => tc.id && toolResponseIds.has(tc.id));
+          if (validToolCalls.length !== m.tool_calls.length) {
+            return { ...m, tool_calls: validToolCalls.length > 0 ? validToolCalls : undefined };
+          }
+        }
+        return m;
+      })
+      .filter((m): m is LlmMessage => {
+        if (!m) return false;
+        // 4. Drop assistant messages that became empty (no content, no tool_calls)
+        if (m.role === 'assistant' && !m.content?.trim() && !m.tool_calls?.length) {
+          return false;
+        }
+        return true;
+      });
   }
 
 }
