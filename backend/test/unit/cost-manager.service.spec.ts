@@ -26,7 +26,7 @@ describe('CostManagerService', () => {
 
     it('returns paid input budget for deepseek', () => {
       const service = createService({ MAX_INPUT_TOKENS_PAID: '8000' });
-      const caps = service.getCaps('deepseek', 'decision');
+      const caps = service.getCaps('deepseek_v4', 'decision');
       expect(caps.maxOutputTokens).toBe(300);
       expect(caps.maxInputTokens).toBe(8000);
     });
@@ -52,7 +52,7 @@ describe('CostManagerService', () => {
 
     it('returns 8000 for deepseek by default', () => {
       const service = createService();
-      expect(service.getInputBudget('deepseek')).toBe(8000);
+      expect(service.getInputBudget('deepseek_v4')).toBe(8000);
     });
   });
 
@@ -64,7 +64,7 @@ describe('CostManagerService', () => {
 
     it('returns number for deepseek', () => {
       const service = createService();
-      const cost = service.estimateCost('deepseek', 1_000_000, 1_000_000);
+      const cost = service.estimateCost('deepseek_v4', 1_000_000, 1_000_000);
       expect(cost).not.toBe(null);
       expect(typeof cost).toBe('number');
     });

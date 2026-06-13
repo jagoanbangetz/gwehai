@@ -49,7 +49,7 @@ export class GwehAIService {
       messages,
       stream,
       conversation_id: conversationId,
-      ...(modelKey && { model_key: modelKey }),
+      ...(modelKey && { model_key: modelKey as any }),
     };
     return this.startChat(userId, payload);
   }
@@ -219,7 +219,7 @@ export class GwehAIService {
       const chatOptions = {
         emitDoneEvent: true,
         abortSignal,
-        ...(modelKey && { model_key: modelKey }),
+        ...(modelKey && { model_key: modelKey as any }),
         ...(modelIdOverride && { modelIdOverride }),
         ...(maxAgentsForRun != null && maxAgentsForRun >= 1 && { maxAgentsForRun }),
       };

@@ -222,7 +222,7 @@ export class GwehAIController {
 
     if (fromDb.length > 0) {
       // Keep DeepSeek as internal-only; expose Auto, OpenAI GPT5, Claude.
-      const filtered = fromDb.filter((o) => o.key !== 'deepseek');
+      const filtered = fromDb;
       if (filtered.length > 0) {
         return { options: filtered };
       }
@@ -230,7 +230,7 @@ export class GwehAIController {
 
     // Fallback: static config (no DB rows yet).
     const options = getModelOptions()
-      .filter((o) => o.key !== 'deepseek')
+      
       .map((o) => ({ key: o.key, label: o.label, provider: o.provider }));
     return { options };
   }
