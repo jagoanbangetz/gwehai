@@ -90,20 +90,28 @@ function sanitizeToolCalls(raw: any[]): Array<{ id: string; name: string; argume
   return raw
     .filter((tc: any) => tc?.function?.name)
     .map((tc: any) => {
+      const rawArgsType = typeof tc.function?.arguments;
       let argsStr =
-        typeof tc.function?.arguments === 'string'
+        rawArgsType === 'string'
           ? tc.function.arguments
           : JSON.stringify(tc.function?.arguments ?? {});
+      let parseOk = true;
       try {
         JSON.parse(argsStr);
-      } catch {
+      } catch (e: any) {
+        parseOk = false;
+        console.log(`[sanitizeToolCalls DEBUG] JSON.parse FAILED for ${tc.function?.name}: argsStr_len=${argsStr.length} argsStr_preview=${String(argsStr).substring(0, 150)} error=${e?.message}`);
         argsStr = '{}';
       }
-      return {
+      const result = {
         id: tc.id || tc.function?.name || `call_${Date.now()}`,
         name: String(tc.function?.name ?? '').trim(),
         arguments: argsStr,
       };
+      if (!parseOk || rawArgsType !== 'string') {
+        console.log(`[sanitizeToolCalls DEBUG] tool=${result.name} rawArgsType=${rawArgsType} parseOk=${parseOk} finalArgs_len=${result.arguments.length}`);
+      }
+      return result;
     });
 }
 
