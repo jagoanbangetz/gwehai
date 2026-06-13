@@ -183,7 +183,18 @@ const ModelPicker: React.FC<ModelPickerProps> = ({ value, onChange, disabled, cl
           setSelectedModelId(initial.id)
         }
       } catch {
-        // Ignore errors and fall back to built-in MODEL_OPTIONS.
+        // API failed - fall back to built-in MODEL_OPTIONS as synthetic rows
+        const synthetic: BackendModelRow[] = MODEL_OPTIONS.map(o => ({
+          id: o.key,
+          name: o.label,
+          displayName: o.label,
+          provider: o.key,
+          isActive: true,
+          metadata: { key: o.key },
+        }))
+        setModels(synthetic)
+        const initial = synthetic.find(m => getModelKeyForRow(m) === value) || synthetic[0] || null
+        if (initial && !cancelled) setSelectedModelId(initial.id)
       }
     })()
     return () => {
