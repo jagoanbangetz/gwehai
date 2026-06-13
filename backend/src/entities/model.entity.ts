@@ -12,6 +12,7 @@ export enum ModelProvider {
   OPENAI = 'openai',
   ANTHROPIC = 'anthropic',
   GOOGLE = 'google',
+  DEEPSEEK = 'deepseek',
   CUSTOM = 'custom',
 }
 
@@ -31,6 +32,12 @@ export class Model {
     enum: ModelProvider,
   })
   provider: ModelProvider;
+
+  @Column({ nullable: true })
+  apiModelId: string; // Actual model ID sent to the provider API (e.g., "gpt-4-turbo")
+
+  @Column({ type: 'text', nullable: true })
+  apiKey: string; // API key for this provider (encrypted at rest ideally)
 
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   pointsPer1kInputTokens: number; // Cost in points per 1k input tokens
