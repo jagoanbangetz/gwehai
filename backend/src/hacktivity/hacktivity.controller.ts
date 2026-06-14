@@ -37,4 +37,11 @@ export class HacktivityController {
     const user = req.user as any;
     return this.hacktivityService.getOne(user.id, id);
   }
+
+  /** Get parsed/structured result for a hacktivity entry. */
+  @Get(':id/parsed')
+  async getParsed(@Req() req: Request, @Param('id') id: string) {
+    const user = req.user as any;
+    return this.hacktivityService.getParsed(user.id, id);
+  }
 }

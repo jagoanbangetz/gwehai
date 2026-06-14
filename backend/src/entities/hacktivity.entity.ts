@@ -44,6 +44,19 @@ export class Hacktivity {
   @Column({ type: 'jsonb', nullable: true })
   toolArgs: Record<string, any> | null;
 
+  /** Name of the tool that was executed (e.g. nmap, nuclei, ffuf, exec). */
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  @Index()
+  toolName: string | null;
+
+  /** Action type inferred from tool execution (scan, enumerate, fuzz, execute, etc.). */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  action: string | null;
+
+  /** Structured parse result from tool output (parsedResult JSON). */
+  @Column({ type: 'jsonb', nullable: true })
+  parsedResult: Record<string, any> | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }
