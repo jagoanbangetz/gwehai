@@ -1,3 +1,6 @@
+import SeverityBadge from '../../../components/pentest/results/SeverityBadge'
+import ToolResultTable from '../../../components/pentest/results/ToolResultTable'
+import PortVisualizer from '../../../components/pentest/results/PortVisualizer'
 import { useState, useMemo } from 'react'
 import type { ReportGroupRow, FindingRow } from '../types'
 import { formatReportTime, formatReportDuration } from '../utils'
@@ -54,6 +57,7 @@ export default function ReportModal({
   onClose,
 }: Props) {
   const [page, setPage] = useState(0)
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
 
   /* Group reports by domain */
   const domainGroups = useMemo(() => {
@@ -263,7 +267,7 @@ export default function ReportModal({
                   </div>
                 ) : (
                   <>
-                    {/* Severity summary bar */}
+                    {/* Severity summary bar + view toggle */}
                     <div className="report-severity-bar">
                       {SEVERITY_ORDER.map((sev) => (
                         <div
@@ -276,45 +280,77 @@ export default function ReportModal({
                           <span className="report-severity-count">{severityCounts[sev]}</span>
                         </div>
                       ))}
+                      <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+                        <button
+                          className={`report-page-btn${viewMode === 'cards' ? ' active' : ''}`}
+                          onClick={() => setViewMode('cards')}
+                          title="Card view"
+                          style={{ fontSize: 11, padding: '3px 8px' }}
+                        >
+                          <i className="fa-solid fa-grip" />
+                        </button>
+                        <button
+                          className={`report-page-btn${viewMode === 'table' ? ' active' : ''}`}
+                          onClick={() => setViewMode('table')}
+                          title="Table view"
+                          style={{ fontSize: 11, padding: '3px 8px' }}
+                        >
+                          <i className="fa-solid fa-table-list" />
+                        </button>
+                      </div>
                     </div>
 
-                    {/* Findings list */}
-                    <div className="report-findings-list">
-                      {findings.map((f) => {
-                        const sev = ((f.metadata as any)?.severity || 'info').toLowerCase()
-                        return (
-                          <div key={f.id} className="report-finding-card" onClick={() => { onSelectFinding(f); onSelectFindingId(f.id) }}>
-                            <div className="report-finding-card-left">
-                              <span
-                                className="report-finding-severity-indicator"
-                                style={{ background: SEVERITY_COLORS[sev] || SEVERITY_COLORS.info }}
-                              />
-                            </div>
-                            <div className="report-finding-card-body">
-                              <div className="report-finding-card-title">
-                                {(f.metadata as any)?.title || 'Untitled finding'}
+                    {/* Findings as table or cards */}
+                    {viewMode === 'table' ? (
+                      <ToolResultTable
+                        results={findings.map(f => ({
+                          id: f.id,
+                          tool: (f.metadata as any)?.tool || 'finding',
+                          target: f.target || undefined,
+                          severity: ((f.metadata as any)?.severity || 'info') as any,
+                          title: (f.metadata as any)?.title || 'Untitled finding',
+                          description: f.detail || undefined,
+                          output: f.poc || undefined,
+                          timestamp: f.createdAt,
+                        }))}
+                        showFilters
+                      />
+                    ) : (
+                      <div className="report-findings-list">
+                        {findings.map((f) => {
+                          const sev = ((f.metadata as any)?.severity || 'info').toLowerCase()
+                          return (
+                            <div key={f.id} className="report-finding-card" onClick={() => { onSelectFinding(f); onSelectFindingId(f.id) }}>
+                              <div className="report-finding-card-left">
+                                <span
+                                  className="report-finding-severity-indicator"
+                                  style={{ background: SEVERITY_COLORS[sev] || SEVERITY_COLORS.info }}
+                                />
                               </div>
-                              <div className="report-finding-card-meta">
-                                <span className={`severity-badge severity-${sev}`}>
-                                  {sev}
-                                </span>
-                                {f.target && (
-                                  <span className="report-finding-card-target">
-                                    <i className="fa-solid fa-link" /> {f.target}
+                              <div className="report-finding-card-body">
+                                <div className="report-finding-card-title">
+                                  {(f.metadata as any)?.title || 'Untitled finding'}
+                                </div>
+                                <div className="report-finding-card-meta">
+                                  <SeverityBadge level={sev} compact />
+                                  {f.target && (
+                                    <span className="report-finding-card-target">
+                                      <i className="fa-solid fa-link" /> {f.target}
+                                    </span>
+                                  )}
+                                  <span className="report-finding-card-date">
+                                    <i className="fa-regular fa-clock" /> {formatReportTime(f.createdAt)}
                                   </span>
-                                )}
-                                <span className="report-finding-card-date">
-                                  <i className="fa-regular fa-clock" /> {formatReportTime(f.createdAt)}
-                                </span>
+                                </div>
+                              </div>
+                              <div className="report-finding-card-arrow">
+                                <i className="fa-solid fa-chevron-right" />
                               </div>
                             </div>
-                            <div className="report-finding-card-arrow">
-                              <i className="fa-solid fa-chevron-right" />
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </>
                 )}
               </div>

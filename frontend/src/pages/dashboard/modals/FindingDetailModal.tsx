@@ -1,23 +1,20 @@
 import type { FindingRow } from '../types'
 import { formatReportTime } from '../utils'
+import SeverityBadge from '../../../components/pentest/results/SeverityBadge'
+import CollapsibleRawOutput from '../../../components/pentest/results/CollapsibleRawOutput'
+import PortVisualizer from '../../../components/pentest/results/PortVisualizer'
+import type { PortInfo } from '../../../components/pentest/results/PortVisualizer'
 
 interface Props {
   finding: FindingRow
   onClose: () => void
 }
 
-const SEVERITY_COLORS: Record<string, string> = {
-  critical: '#ff4444',
-  high: '#ff8800',
-  medium: '#ffcc00',
-  low: '#44aaff',
-  info: '#888888',
-}
-
 export default function FindingDetailModal({ finding, onClose }: Props) {
   const sev = ((finding.metadata as any)?.severity || 'info').toLowerCase()
   const title = (finding.metadata as any)?.title || 'Finding detail'
   const confidence = (finding.metadata as any)?.confidence as number | undefined
+  const ports = ((finding.metadata as any)?.ports ?? []) as PortInfo[]
 
   return (
     <div className="modal-overlay finding-detail-overlay" onClick={onClose}>
@@ -25,15 +22,7 @@ export default function FindingDetailModal({ finding, onClose }: Props) {
         <div className="modal-header finding-detail-header">
           <div className="finding-detail-title-group">
             <h2 className="modal-title finding-detail-title">{title}</h2>
-            <span
-              className="finding-detail-severity-pill"
-              style={{
-                background: SEVERITY_COLORS[sev] || SEVERITY_COLORS.info,
-                color: sev === 'medium' ? '#1a1a1a' : '#ffffff',
-              }}
-            >
-              {sev}
-            </span>
+            <SeverityBadge level={sev} />
           </div>
           <button className="modal-close" onClick={onClose}>
             <i className="fa-solid fa-xmark" />
@@ -75,6 +64,13 @@ export default function FindingDetailModal({ finding, onClose }: Props) {
             </div>
           </div>
 
+          {/* Port scan results */}
+          {ports.length > 0 && (
+            <section className="report-poc-section finding-detail-section">
+              <PortVisualizer ports={ports} host={finding.target || undefined} />
+            </section>
+          )}
+
           {/* Description */}
           {finding.detail && (
             <section className="report-poc-section finding-detail-section">
@@ -91,12 +87,12 @@ export default function FindingDetailModal({ finding, onClose }: Props) {
               <h3>
                 <i className="fa-solid fa-flask" /> Proof of Concept (POC)
               </h3>
-              <pre className="report-poc-poc">{finding.poc}</pre>
+              <CollapsibleRawOutput content={finding.poc} language="text" showLineNumbers />
             </section>
           )}
 
           {/* Empty state */}
-          {!finding.detail && !finding.poc && (
+          {!finding.detail && !finding.poc && ports.length === 0 && (
             <div className="report-poc-empty">
               <i className="fa-regular fa-clipboard" />
               <p>No description or POC saved for this finding.</p>
