@@ -58,15 +58,17 @@ function detectVulnIndicators(toolName: string, output: string): string | null {
     return 'Possible XSS reflection detected — script or event handler appears in response. Call report_finding with payload + evidence.';
   }
 
-  // Stack trace / verbose error — information disclosure
-  if (/traceback \(most recent|at \S+\.java:\d+|at \S+\.js:\d+|stack trace|unhandled exception|internal server error|fatal error|warning:.*on line|notice:.*on line/i.test(output)) {
-    return 'Stack trace or verbose error detected — information disclosure. Call report_finding if this reveals sensitive paths, versions, or internals.';
-  }
+  // Stack trace / verbose error — IGNORE (info disclosure, NOT exploitable)
+  // Do NOT flag these as vuln indicators — the agent's prompt says SKIP info disclosure.
+  // These are only useful for recon, not for exploitation findings.
+  // if (/traceback \(most recent|at \S+\.java:\d+|at \S+\.js:\d+|stack trace|unhandled exception|internal server error|fatal error|warning:.*on line|notice:.*on line/i.test(output)) {
+  //   return 'Stack trace or verbose error detected — information disclosure. Call report_finding if this reveals sensitive paths, versions, or internals.';
+  // }
 
-  // 500 Internal Server Error with details
-  if (/500 internal server error/i.test(output) && output.length > 200) {
-    return '500 error with detailed response detected. Check if it reveals sensitive info (stack trace, DB details). If so, call report_finding.';
-  }
+  // 500 Internal Server Error — IGNORE (info disclosure, NOT exploitable)
+  // if (/500 internal server error/i.test(output) && output.length > 200) {
+  //   return '500 error with detailed response detected. Check if it reveals sensitive info (stack trace, DB details). If so, call report_finding.';
+  // }
 
   // Directory traversal / LFI evidence
   if (/\[boot loader\]|root:.*:0:0:|windows\\system32|etc\/passwd|etc\/shadow/i.test(output)) {
@@ -441,8 +443,6 @@ export class AgentOrchestratorService {
         }
       }
     } catch (err: any) {
-        console.log('[AgentOrchestrator DEBUG] CAUGHT ERROR | type=' + typeof err + ' | ctor=' + (err?.constructor?.name || 'none') + ' | msg=' + String(err?.message || 'none').substring(0,100) + ' | getResp=' + (typeof err?.getResponse === 'function' ? JSON.stringify(err.getResponse()).substring(0,100) : 'N/A'));
-
       // Non-blocking: CVE injection is best-effort
       push({ type: 'status', data: { message: `CVE Feed skipped: ${err?.message || 'unknown'}` } });
     }
@@ -545,54 +545,23 @@ export class AgentOrchestratorService {
       const toolsCap = this.costManager.getToolsOutputCap();
       const fallbackCaps = this.costManager.getCaps('auto', 'decision');
       const maxTokensForTools = toolsCap ?? fallbackCaps.maxOutputTokens;
-      // PREVENTIVE: strip unpaired tool_calls/tool_responses BEFORE sending to LLM
-      // (catch+retry is backup — this prevents the error from happening at all)
-      const validatedForLlm = this.stripUnpairedToolCalls(truncatedForLlm);
-      let response: { content: string; tool_calls?: LlmToolCall[] } | null;
-      try {
-        response = modelKey
-          ? await this.providerRouter
-              .generateWithTools({
-                selectedModelKey: modelKey,
-                selectedModelIdOverride: options?.modelIdOverride,
-                messages: validatedForLlm,
-                tools: PENTEST_TOOL_DEFS,
-                mode: 'decision',
-                tool_choice: toolChoice,
-              })
-              .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
-          : await this.llmService.generateWithTools(
-              model!,
-              truncatedForLlm,
-              PENTEST_TOOL_DEFS,
-              { tool_choice: toolChoice, max_tokens: maxTokensForTools },
-            );
-      } catch (err: any) {
-        if (this.getErrMsg(err).includes('tool_calls must be followed')) {
-          console.warn(`[AgentOrchestrator] tool_calls protocol error caught, retrying with stripped messages: ${err.message}`);
-          push({ type: 'status', data: { message: 'Retrying with fixed tool_calls...' } });
-          const fixed = this.stripUnpairedToolCalls(validatedForLlm);
-          response = modelKey
-            ? await this.providerRouter
-                .generateWithTools({
-                  selectedModelKey: modelKey,
-                  selectedModelIdOverride: options?.modelIdOverride,
-                  messages: fixed,
-                  tools: PENTEST_TOOL_DEFS,
-                  mode: 'decision',
-                  tool_choice: toolChoice,
-                })
-                .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
-            : await this.llmService.generateWithTools(
-                model!,
-                fixed,
-                PENTEST_TOOL_DEFS,
-                { tool_choice: toolChoice, max_tokens: maxTokensForTools },
-              );
-        } else {
-          throw err;
-        }
-      }
+      let response = modelKey
+        ? await this.providerRouter
+            .generateWithTools({
+              selectedModelKey: modelKey,
+              selectedModelIdOverride: options?.modelIdOverride,
+              messages: truncatedForLlm,
+              tools: PENTEST_TOOL_DEFS,
+              mode: 'decision',
+              tool_choice: toolChoice,
+            })
+            .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
+        : await this.llmService.generateWithTools(
+            model!,
+            truncatedForLlm,
+            PENTEST_TOOL_DEFS,
+            { tool_choice: toolChoice, max_tokens: maxTokensForTools },
+          );
       if (!response) {
         // CHECKLIST GUARD: dont break if pentest checklist incomplete
         try {
@@ -630,52 +599,23 @@ export class AgentOrchestratorService {
         const overridePrompt = this.buildRefusalOverridePrompt(message);
         messages.push({ role: 'assistant', content: response.content });
         messages.push({ role: 'user', content: overridePrompt });
-        const retryMessages = truncateMessagesForContext(messages);
-        let retryResponse: { content: string; tool_calls?: LlmToolCall[] } | null;
-        try {
-          retryResponse = modelKey
-            ? await this.providerRouter
-                .generateWithTools({
-                  selectedModelKey: modelKey,
-                  selectedModelIdOverride: options?.modelIdOverride,
-                  messages: retryMessages,
-                  tools: PENTEST_TOOL_DEFS,
-                  mode: 'decision',
-                  tool_choice: 'required' as const,
-                })
-                .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
-            : await this.llmService.generateWithTools(
-                model!,
-                retryMessages,
-                PENTEST_TOOL_DEFS,
-                { tool_choice: 'required' as const, max_tokens: maxTokensForTools },
-              );
-        } catch (retryErr: any) {
-          if (this.getErrMsg(retryErr).includes('tool_calls must be followed')) {
-            console.warn(`[AgentOrchestrator] tool_calls protocol error in refusal retry, stripping: ${retryErr.message}`);
-            push({ type: 'status', data: { message: 'Retrying refusal override with fixed tool_calls...' } });
-            const fixedRetry = this.stripUnpairedToolCalls(retryMessages);
-            retryResponse = modelKey
-              ? await this.providerRouter
-                  .generateWithTools({
-                    selectedModelKey: modelKey,
-                    selectedModelIdOverride: options?.modelIdOverride,
-                    messages: fixedRetry,
-                    tools: PENTEST_TOOL_DEFS,
-                    mode: 'decision',
-                    tool_choice: 'required' as const,
-                  })
-                  .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
-              : await this.llmService.generateWithTools(
-                  model!,
-                  fixedRetry,
-                  PENTEST_TOOL_DEFS,
-                  { tool_choice: 'required' as const, max_tokens: maxTokensForTools },
-                );
-          } else {
-            throw retryErr;
-          }
-        }
+        const retryResponse = modelKey
+          ? await this.providerRouter
+              .generateWithTools({
+                selectedModelKey: modelKey,
+                selectedModelIdOverride: options?.modelIdOverride,
+                messages: truncateMessagesForContext(messages),
+                tools: PENTEST_TOOL_DEFS,
+                mode: 'decision',
+                tool_choice: 'required' as const,
+              })
+              .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
+          : await this.llmService.generateWithTools(
+              model!,
+              truncateMessagesForContext(messages),
+              PENTEST_TOOL_DEFS,
+              { tool_choice: 'required' as const, max_tokens: maxTokensForTools },
+            );
         if (retryResponse && (retryResponse.tool_calls?.length || !this.isRefusalResponse(retryResponse.content || ''))) {
           response = retryResponse;
           push({ type: 'status', data: { message: 'Override successful - proceeding with pentest.' } });
@@ -814,10 +754,6 @@ export class AgentOrchestratorService {
         const resultMap = new Map<string, { tc: LlmToolCall; args: Record<string, any>; result: string }>();
         for (const r of [...regularResults, ...sendResults]) resultMap.set(r.tc.id, r);
 
-        // Collect vuln hints outside the tool message loop so user messages
-        // do not break tool_calls -> tool_response pairing (DeepSeek API requires
-        // tool messages immediately after assistant tool_calls with no user msgs between)
-        const vulnHints: string[] = [];
         for (const { tc } of parsedToolCalls) {
           const r = resultMap.get(tc.id);
           if (!r) continue;
@@ -837,30 +773,71 @@ export class AgentOrchestratorService {
             reportFindingCalledThisRun++;
           }
 
-          // Layer 1: Vuln detection — collect hints, push after all tool responses
+          // Layer 1: Vuln detection — if exec output shows vulnerability evidence, remind LLM to call report_finding
           const vulnHint = detectVulnIndicators(tc.name, r.result);
           if (vulnHint) {
-            vulnHints.push(vulnHint);
+            messages.push({
+              role: 'user' as any,
+              content: `⚠️ EXPLOITABLE VULN INDICATOR (ignore info disclosure like stack traces/headers — only act on SQL errors, XSS reflections, LFI, RCE, auth bypass): ${vulnHint}`,
+            });
             push({ type: 'status', data: { message: `⚠️ Vuln indicator found — remind to call report_finding` } });
             console.log(`[VulnDetect] turn=${turn} tool=${tc.name} hint=${vulnHint.slice(0, 80)}`);
           }
-        }
-        // Push vuln reminders AFTER all tool responses (keeps tool_calls pairing intact)
-        if (vulnHints.length > 0) {
-          messages.push({
-            role: 'user' as any,
-            content: '⚠️ VULNERABILITY INDICATORS DETECTED in exec outputs: ' + vulnHints.join(' | '),
-          });
         }
 
         // Layer 3: Periodic enforcement — every 5 turns without report_finding, inject mandatory reminder
         if (turn > 0 && turn % 5 === 0 && reportFindingCalledThisRun === 0) {
           messages.push({
             role: 'user' as any,
-            content: '⚠️ MANDATORY REMINDER: You have run multiple tool calls without calling report_finding. If ANY exec output showed SQL errors, XSS reflections, stack traces, 500 errors with details, or any other vulnerability evidence, you MUST call report_finding NOW before continuing with more scans. Every confirmed vulnerability must be reported via report_finding before the final summary.',
+            content: '⚠️ MANDATORY REMINDER: You have run multiple tool calls without calling report_finding. If exec output showed SQL errors, reflected XSS payloads, LFI file contents, RCE command output, or auth bypass — call report_finding NOW. SKIP info disclosure (stack traces, server headers, version strings). Continue exploitation on remaining checklist sections.',
           });
           push({ type: 'status', data: { message: '⚠️ Enforcement: report_finding not yet called — injecting reminder' } });
           console.log(`[ReportEnforcement] turn=${turn} report_finding_calls=${reportFindingCalledThisRun}`);
+        }
+
+        // ── Plan Tracker: enforce step-by-step execution ────────────
+        try {
+          const planState = await this.pentestJobs.getStateByConversationId(userId, cid);
+          if (planState?.state?.plan_active && planState.state.plan) {
+            const plan = planState.state.plan;
+            const phase = plan.phases[plan.current_phase];
+            if (phase) {
+              const step = phase.steps[plan.current_step];
+              if (step && step.status !== 'completed') {
+                // Auto-complete: detect if agent ran this step's tool
+                const toolMatched = priorToolCallNames.some(tn =>
+                  tn === step.tool || (step.command && priorToolCallNames.includes('exec'))
+                );
+                if (toolMatched && turn > 0) {
+                  step.status = 'completed';
+                  step.executed_at = new Date().toISOString();
+                  console.log(`[PlanTracker] auto-completed step ${step.id}`);
+                  // Advance to next step
+                  if (plan.current_step + 1 < phase.steps.length) {
+                    plan.current_step++;
+                  } else if (plan.current_phase + 1 < plan.phases.length) {
+                    plan.current_phase++;
+                    plan.current_step = 0;
+                    const nextPhase = plan.phases[plan.current_phase];
+                    messages.push({ role: 'user' as any, content: `✅ Phase "${phase.name}" complete! Now starting: ${nextPhase.name} — ${nextPhase.steps[0]?.description}` });
+                    console.log(`[PlanTracker] advanced to phase ${nextPhase.name}`);
+                  } else {
+                    plan.plan_active = false;
+                    messages.push({ role: 'user' as any, content: '✅ ALL PLAN STEPS COMPLETED. Write final summary with all findings and stop.' });
+                    console.log('[PlanTracker] all phases complete');
+                  }
+                  await this.pentestJobs.updateStateByConversationId(userId, cid, { plan, plan_active: plan.plan_active ?? true });
+                } else {
+                  // Inject CURRENT STEP reminder
+                  const stepPrompt = `📋 PLAN STEP ${plan.current_phase}.${plan.current_step}/${plan.total_steps}: [${phase.name}] ${step.description}\n→ RUN: ${step.tool} — ${step.command}\n→ EXPECT: ${step.expect || 'any output'}`;
+                  messages.push({ role: 'user' as any, content: stepPrompt });
+                  console.log(`[PlanTracker] turn=${turn} current=${phase.name}.${step.id}`);
+                }
+              }
+            }
+          }
+        } catch (err: any) {
+          console.log(`[PlanTracker] error: ${err?.message}`);
         }
 
         // ── Wait for parallel sub-agents (wait_for_reply=false) ───────────
@@ -986,41 +963,18 @@ export class AgentOrchestratorService {
           },
         ]);
         const enforceModelKey = options?.model_key || 'auto';
-        let enforceResponse: { content: string; tool_calls?: LlmToolCall[] } | null;
-        try {
-          enforceResponse = enforceModelKey
-            ? await this.providerRouter
-                .generateWithTools({
-                  selectedModelKey: enforceModelKey,
-                  selectedModelIdOverride: options?.modelIdOverride,
-                  messages: enforceMessages,
-                  tools: PENTEST_TOOL_DEFS,
-                  mode: 'decision',
-                  tool_choice: 'auto' as const,
-                })
-                .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
-            : null;
-        } catch (enforceErr: any) {
-          if (this.getErrMsg(enforceErr).includes('tool_calls must be followed')) {
-            console.warn(`[AgentOrchestrator] tool_calls protocol error in enforcement, stripping: ${enforceErr.message}`);
-            push({ type: 'status', data: { message: 'Retrying enforcement with fixed tool_calls...' } });
-            const fixedEnforce = this.stripUnpairedToolCalls(enforceMessages);
-            enforceResponse = enforceModelKey
-              ? await this.providerRouter
-                  .generateWithTools({
-                    selectedModelKey: enforceModelKey,
-                    selectedModelIdOverride: options?.modelIdOverride,
-                    messages: fixedEnforce,
-                    tools: PENTEST_TOOL_DEFS,
-                    mode: 'decision',
-                    tool_choice: 'auto' as const,
-                  })
-                  .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
-              : null;
-          } else {
-            throw enforceErr;
-          }
-        }
+        const enforceResponse = enforceModelKey
+          ? await this.providerRouter
+              .generateWithTools({
+                selectedModelKey: enforceModelKey,
+                selectedModelIdOverride: options?.modelIdOverride,
+                messages: enforceMessages,
+                tools: PENTEST_TOOL_DEFS,
+                mode: 'decision',
+                tool_choice: 'auto' as const,
+              })
+              .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
+          : null;
 
         if (enforceResponse?.tool_calls?.length) {
           const mkCtx = (): ToolExecutionContext => ({
@@ -1084,47 +1038,21 @@ export class AgentOrchestratorService {
       const summaryMessage: LlmMessage = { role: 'user', content: summaryPrompt };
       const summaryMessages = truncateMessagesForContext([...messages, summaryMessage]);
       const summaryCaps = this.costManager.getToolsOutputCap() ?? this.costManager.getCaps('auto', 'decision').maxOutputTokens;
-      let summaryResponse: { content: string } | null;
-      try {
-        summaryResponse = modelKeySummary
-          ? await this.providerRouter
-              .generateWithTools({
-                selectedModelKey: modelKeySummary,
-                selectedModelIdOverride: options?.modelIdOverride,
-                messages: summaryMessages,
-                tools: PENTEST_TOOL_DEFS,
-                mode: 'decision',
-                tool_choice: 'none',
-              })
-              .then((r) => ({ content: r.content }))
-          : await this.llmService.generateWithTools(model!, summaryMessages, PENTEST_TOOL_DEFS, {
+      const summaryResponse = modelKeySummary
+        ? await this.providerRouter
+            .generateWithTools({
+              selectedModelKey: modelKeySummary,
+              selectedModelIdOverride: options?.modelIdOverride,
+              messages: summaryMessages,
+              tools: PENTEST_TOOL_DEFS,
+              mode: 'decision',
               tool_choice: 'none',
-              max_tokens: summaryCaps,
-            });
-      } catch (summaryErr: any) {
-        if (this.getErrMsg(summaryErr).includes('tool_calls must be followed')) {
-          console.warn(`[AgentOrchestrator] tool_calls protocol error in summary, stripping: ${summaryErr.message}`);
-          push({ type: 'status', data: { message: 'Retrying summary with fixed tool_calls...' } });
-          const fixedSummary = this.stripUnpairedToolCalls(summaryMessages);
-          summaryResponse = modelKeySummary
-            ? await this.providerRouter
-                .generateWithTools({
-                  selectedModelKey: modelKeySummary,
-                  selectedModelIdOverride: options?.modelIdOverride,
-                  messages: fixedSummary,
-                  tools: PENTEST_TOOL_DEFS,
-                  mode: 'decision',
-                  tool_choice: 'none',
-                })
-                .then((r) => ({ content: r.content }))
-            : await this.llmService.generateWithTools(model!, fixedSummary, PENTEST_TOOL_DEFS, {
-                tool_choice: 'none',
-                max_tokens: summaryCaps,
-              });
-        } else {
-          throw summaryErr;
-        }
-      }
+            })
+            .then((r) => ({ content: r.content }))
+        : await this.llmService.generateWithTools(model!, summaryMessages, PENTEST_TOOL_DEFS, {
+            tool_choice: 'none',
+            max_tokens: summaryCaps,
+          });
       if (summaryResponse?.content?.trim()) {
         finalContent = summaryResponse.content;
       } else {
@@ -1474,65 +1402,6 @@ export class AgentOrchestratorService {
     parts.push('');
     parts.push('Proceed with the security testing immediately. Use exec to run tools.');
     return parts.join('\n');
-  }
-
-  /**
-   * Strip unpaired tool_calls and orphan tool responses from messages.
-   * Defense-in-depth: when truncation leaves assistant tool_calls without
-   * matching tool responses, the API returns "tool_calls must be followed
-   * by tool messages" error. This helper fixes the messages so the retry works.
-   */
-  /** Extract error message from NestJS HttpException (where .message = HTTP status, not real msg) */
-  private getErrMsg(err: any): string {
-    if (!err) return "";
-    if (typeof err.getResponse === "function") {
-      const r = err.getResponse();
-      if (typeof r === "string") return r;
-      if (r?.message) return typeof r.message === "string" ? r.message : String(r.message);
-      return String(r);
-    }
-    return err?.message ?? String(err);
-  }
-
-  private stripUnpairedToolCalls(messages: LlmMessage[]): LlmMessage[] {
-    // 1. Collect all tool_call IDs requested by assistant messages
-    const requestedIds = new Set<string>();
-    for (const m of messages) {
-      if (m.role === 'assistant' && m.tool_calls?.length) {
-        for (const tc of m.tool_calls) {
-          if (tc.id) requestedIds.add(tc.id);
-        }
-      }
-    }
-
-    return messages
-      .map((m) => {
-        // 2. Drop tool responses that don't have a matching tool_call
-        if (m.role === 'tool' && m.tool_call_id && !requestedIds.has(m.tool_call_id)) {
-          return null;
-        }
-        // 3. Drop tool_calls from assistant that have no matching tool response
-        if (m.role === 'assistant' && m.tool_calls?.length) {
-          const toolResponseIds = new Set(
-            messages
-              .filter((x) => x.role === 'tool' && x.tool_call_id && requestedIds.has(x.tool_call_id!))
-              .map((x) => x.tool_call_id!),
-          );
-          const validToolCalls = m.tool_calls.filter((tc) => tc.id && toolResponseIds.has(tc.id));
-          if (validToolCalls.length !== m.tool_calls.length) {
-            return { ...m, tool_calls: validToolCalls.length > 0 ? validToolCalls : undefined };
-          }
-        }
-        return m;
-      })
-      .filter((m): m is LlmMessage => {
-        if (!m) return false;
-        // 4. Drop assistant messages that became empty (no content, no tool_calls)
-        if (m.role === 'assistant' && !m.content?.trim() && !m.tool_calls?.length) {
-          return false;
-        }
-        return true;
-      });
   }
 
 }
