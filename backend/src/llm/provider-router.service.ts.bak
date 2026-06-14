@@ -342,6 +342,39 @@ export class ProviderRouterService {
     if (!res.ok) {
       const errText = await res.text();
       const message = parseApiErrorResponse(errText, 'DeepSeek', errText || 'DeepSeek API error');
+      // Retry ONCE with fixed messages if tool_calls pairing error
+      if (message.includes('tool_calls must be followed')) {
+        console.warn('[DeepSeek] tool_calls pairing error — retrying with fixed messages');
+        const fixed = fixToolCallPairing(this.llmMessagesToOpenAI(messages));
+        const retryRes = await fetch('https://api.deepseek.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({ ...body, messages: fixed }),
+        });
+        if (retryRes.ok) {
+          const retryData = await retryRes.json();
+          if (retryData?.error) {
+            const errBody = typeof retryData.error === 'string' ? retryData.error : JSON.stringify(retryData.error);
+            throw new HttpException(parseApiErrorResponse(errBody, 'DeepSeek', errBody || 'DeepSeek API error'), 400);
+          }
+          const retryMsg = retryData?.choices?.[0]?.message || {};
+          const retryContent = retryMsg.content ?? '';
+          const retryRawToolCalls = retryMsg.tool_calls || [];
+          const retryToolCalls = sanitizeToolCalls(retryRawToolCalls);
+          const retryUsage = retryData?.usage || {};
+          return {
+            content: retryContent,
+            tool_calls: retryToolCalls.length ? retryToolCalls : undefined,
+            provider: 'deepseek',
+            model: option.defaultModel,
+            inputTokens: retryUsage.prompt_tokens ?? 0,
+            outputTokens: retryUsage.completion_tokens ?? 0,
+          };
+        }
+        // Retry failed — throw original error
+        const retryErrText = await retryRes.text();
+        throw new HttpException(parseApiErrorResponse(retryErrText, 'DeepSeek', retryErrText || 'DeepSeek API error'), retryRes.status);
+      }
       throw new HttpException(message, res.status);
     }
     const data = await res.json();

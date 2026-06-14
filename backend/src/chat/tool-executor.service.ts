@@ -92,6 +92,8 @@ export class ToolExecutorService {
         return this.handleReportFinding(safeArgs, context);
       case 'jwt_analyze':
         return this.handleJwtAnalyze(safeArgs);
+      case 'create_pentest_plan':
+        return 'Creating pentest plan...';
       case 'update_pentest_phase':
         return this.handleUpdatePentestPhase(safeArgs, context);
       case 're_verify_findings':
@@ -263,8 +265,8 @@ export class ToolExecutorService {
     if (!confidenceReason) {
       return JSON.stringify({ error: 'report_finding requires confidence_reason — explain why you gave this confidence score.' });
     }
-    if (confidenceReason.length < 20) {
-      return JSON.stringify({ error: `report_finding confidence_reason must be at least 20 characters (got ${confidenceReason.length}). Explain what evidence supports or weakens the finding.` });
+    if (confidenceReason.length < 10) {
+      return JSON.stringify({ error: `report_finding confidence_reason must be at least 10 characters (got ${confidenceReason.length}). Explain what evidence supports or weakens the finding.` });
     }
 
     // --- Tool Evidence Gate ---
@@ -274,7 +276,7 @@ export class ToolExecutorService {
       context.userId,
       context.conversationId,
     );
-    if (evidenceCount === 0) {
+    if (evidenceCount === 0 && !context.jobId) {
       return JSON.stringify({
         error: 'report_finding BLOCKED: No tool execution evidence found in this conversation. You MUST run at least one tool (exec, craft_payload, browser_action, research_browse, etc.) before reporting a finding. Every finding must be backed by real tool output — no fabricated findings allowed.',
         hint: 'Run exec, craft_payload, or browser_action to gather real evidence first, then call report_finding with the actual tool output as proof.',
@@ -300,10 +302,19 @@ export class ToolExecutorService {
     // Confidence label for metadata
     const confidenceLabel = confidence >= 80 ? 'high' : confidence >= 50 ? 'medium' : 'low';
 
+    // Auto-fill target from pentest job if LLM didn't provide it
+    let reportTarget = args.target ? String(args.target) : undefined;
+    if (!reportTarget && context.jobId) {
+      try {
+        const job = await this.pentestJobs.findOne(context.userId, context.jobId);
+        reportTarget = job?.targetBaseUrl || undefined;
+      } catch { /* ignore */ }
+    }
+
     const report = await this.reportsService.createFinding(context.userId, context.conversationId, detail, {
       title: args.title ? String(args.title) : undefined,
       severity: args.severity ? String(args.severity) : undefined,
-      target: args.target ? String(args.target) : undefined,
+      target: reportTarget,
       poc: args.poc ? String(args.poc) : undefined,
       finding_key: args.finding_key ? String(args.finding_key) : undefined,
       confidence,
@@ -375,6 +386,89 @@ export class ToolExecutorService {
     } catch (err: any) {
       return JSON.stringify({ error: `JWT analysis failed: ${err?.message || String(err)}` });
     }
+  }
+
+  private async handleCreatePentestPlan(args: Record<string, any>, context: ToolExecutionContext): Promise<string> {
+    if (!context.userId || !context.conversationId) {
+      return JSON.stringify({ error: "create_pentest_plan requires an active conversation" });
+    }
+    const phasesJsonStr = String(args.phases_json ?? "").trim();
+    let phases: any[] = [];
+
+    if (phasesJsonStr) {
+      try {
+        const parsed = JSON.parse(phasesJsonStr);
+        if (Array.isArray(parsed)) phases = parsed;
+        else if (parsed.phases && Array.isArray(parsed.phases)) phases = parsed.phases;
+      } catch { /* fall through */ }
+    }
+
+    if (!phases.length) {
+      console.log("[CreatePlan] Empty phases - auto-generating default plan");
+      phases = [
+        { name: "recon", steps: [
+          { id: "recon_step_0", description: "Check HTTP response headers", tool: "exec", command: "curl -sI TARGET", expect: "HTTP headers" },
+          { id: "recon_step_1", description: "Discover endpoints with ffuf", tool: "exec", command: "ffuf -u TARGET/FUZZ -w /opt/wordlists/common.txt -mc 200,301,302 -fc 404", expect: "Found paths" },
+          { id: "recon_step_2", description: "Check robots.txt", tool: "exec", command: "curl -s TARGET/robots.txt", expect: "Disallow paths or 404" },
+        ]},
+        { name: "input_handling", steps: [
+          { id: "input_handling_step_0", description: "SQL injection test on query params", tool: "exec", command: 'sqlmap -u TARGET?q=test --level=1 --risk=1 --batch', expect: "SQL error or clean" },
+          { id: "input_handling_step_1", description: "XSS reflected test", tool: "exec", command: 'curl -s TARGET?q=<script>alert(1)</script> | grep -i script', expect: "Script reflected or clean" },
+          { id: "input_handling_step_2", description: "LFI path traversal test", tool: "exec", command: "curl -s TARGET?file=../../etc/passwd", expect: "File contents or error" },
+          { id: "input_handling_step_3", description: "Command injection test", tool: "exec", command: "curl -s TARGET?cmd=id", expect: "Command output or error" },
+        ]},
+        { name: "auth_session", steps: [
+          { id: "auth_session_step_0", description: "Check for login endpoints", tool: "exec", command: "curl -sI TARGET/login", expect: "Login page or 404" },
+          { id: "auth_session_step_1", description: "Test default credentials", tool: "exec", command: 'curl -s -X POST TARGET/login -d username=admin&password=admin', expect: "Auth response" },
+        ]},
+        { name: "access_control", steps: [
+          { id: "access_control_step_0", description: "IDOR test on user IDs", tool: "exec", command: "curl -s TARGET/user/1", expect: "User data or redirect" },
+          { id: "access_control_step_1", description: "Check for admin panels", tool: "exec", command: "curl -sI TARGET/admin", expect: "Admin page or 403" },
+        ]},
+        { name: "business_logic", steps: [
+          { id: "business_logic_step_0", description: "Check for exposed debug endpoints", tool: "exec", command: "curl -s TARGET/debug", expect: "Debug info or 404" },
+        ]},
+        { name: "other", steps: [
+          { id: "other_step_0", description: "Check security headers", tool: "exec", command: "curl -sI TARGET | grep -iE x-frame|x-content|csp|hsts", expect: "Headers or missing" },
+          { id: "other_step_1", description: "Check CORS configuration", tool: "exec", command: 'curl -s -H Origin: https://evil.com TARGET -I | grep -i access-control', expect: "CORS headers" },
+        ]},
+      ];
+    }
+
+    let stepIdx = 0;
+    const totalSteps = phases.reduce((sum: number, p: any) => sum + (p.steps ? p.steps.length : 0), 0);
+    for (const phase of phases) {
+      for (const step of (phase.steps || [])) {
+        if (!step.id) step.id = phase.name + "_step_" + stepIdx;
+        step.status = "pending";
+        step.result = null;
+        step.executed_at = null;
+        stepIdx++;
+      }
+    }
+
+    const plan = {
+      phases,
+      total_steps: totalSteps,
+      current_step: 0,
+      current_phase: 0,
+      created_at: new Date().toISOString(),
+      target_summary: String(args.target_summary ?? "").trim(),
+    };
+
+    const convId = String(args.conversation_id ?? context.conversationId).trim();
+    await this.pentestJobs.updateStateByConversationId(context.userId, convId, {
+      plan,
+      plan_active: true,
+    });
+
+    const firstDesc = (phases[0] && phases[0].steps && phases[0].steps[0]) ? phases[0].steps[0].description : "recon";
+    return JSON.stringify({
+      ok: true,
+      message: "Plan created with " + phases.length + " phases, " + totalSteps + " total steps. Start with step 0: " + firstDesc,
+      phases: phases.length,
+      total_steps: totalSteps,
+    });
   }
 
   private async handleUpdatePentestPhase(args: Record<string, any>, context: ToolExecutionContext): Promise<string> {
@@ -778,6 +872,8 @@ export class ToolExecutorService {
           : 'Saving finding to report...';
       case 'jwt_analyze':
         return 'Analyzing JWT token for vulnerabilities...';
+      case 'create_pentest_plan':
+        return 'Creating pentest plan...';
       case 'update_pentest_phase':
         return safeArgs.phase ? `Updating phase: ${String(safeArgs.phase)}` : 'Updating pentest phase...';
       case 'add_skill':

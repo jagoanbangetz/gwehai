@@ -58,17 +58,15 @@ function detectVulnIndicators(toolName: string, output: string): string | null {
     return 'Possible XSS reflection detected — script or event handler appears in response. Call report_finding with payload + evidence.';
   }
 
-  // Stack trace / verbose error — IGNORE (info disclosure, NOT exploitable)
-  // Do NOT flag these as vuln indicators — the agent's prompt says SKIP info disclosure.
-  // These are only useful for recon, not for exploitation findings.
-  // if (/traceback \(most recent|at \S+\.java:\d+|at \S+\.js:\d+|stack trace|unhandled exception|internal server error|fatal error|warning:.*on line|notice:.*on line/i.test(output)) {
-  //   return 'Stack trace or verbose error detected — information disclosure. Call report_finding if this reveals sensitive paths, versions, or internals.';
-  // }
+  // Stack trace / verbose error — information disclosure
+  if (/traceback \(most recent|at \S+\.java:\d+|at \S+\.js:\d+|stack trace|unhandled exception|internal server error|fatal error|warning:.*on line|notice:.*on line/i.test(output)) {
+    return 'Stack trace or verbose error detected — information disclosure. Call report_finding if this reveals sensitive paths, versions, or internals.';
+  }
 
-  // 500 Internal Server Error — IGNORE (info disclosure, NOT exploitable)
-  // if (/500 internal server error/i.test(output) && output.length > 200) {
-  //   return '500 error with detailed response detected. Check if it reveals sensitive info (stack trace, DB details). If so, call report_finding.';
-  // }
+  // 500 Internal Server Error with details
+  if (/500 internal server error/i.test(output) && output.length > 200) {
+    return '500 error with detailed response detected. Check if it reveals sensitive info (stack trace, DB details). If so, call report_finding.';
+  }
 
   // Directory traversal / LFI evidence
   if (/\[boot loader\]|root:.*:0:0:|windows\\system32|etc\/passwd|etc\/shadow/i.test(output)) {
@@ -91,6 +89,80 @@ function detectVulnIndicators(toolName: string, output: string): string | null {
   }
 
   return null;
+}
+
+/**
+ * Validate and fix tool_calls message ordering before sending to LLM.
+ *
+ * LLM API requirement:
+ *   [assistant with tool_calls] → [tool response] → [tool response] → [next ANY]
+ *
+ * This function detects user/system messages incorrectly placed between
+ * assistant tool_calls and their tool responses, and reorders them.
+ *
+ * SAFETY NET: even if the root cause is fixed, this catches any future
+ * ordering violations from new code paths.
+ */
+function validateMessages(messages: LlmMessage[]): LlmMessage[] {
+  const result: LlmMessage[] = [];
+  let i = 0;
+  let reorderCount = 0;
+
+  while (i < messages.length) {
+    const msg = messages[i];
+    result.push(msg);
+    i++;
+
+    // If this is an assistant message with tool_calls, ensure next messages are tool responses
+    if (msg.role === 'assistant' && msg.tool_calls?.length) {
+      const toolCallIds = new Set(msg.tool_calls.map((tc) => tc.id).filter(Boolean));
+      if (toolCallIds.size === 0) continue;
+
+      // Collect tool responses and any misplaced non-tool messages
+      const toolResponses: LlmMessage[] = [];
+      const misplaced: LlmMessage[] = [];
+
+      while (i < messages.length) {
+        const next = messages[i];
+        // If it's a tool response for one of our tool_calls, it's in the right place
+        if (next.role === 'tool' && next.tool_call_id && toolCallIds.has(next.tool_call_id)) {
+          toolResponses.push(next);
+          toolCallIds.delete(next.tool_call_id);
+          i++;
+          continue;
+        }
+        // If it's another tool response (orphan) or a non-tool message, stop collecting
+        break;
+      }
+
+      // Check if there are non-tool messages BEFORE all tool responses are placed
+      // This would be the ordering violation
+      while (i < messages.length) {
+        const next = messages[i];
+        // If we still have unpaired tool_call IDs, and next message is NOT a tool response
+        if (toolCallIds.size > 0 && !(next.role === 'tool' && next.tool_call_id && toolCallIds.has(next.tool_call_id))) {
+          misplaced.push(next);
+          i++;
+          continue;
+        }
+        break;
+      }
+
+      // Push tool responses first, then misplaced messages after
+      result.push(...toolResponses);
+      if (misplaced.length > 0) {
+        reorderCount += misplaced.length;
+        console.warn(`[validateMessages] Reordered ${misplaced.length} message(s) that were between assistant tool_calls and tool responses`);
+        result.push(...misplaced);
+      }
+    }
+  }
+
+  if (reorderCount > 0) {
+    console.warn(`[validateMessages] Total reordered: ${reorderCount} message(s)`);
+  }
+
+  return result;
 }
 
 /** Small delay so SSE client receives events over time and frontend typing effect can run */
@@ -542,6 +614,11 @@ export class AgentOrchestratorService {
         console.warn(`[AgentOrchestrator] WARNING: ${toolCallsCount} assistant messages with tool_calls but 0 tool responses — may trigger protocol error`);
       }
 
+      // SAFETY NET: validate and fix message ordering before LLM call.
+      // Catches any user/system messages incorrectly placed between
+      // assistant tool_calls and their tool responses.
+      const validatedForLlm = validateMessages(truncatedForLlm);
+
       const toolsCap = this.costManager.getToolsOutputCap();
       const fallbackCaps = this.costManager.getCaps('auto', 'decision');
       const maxTokensForTools = toolsCap ?? fallbackCaps.maxOutputTokens;
@@ -550,7 +627,7 @@ export class AgentOrchestratorService {
             .generateWithTools({
               selectedModelKey: modelKey,
               selectedModelIdOverride: options?.modelIdOverride,
-              messages: truncatedForLlm,
+              messages: validatedForLlm,
               tools: PENTEST_TOOL_DEFS,
               mode: 'decision',
               tool_choice: toolChoice,
@@ -558,7 +635,7 @@ export class AgentOrchestratorService {
             .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
         : await this.llmService.generateWithTools(
             model!,
-            truncatedForLlm,
+            validatedForLlm,
             PENTEST_TOOL_DEFS,
             { tool_choice: toolChoice, max_tokens: maxTokensForTools },
           );
@@ -604,7 +681,7 @@ export class AgentOrchestratorService {
               .generateWithTools({
                 selectedModelKey: modelKey,
                 selectedModelIdOverride: options?.modelIdOverride,
-                messages: truncateMessagesForContext(messages),
+                messages: validateMessages(truncateMessagesForContext(messages)),
                 tools: PENTEST_TOOL_DEFS,
                 mode: 'decision',
                 tool_choice: 'required' as const,
@@ -612,7 +689,7 @@ export class AgentOrchestratorService {
               .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
           : await this.llmService.generateWithTools(
               model!,
-              truncateMessagesForContext(messages),
+              validateMessages(truncateMessagesForContext(messages)),
               PENTEST_TOOL_DEFS,
               { tool_choice: 'required' as const, max_tokens: maxTokensForTools },
             );
@@ -754,6 +831,9 @@ export class AgentOrchestratorService {
         const resultMap = new Map<string, { tc: LlmToolCall; args: Record<string, any>; result: string }>();
         for (const r of [...regularResults, ...sendResults]) resultMap.set(r.tc.id, r);
 
+        // Collect vuln hints — push AFTER all tool responses to preserve tool_calls protocol ordering
+        const vulnHints: { hint: string; toolName: string }[] = [];
+
         for (const { tc } of parsedToolCalls) {
           const r = resultMap.get(tc.id);
           if (!r) continue;
@@ -773,71 +853,35 @@ export class AgentOrchestratorService {
             reportFindingCalledThisRun++;
           }
 
-          // Layer 1: Vuln detection — if exec output shows vulnerability evidence, remind LLM to call report_finding
+          // Layer 1: Vuln detection — COLLECT hints, don't push yet (would break tool_calls protocol)
           const vulnHint = detectVulnIndicators(tc.name, r.result);
           if (vulnHint) {
-            messages.push({
-              role: 'user' as any,
-              content: `⚠️ EXPLOITABLE VULN INDICATOR (ignore info disclosure like stack traces/headers — only act on SQL errors, XSS reflections, LFI, RCE, auth bypass): ${vulnHint}`,
-            });
-            push({ type: 'status', data: { message: `⚠️ Vuln indicator found — remind to call report_finding` } });
+            vulnHints.push({ hint: vulnHint, toolName: tc.name });
+            push({ type: 'status', data: { message: `⚠️ Vuln indicator found (${tc.name}) — will remind after all tool responses` } });
             console.log(`[VulnDetect] turn=${turn} tool=${tc.name} hint=${vulnHint.slice(0, 80)}`);
           }
+        }
+
+        // Push vuln hints AFTER all tool responses — preserves tool_calls protocol ordering
+        // (assistant with tool_calls → ALL tool responses → then user/system messages)
+        if (vulnHints.length > 0) {
+          const hintContent = vulnHints.length === 1
+            ? `⚠️ VULNERABILITY INDICATOR DETECTED in ${vulnHints[0].toolName} output: ${vulnHints[0].hint}`
+            : `⚠️ VULNERABILITY INDICATORS DETECTED in tool outputs:\n${vulnHints.map((v, i) => `${i + 1}. [${v.toolName}] ${v.hint}`).join('\n')}`;
+          messages.push({
+            role: 'user' as any,
+            content: hintContent,
+          });
         }
 
         // Layer 3: Periodic enforcement — every 5 turns without report_finding, inject mandatory reminder
         if (turn > 0 && turn % 5 === 0 && reportFindingCalledThisRun === 0) {
           messages.push({
             role: 'user' as any,
-            content: '⚠️ MANDATORY REMINDER: You have run multiple tool calls without calling report_finding. If exec output showed SQL errors, reflected XSS payloads, LFI file contents, RCE command output, or auth bypass — call report_finding NOW. SKIP info disclosure (stack traces, server headers, version strings). Continue exploitation on remaining checklist sections.',
+            content: '⚠️ MANDATORY REMINDER: You have run multiple tool calls without calling report_finding. If ANY exec output showed SQL errors, XSS reflections, stack traces, 500 errors with details, or any other vulnerability evidence, you MUST call report_finding NOW before continuing with more scans. Every confirmed vulnerability must be reported via report_finding before the final summary.',
           });
           push({ type: 'status', data: { message: '⚠️ Enforcement: report_finding not yet called — injecting reminder' } });
           console.log(`[ReportEnforcement] turn=${turn} report_finding_calls=${reportFindingCalledThisRun}`);
-        }
-
-        // ── Plan Tracker: enforce step-by-step execution ────────────
-        try {
-          const planState = await this.pentestJobs.getStateByConversationId(userId, cid);
-          if (planState?.state?.plan_active && planState.state.plan) {
-            const plan = planState.state.plan;
-            const phase = plan.phases[plan.current_phase];
-            if (phase) {
-              const step = phase.steps[plan.current_step];
-              if (step && step.status !== 'completed') {
-                // Auto-complete: detect if agent ran this step's tool
-                const toolMatched = priorToolCallNames.some(tn =>
-                  tn === step.tool || (step.command && priorToolCallNames.includes('exec'))
-                );
-                if (toolMatched && turn > 0) {
-                  step.status = 'completed';
-                  step.executed_at = new Date().toISOString();
-                  console.log(`[PlanTracker] auto-completed step ${step.id}`);
-                  // Advance to next step
-                  if (plan.current_step + 1 < phase.steps.length) {
-                    plan.current_step++;
-                  } else if (plan.current_phase + 1 < plan.phases.length) {
-                    plan.current_phase++;
-                    plan.current_step = 0;
-                    const nextPhase = plan.phases[plan.current_phase];
-                    messages.push({ role: 'user' as any, content: `✅ Phase "${phase.name}" complete! Now starting: ${nextPhase.name} — ${nextPhase.steps[0]?.description}` });
-                    console.log(`[PlanTracker] advanced to phase ${nextPhase.name}`);
-                  } else {
-                    plan.plan_active = false;
-                    messages.push({ role: 'user' as any, content: '✅ ALL PLAN STEPS COMPLETED. Write final summary with all findings and stop.' });
-                    console.log('[PlanTracker] all phases complete');
-                  }
-                  await this.pentestJobs.updateStateByConversationId(userId, cid, { plan, plan_active: plan.plan_active ?? true });
-                } else {
-                  // Inject CURRENT STEP reminder
-                  const stepPrompt = `📋 PLAN STEP ${plan.current_phase}.${plan.current_step}/${plan.total_steps}: [${phase.name}] ${step.description}\n→ RUN: ${step.tool} — ${step.command}\n→ EXPECT: ${step.expect || 'any output'}`;
-                  messages.push({ role: 'user' as any, content: stepPrompt });
-                  console.log(`[PlanTracker] turn=${turn} current=${phase.name}.${step.id}`);
-                }
-              }
-            }
-          }
-        } catch (err: any) {
-          console.log(`[PlanTracker] error: ${err?.message}`);
         }
 
         // ── Wait for parallel sub-agents (wait_for_reply=false) ───────────
@@ -955,13 +999,13 @@ export class AgentOrchestratorService {
       console.log(`[ReportEnforcement] FINAL: agent ran ${turn} turns with 0 report_finding calls — attempting enforcement turn`);
       push({ type: 'status', data: { message: '⚠️ Final check: ensuring findings are reported...' } });
       try {
-        const enforceMessages = truncateMessagesForContext([
+        const enforceMessages = validateMessages(truncateMessagesForContext([
           ...messages,
           {
             role: 'user' as any,
             content: 'CRITICAL: You have completed your scans but called report_finding ZERO times. Review ALL exec outputs from this session. If ANY output contained SQL errors, XSS reflections, stack traces, sensitive data, auth bypasses, or other vulnerability evidence, you MUST call report_finding NOW for each one. This is mandatory — do NOT summarize without reporting findings. If you truly found zero vulnerabilities, respond with "No vulnerabilities confirmed." and skip report_finding.',
           },
-        ]);
+        ]));
         const enforceModelKey = options?.model_key || 'auto';
         const enforceResponse = enforceModelKey
           ? await this.providerRouter
@@ -1036,7 +1080,7 @@ export class AgentOrchestratorService {
         ? `Step limit for this session was reached. Summarize what you found so far (list each report_finding). In <final>, also list which checklist areas you did NOT get to test (e.g. XSS, LFI, auth) so the user knows.${reVerifyContext} Reply only with <think>brief</think> then <final>summary + unchecked areas + re-verify status</final>. No tool calls.`
         : `Summarize what you did so far.${reVerifyContext} Reply only with <think>brief reasoning</think> then <final>your summary for the user (include re-verification status if any)</final>. No tool calls.`;
       const summaryMessage: LlmMessage = { role: 'user', content: summaryPrompt };
-      const summaryMessages = truncateMessagesForContext([...messages, summaryMessage]);
+      const summaryMessages = validateMessages(truncateMessagesForContext([...messages, summaryMessage]));
       const summaryCaps = this.costManager.getToolsOutputCap() ?? this.costManager.getCaps('auto', 'decision').maxOutputTokens;
       const summaryResponse = modelKeySummary
         ? await this.providerRouter

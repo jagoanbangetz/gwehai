@@ -5,59 +5,59 @@ const Features = () => {
     {
       title: 'Automated Penetration Testing',
       subtitle: 'Professional-Grade Security Assessment',
-      description: 'GwehAI automates the entire penetration testing workflow, from reconnaissance to exploit validation and report generation.',
-      highlight: 'Enterprise-grade security testing with AI-powered vulnerability detection and exploit recognition.',
+      description: 'End-to-end penetration testing — from recon to exploit validation and reporting.',
+      highlight: 'AI-powered vulnerability detection with automated exploit recognition.',
       items: [
         {
           icon: 'fa-solid fa-bug',
           title: 'Exploit Recognition',
-          description: 'Advanced AI algorithms recognize and classify exploits across multiple attack vectors including web applications, networks, and APIs.',
+          description: 'AI classifies exploits across web apps, networks, and APIs.',
         },
         {
           icon: 'fa-solid fa-crosshairs',
           title: 'Vulnerability Scanning',
-          description: 'Comprehensive automated scanning that identifies security weaknesses, misconfigurations, and potential attack surfaces.',
+          description: 'Automated scanning for weaknesses, misconfigurations, and attack surfaces.',
         },
         {
           icon: 'fa-solid fa-file-shield',
           title: 'Report Generation',
-          description: 'Generate detailed, professional pentest reports with executive summaries, technical findings, and remediation recommendations.',
+          description: 'Detailed pentest reports with executive summaries and remediation guides.',
         },
         {
           icon: 'fa-solid fa-diagram-project',
           title: 'Multi-Vector Testing',
-          description: 'Conduct security assessments across web applications, network infrastructure, APIs, cloud environments, and mobile applications.',
+          description: 'Web, network, API, cloud, and mobile security assessments.',
         },
         {
           icon: 'fa-solid fa-bolt',
           title: 'Real-Time Threat Analysis',
-          description: 'Continuous monitoring and analysis of security threats with real-time alerts and actionable insights.',
+          description: 'Continuous monitoring with real-time alerts and actionable insights.',
         },
       ],
     },
     {
       title: 'AI Security Chat',
-      description: 'Chat with GwehAI to get instant security guidance, vulnerability explanations, and pentesting advice.',
+      description: 'Chat with GwehAI for instant security guidance and vulnerability analysis.',
       items: [
         {
           icon: 'fa-solid fa-comments',
           title: 'Intelligent Security Chat',
-          description: 'Interactive AI chat agent that provides expert security guidance, explains vulnerabilities, and helps with penetration testing strategies.',
+          description: 'Expert security guidance, vulnerability explanations, and pentesting strategies.',
         },
         {
           icon: 'fa-solid fa-magnifying-glass-chart',
           title: 'Exploit Analysis',
-          description: 'Get detailed explanations of discovered exploits, their impact, CVSS scores, and recommended mitigation strategies.',
+          description: 'Detailed explanations of exploits, CVSS scores, and mitigation strategies.',
         },
         {
           icon: 'fa-solid fa-flask',
           title: 'Custom Testing Scenarios',
-          description: 'Describe your security testing needs in natural language, and GwehAI will create custom testing scenarios and attack vectors.',
+          description: 'Describe your needs in natural language — GwehAI creates custom attack vectors.',
         },
         {
           icon: 'fa-solid fa-shield-halved',
           title: 'Security Best Practices',
-          description: 'Get recommendations on security best practices, compliance requirements, and industry-standard security frameworks.',
+          description: 'Compliance, frameworks, and industry-standard security recommendations.',
         },
       ],
     },
@@ -68,22 +68,22 @@ const Features = () => {
         {
           icon: 'fa-solid fa-chart-pie',
           title: 'Executive Summary Reports',
-          description: 'High-level executive summaries with risk ratings, business impact analysis, and strategic recommendations for stakeholders.',
+          description: 'Risk ratings, business impact analysis, and strategic recommendations.',
         },
         {
           icon: 'fa-solid fa-code',
           title: 'Technical Deep Dives',
-          description: 'Detailed technical reports with proof-of-concept exploits, code snippets, network diagrams, and step-by-step remediation guides.',
+          description: 'Proof-of-concept exploits, code snippets, and step-by-step remediation.',
         },
         {
           icon: 'fa-solid fa-list-check',
           title: 'Compliance Mapping',
-          description: 'Automatically map findings to compliance frameworks like OWASP Top 10, CWE, NIST, PCI-DSS, and GDPR requirements.',
+          description: 'Automatically map findings to OWASP, CWE, NIST, PCI-DSS, and GDPR.',
         },
         {
           icon: 'fa-solid fa-chart-line',
           title: 'Trend Analysis & Dashboards',
-          description: 'Track security posture over time with visual dashboards, trend analysis, and comparative security assessments.',
+          description: 'Visual dashboards, trend analysis, and comparative security assessments.',
         },
       ],
     },

@@ -107,9 +107,9 @@ export class GwehAIController {
     }
 
     // Auto = DeepSeek. Default to 'auto' so we never run without a model (avoids "Model not found").
-    const validModelKey = (model_key && ['auto', 'deepseek', 'openai_gpt5', 'claude', 'gemini'].includes(model_key)
+    const validModelKey = (model_key && ['auto', 'deepseek_v4', 'deepseek_v4_flash', 'deepseek_r1', 'deepseek_chat', 'deepseek_coder', 'openai_gpt55', 'openai_gpt5', 'openai_gpt4o', 'openai_o3', 'openai_o4mini', 'openai_codex', 'claude_fable5', 'claude_opus48', 'claude_sonnet4', 'claude_haiku4', 'gemini_31_pro', 'gemini_3_flash', 'gemini_25_pro', 'gemini_ultra'].includes(model_key)
       ? model_key
-      : 'auto') as 'auto' | 'deepseek' | 'openai_gpt5' | 'claude' | 'gemini';
+      : 'auto') as string;
     return this.gwehaiService.createJob(user.id, messages, stream, conversation_id || job_id, validModelKey);
   }
 
@@ -211,7 +211,7 @@ export class GwehAIController {
       .map((m) => {
         const meta = (m.metadata || {}) as Record<string, any>;
         const key = (meta.key as string) || '';
-        if (!['auto', 'deepseek', 'deepseek_v4', 'deepseek_v4_pro', 'openai_gpt5', 'openai_o', 'claude', 'gemini', 'xai', 'meta', 'deepseek_reasoner'].includes(key)) return null;
+        if (!['auto', 'deepseek_v4', 'deepseek_v4_flash', 'deepseek_r1', 'deepseek_chat', 'deepseek_coder', 'openai_gpt55', 'openai_gpt5', 'openai_gpt4o', 'openai_o3', 'openai_o4mini', 'openai_codex', 'claude_fable5', 'claude_opus48', 'claude_sonnet4', 'claude_haiku4', 'gemini_31_pro', 'gemini_3_flash', 'gemini_25_pro', 'gemini_ultra'].includes(key)) return null;
         return {
           key,
           label: m.displayName || m.name || key,
@@ -222,7 +222,7 @@ export class GwehAIController {
 
     if (fromDb.length > 0) {
       // Keep DeepSeek as internal-only; expose Auto, OpenAI GPT5, Claude.
-      const filtered = fromDb.filter((o) => o.key !== 'deepseek');
+      const filtered = fromDb;
       if (filtered.length > 0) {
         return { options: filtered };
       }
@@ -230,7 +230,7 @@ export class GwehAIController {
 
     // Fallback: static config (no DB rows yet).
     const options = getModelOptions()
-      .filter((o) => o.key !== 'deepseek')
+      
       .map((o) => ({ key: o.key, label: o.label, provider: o.provider }));
     return { options };
   }
