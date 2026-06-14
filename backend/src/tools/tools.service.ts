@@ -302,6 +302,61 @@ export class ToolsService {
     return out;
   }
 
+
+  /**
+   * Fix common AI-generated flag typos for pentest tools.
+   * Models sometimes use single-dash for long flags (e.g. sslyze -json instead of --json).
+   */
+  private normalizeToolFlags(
+    command: string,
+    args?: string[],
+    commandLine?: string,
+  ): { args?: string[]; commandLine?: string; changed: boolean } {
+    if (!args || args.length === 0) return { args, commandLine, changed: false };
+
+    const flagFixes: Record<string, { pattern: RegExp; replacement: string }[]> = {
+      sslyze: [
+        { pattern: /^-json$/, replacement: '--json' },
+        { pattern: /^-json_out$/, replacement: '--json_out' },
+        { pattern: /^-targets_in$/, replacement: '--targets_in' },
+        { pattern: /^-certinfo$/, replacement: '--certinfo' },
+        { pattern: /^-heartbleed$/, replacement: '--heartbleed' },
+      ],
+    };
+
+    const fixes = flagFixes[command];
+    if (!fixes || fixes.length === 0) return { args, commandLine, changed: false };
+
+    let changed = false;
+    const newArgs = args.map((arg) => {
+      for (const fix of fixes) {
+        if (fix.pattern.test(arg)) {
+          changed = true;
+          return arg.replace(fix.pattern, fix.replacement);
+        }
+      }
+      return arg;
+    });
+
+    if (!changed) return { args, commandLine, changed: false };
+
+    let newCommandLine = commandLine;
+    if (commandLine) {
+      const parts = commandLine.split(/\s+/).filter(Boolean);
+      const fixedParts = parts.map((part) => {
+        for (const fix of fixes) {
+          if (fix.pattern.test(part)) {
+            return part.replace(fix.pattern, fix.replacement);
+          }
+        }
+        return part;
+      });
+      newCommandLine = fixedParts.join(' ');
+    }
+
+    return { args: newArgs, commandLine: newCommandLine, changed: true };
+  }
+
   async execCommand(options: {
     command: string;
     args?: string[];
@@ -328,6 +383,13 @@ export class ToolsService {
       options.args = normalized.args;
       options.commandLine = normalized.commandLine ?? options.commandLine;
     }
+    // Fix common AI-generated flag typos for pentest tools.
+    const flagFixed = this.normalizeToolFlags(command, options.args, options.commandLine);
+    if (flagFixed.changed) {
+      options.args = flagFixed.args;
+      options.commandLine = flagFixed.commandLine;
+    }
+
 
     if (allow.get(command)?.requiresTarget) {
       if (!options.target) {
