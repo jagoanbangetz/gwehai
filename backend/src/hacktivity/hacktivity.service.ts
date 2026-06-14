@@ -144,6 +144,9 @@ export class HacktivityService {
   /**
    * List activity for the user. Optional filter by conversationId; pagination via limit/offset.
    * Returns items and total count for pagination.
+   *
+   * NOTE: Also filters noise entries on read — belt & suspenders alongside isNoiseEntry()
+   * on write. Old entries with "Error: command is required" etc. are excluded from results.
    */
   async list(
     userId: string,
@@ -154,6 +157,10 @@ export class HacktivityService {
     const qb = this.hacktivityRepo
       .createQueryBuilder('h')
       .where('h.userId = :userId', { userId })
+      // Filter noise on read: exclude plain-text error messages and empty results
+      .andWhere(
+        "(h.result IS NULL OR (h.result LIKE '{%' OR h.result NOT LIKE 'Error:%'))",
+      )
       .orderBy('h.createdAt', 'DESC');
     if (options?.conversationId) {
       qb.andWhere('h.conversationId = :conversationId', {

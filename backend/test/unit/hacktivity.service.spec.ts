@@ -281,6 +281,17 @@ describe('HacktivityService', () => {
 
       expect(mockQueryBuilder.take).toHaveBeenCalledWith(100);
     });
+
+    it('filters noise entries (Error: prefix) on read', async () => {
+      mockQueryBuilder.getManyAndCount.mockResolvedValue([[], 0]);
+
+      await service.list('u1');
+
+      // Should add andWhere to exclude plain-text error messages
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        expect.stringContaining('Error:%'),
+      );
+    });
   });
 
   describe('listConversations', () => {
