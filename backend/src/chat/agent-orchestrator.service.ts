@@ -689,10 +689,10 @@ export class AgentOrchestratorService {
           if (tc.name === 'exec' && (!args.command || String(args.command).trim() === '')) {
             emptyExecCounter++;
             if (emptyExecCounter >= 3) {
-              push({ type: 'status', data: { message: `Skipped empty exec (${emptyExecCounter} consecutive empty commands — breaking loop)` } });
+              console.log("[AgentOrchestrator] Skipped empty exec (" + emptyExecCounter + " consecutive empty commands — breaking loop)");
               return 'Error: exec requires a non-empty command. Tool call force-skipped after 3 consecutive empty commands. Provide a valid tool call or respond with text instead.';
             }
-            push({ type: 'status', data: { message: `Blocked empty exec command (attempt ${emptyExecCounter}/3)` } });
+            console.log("[AgentOrchestrator] Blocked empty exec command (attempt " + emptyExecCounter + "/3)");
             return 'Error: exec requires a non-empty command. Provide a valid command (e.g. "curl -I https://target.com", "nmap -sV target.com").';
           }
 
@@ -710,13 +710,13 @@ export class AgentOrchestratorService {
               const result = await this.toolExecutor.runTool(tc.name, args, mkContext());
               // Check for hard failures in result (non-zero exit, command required errors)
               if (attempt < maxRetries && typeof result === 'string' && (result.includes('command is required') || result.match(/exit code [1-9]/))) {
-                push({ type: 'status', data: { message: `Retrying tool ${tc.name} (attempt ${attempt + 2}/${maxRetries + 1})...` } });
+                console.log("[AgentOrchestrator] Retrying tool " + tc.name + " (attempt " + (attempt + 2) + "/" + (maxRetries + 1) + ")");
                 continue;
               }
               return result;
             } catch (err: any) {
               if (attempt < maxRetries) {
-                push({ type: 'status', data: { message: `Tool ${tc.name} failed, retrying (${attempt + 2}/${maxRetries + 1})...` } });
+                console.log("[AgentOrchestrator] Tool " + tc.name + " failed, retrying (" + (attempt + 2) + "/" + (maxRetries + 1) + ")");
                 continue;
               }
               return `Error: ${err?.message || String(err)}`;
