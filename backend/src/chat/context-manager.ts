@@ -61,16 +61,17 @@ function estimateChars(messages: LlmMessage[]): number {
 
 /**
  * Normalize tool message order and fix tool_calls protocol violations.
- * 
+ * Exported for use in provider-router retry logic.
+ *
  * Two passes:
  * 1. Forward pass: track tool_call IDs from assistant messages, drop orphan tool messages
  * 2. Backward pass: detect assistant messages with unpaired tool_calls and either
  *    strip the tool_calls (fallback to text-only) or remove the message entirely
- * 
+ *
  * This prevents the LLM API error:
  * "An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'"
  */
-function normalizeToolMessageOrder(messages: LlmMessage[]): LlmMessage[] {
+export function normalizeToolMessageOrder(messages: LlmMessage[]): LlmMessage[] {
   // ── Pass 1: Forward — drop orphan tool messages ──────────────────────
   const out: LlmMessage[] = [];
   const openToolCallIds = new Set<string>();

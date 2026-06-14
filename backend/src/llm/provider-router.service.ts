@@ -4,6 +4,7 @@ import { generateText } from 'ai';
 import { getOptionByKey, getModelOptions, type ModelOptionKey } from '../config/model-options.config';
 import { CostManagerService, type CostMode } from './cost-manager.service';
 import { AdminSettingsService } from '../admin/admin-settings.service';
+import { normalizeToolMessageOrder } from '../chat/context-manager';
 import type { LlmMessage, LlmResponse, LlmToolDef } from './llm.types';
 
 export interface ChatCompletionMeta {
@@ -48,12 +49,19 @@ export interface GenerateWithToolsResult {
 export const TOOL_USE_FAILED_MESSAGE =
   'The model returned an invalid response. Try again or use a different model (e.g. DeepSeek or Claude) for this task.';
 
+/** Friendly message for tool_calls protocol errors (unpaired tool_calls in conversation history). */
+export const TOOL_CALLS_PROTOCOL_MESSAGE =
+  'AI processing error — automatically retrying. If this persists, start a new chat.';
+
 /** Parse API error response body and return a user-friendly message. */
 function parseApiErrorResponse(body: string, provider: string, fallback: string): string {
   try {
     const json = JSON.parse(body);
     const msg = json?.error?.message ?? json?.message ?? json?.error;
     if (typeof msg === 'string' && msg.trim()) {
+      if (/tool_calls must be followed|insufficient tool messages/i.test(msg)) {
+        return TOOL_CALLS_PROTOCOL_MESSAGE;
+      }
       if (/failed to call a function|invalid.*function|malformed.*tool|tool_use_failed/i.test(msg)) {
         return `The ${provider} model returned an invalid response. Try again or use a different model (e.g. DeepSeek or Claude) for this task.`;
       }
@@ -62,13 +70,21 @@ function parseApiErrorResponse(body: string, provider: string, fallback: string)
   } catch {
     // ignore parse errors
   }
+  // Also check raw body string for the pattern (non-JSON errors)
+  if (/tool_calls must be followed|insufficient tool messages/i.test(body)) {
+    return TOOL_CALLS_PROTOCOL_MESSAGE;
+  }
   return fallback;
 }
 
-/** Normalize any LLM/API error string before sending to client (SSE). Handles raw JSON and tool_use_failed. */
+/** Normalize any LLM/API error string before sending to client (SSE). Handles raw JSON, tool_use_failed, and tool_calls protocol errors. */
 export function normalizeLlmErrorMessage(raw: string): string {
   const s = (raw || '').trim();
   if (!s) return 'An error occurred. Please try again.';
+  // tool_calls protocol error — unpaired tool_calls in conversation history
+  if (/tool_calls must be followed|insufficient tool messages/i.test(s)) {
+    return TOOL_CALLS_PROTOCOL_MESSAGE;
+  }
   if (/failed to call a function|tool_use_failed|failed_generation/i.test(s)) {
     return TOOL_USE_FAILED_MESSAGE;
   }
@@ -76,6 +92,7 @@ export function normalizeLlmErrorMessage(raw: string): string {
     const json = JSON.parse(s);
     const msg = json?.error?.message ?? json?.message;
     if (typeof msg === 'string' && msg.trim()) {
+      if (/tool_calls must be followed|insufficient tool messages/i.test(msg)) return TOOL_CALLS_PROTOCOL_MESSAGE;
       if (/failed to call a function|tool_use_failed/i.test(msg)) return TOOL_USE_FAILED_MESSAGE;
       return msg.length > 500 ? msg.slice(0, 500) + '...' : msg;
     }
@@ -353,14 +370,19 @@ export class ProviderRouterService {
         parameters: t.function.parameters,
       },
     }));
-    const body = {
+
+    // Helper to build request body from messages
+    const buildBody = (msgs: LlmMessage[]) => ({
       model: option.defaultModel,
-      messages: this.llmMessagesToOpenAI(messages),
+      messages: this.llmMessagesToOpenAI(msgs),
       tools: apiTools,
       // tool_choice NOT sent — DeepSeek V4 Pro rejects "thinking mode does not support tool_choice"
       max_tokens: caps.maxOutputTokens,
-    };
-    const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    });
+
+    // First attempt with original messages
+    let body = buildBody(messages);
+    let res = await fetch('https://api.deepseek.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -368,18 +390,81 @@ export class ProviderRouterService {
       },
       body: JSON.stringify(body),
     });
+
+    // Handle HTTP errors
     if (!res.ok) {
       const errText = await res.text();
-      const message = parseApiErrorResponse(errText, 'DeepSeek', errText || 'DeepSeek API error');
-      throw new HttpException(message, res.status);
+      // Retry once if tool_calls protocol error — strip unpaired tool_calls and retry
+      if (/tool_calls must be followed|insufficient tool messages/i.test(errText)) {
+        console.log('[DeepSeek] tool_calls protocol error detected, retrying with normalized messages...');
+        const normalized = normalizeToolMessageOrder(messages);
+        body = buildBody(normalized);
+        res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const retryErrText = await res.text();
+          const message = parseApiErrorResponse(retryErrText, 'DeepSeek', retryErrText || 'DeepSeek API error');
+          throw new HttpException(message, res.status);
+        }
+      } else {
+        const message = parseApiErrorResponse(errText, 'DeepSeek', errText || 'DeepSeek API error');
+        throw new HttpException(message, res.status);
+      }
     }
+
     const data = await res.json();
-    // API can return 200 with error in body (e.g. tool_use_failed)
+    // API can return 200 with error in body (e.g. tool_use_failed, tool_calls protocol)
     if (data?.error) {
       const errBody = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+      // Retry once if tool_calls protocol error
+      if (/tool_calls must be followed|insufficient tool messages/i.test(errBody)) {
+        console.log('[DeepSeek] tool_calls protocol error in response body, retrying with normalized messages...');
+        const normalized = normalizeToolMessageOrder(messages);
+        body = buildBody(normalized);
+        res = await fetch('https://api.deepseek.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const retryErrText = await res.text();
+          const message = parseApiErrorResponse(retryErrText, 'DeepSeek', retryErrText || 'DeepSeek API error');
+          throw new HttpException(message, res.status);
+        }
+        const retryData = await res.json();
+        if (retryData?.error) {
+          const retryErrBody = typeof retryData.error === 'string' ? retryData.error : JSON.stringify(retryData.error);
+          const message = parseApiErrorResponse(retryErrBody, 'DeepSeek', retryErrBody || 'DeepSeek API error');
+          throw new HttpException(message, 400);
+        }
+        // Process successful retry response
+        const retryMsg = retryData?.choices?.[0]?.message || {};
+        const retryContent = retryMsg.content ?? '';
+        const retryRawToolCalls = retryMsg.tool_calls || [];
+        const retryToolCalls = sanitizeToolCalls(retryRawToolCalls);
+        const retryUsage = retryData?.usage || {};
+        return {
+          content: retryContent,
+          tool_calls: retryToolCalls.length ? retryToolCalls : undefined,
+          provider: 'deepseek',
+          model: option.defaultModel,
+          inputTokens: retryUsage.prompt_tokens ?? 0,
+          outputTokens: retryUsage.completion_tokens ?? 0,
+        };
+      }
       const message = parseApiErrorResponse(errBody, 'DeepSeek', errBody || 'DeepSeek API error');
       throw new HttpException(message, 400);
     }
+
     const msg = data?.choices?.[0]?.message || {};
     const content = msg.content ?? '';
     const rawToolCalls = msg.tool_calls || [];

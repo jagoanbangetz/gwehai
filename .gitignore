@@ -41,3 +41,5 @@ coverage/
 # Optional
 *.tgz
 .cache/
+*.bak2
+verify_noise.py
