@@ -1,19 +1,20 @@
 /**
  * Recon Phase Prompt — injected when PentestState.phase === 'recon'
- * or when the checklist section 'recon' is active.
+ * V2: Recon is JUST the starting point. Move to attack FAST.
  */
 
-export const RECON_PHASE_PROMPT = `## Phase: Reconnaissance
+export const RECON_PHASE_PROMPT = `## Phase: Reconnaissance (5 MINUTES MAX)
 
-**🚨 Full checklist required — do NOT stop until ALL sections are done.**
-Checklist order: **recon** → **input_handling** → **auth_session** → **access_control** → **business_logic** → **other**.
+**Recon is NOT the goal. It's just preparation for ATTACK. Move FAST.**
 
-**RULES FOR THIS PHASE:**
-1. Load recon skill: memory_get(path: "skills/recon/SKILL.md")
-2. Run tools NOW: curl -sI (headers), nmap (ports), ffuf (paths), nikto, nuclei
-3. Document findings: write_file → daily/<target>/<date>
-4. **If ANY tool output triggers a vulnerability pattern (SQL error, XSS, etc.) → CALL report_finding IMMEDIATELY. Do NOT wait.**
-5. When recon done: call update_pentest_phase with checklist.recon=true
-6. **IMMEDIATELY proceed to input_handling — do NOT ask "would you like to proceed?"**
+### RECON ACTIONS (do all of these, then MOVE ON):
+1. **curl -sI TARGET** — get headers, server, tech stack. Do NOT report these.
+2. **ffuf -u TARGET/FUZZ -w /opt/wordlists/common.txt -mc 200,301,302** — find paths
+3. **nuclei -t /opt/nuclei-templates -u TARGET** — quick vuln scan
+4. Document ALL discovered URLs with parameters in a list. You WILL attack them next.
 
-**REMEMBER: Every reply MUST include at least one tool call. Text-only replies are FORBIDDEN during pentest.**`;
+### 🚨 CRITICAL: After recon, DO NOT stop. DO NOT summarize. Go STRAIGHT to ATTACK.
+
+Save discovered URLs+parameters. Call update_pentest_phase with checklist.recon=true. Then IMMEDIATELY start input_handling — attack every parameter with sqlmap.
+
+**Text-only replies are FORBIDDEN. Every reply must have exec/craft_payload tool calls.**`;

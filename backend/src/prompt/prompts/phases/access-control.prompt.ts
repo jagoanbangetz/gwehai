@@ -1,21 +1,23 @@
-/**
- * Access Control Phase Prompt — injected during access_control checklist section.
- * Covers IDOR, privilege escalation, parameter tampering, logic flaws.
- */
+export const ACCESS_CONTROL_PHASE_PROMPT = `## Phase: Access Control Attacks
 
-export const ACCESS_CONTROL_PHASE_PROMPT = `## Phase: Access Control & Business Logic
+**You MUST attempt to access data you should NOT have access to.**
 
-**Load skill:** memory_get(path: "skills/access-control/SKILL.md")
+### ATTACK SEQUENCE:
+1. **IDOR — change IDs in URLs:**
+   \`\`\`
+   curl -s "URL/profile?id=1" 
+   curl -s "URL/profile?id=2"  # Try another user's ID
+   curl -s "URL/order?id=1"
+   curl -s "URL/order?id=2"  # Try another order
+   \`\`\`
+   **If you can access another user's data → CALL report_finding.**
 
-### WHAT YOU MUST TEST
-- **IDOR:** Change IDs in URLs/body (user_id, order_id, file_id) — access other users' data?
-- **Privilege escalation:** Access admin endpoints as regular user, modify role parameters
-- **Parameter tampering:** Change price, quantity, discount, role in requests
-- **Logic flaws:** Race conditions, step skipping, negative quantities, price manipulation
-- **Rate limiting:** Test for missing rate limits on sensitive endpoints (login, password reset, API)
+2. **Privilege escalation:** Access admin-only URLs as a regular user.
 
-### REPORT FINDINGS IMMEDIATELY
-For EACH confirmed vulnerability: CALL report_finding. Do NOT wait. Do NOT batch. Include POC with actual evidence.
+3. **Parameter tampering:** Change price, role, permissions in requests.
 
-### WHEN DONE
-Call **update_pentest_phase** with checklist.access_control=true AND checklist.business_logic=true. Then proceed to "other" section.`;
+### REPORT IMMEDIATELY
+Every successful IDOR, privilege escalation, or logic bypass → call report_finding.
+
+### AFTER ACCESS CONTROL
+Call update_pentest_phase with checklist.access_control=true. Proceed to report phase.`;
