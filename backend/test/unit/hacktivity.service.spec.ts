@@ -85,6 +85,8 @@ describe('HacktivityService', () => {
         domain: 'https://example.com',
         result: 'stdout: dirsearch output',
         toolArgs: data.toolArgs,
+        toolName: null,
+        action: null,
       });
       expect(mockHacktivityRepo.save).toHaveBeenCalledWith(created);
       expect(result).toEqual(created);
@@ -218,6 +220,8 @@ describe('HacktivityService', () => {
         domain: null,
         result: '[]',
         toolArgs: null,
+        toolName: null,
+        action: null,
       });
     });
 
