@@ -5,6 +5,7 @@ import { In, Repository } from 'typeorm';
 import { Hacktivity } from '../entities/hacktivity.entity';
 import { Conversation } from '../entities/conversation.entity';
 import { stripAnsi } from '../utils/ansi.util';
+import { ToolOutputParserService, ParsedToolResult } from './tool-output-parser.service';
 
 const MAX_RESULT_LENGTH = 16000;
 
@@ -44,6 +45,7 @@ export class HacktivityService {
     private readonly hacktivityRepo: Repository<Hacktivity>,
     @InjectRepository(Conversation)
     private readonly conversationRepo: Repository<Conversation>,
+    private readonly parser: ToolOutputParserService,
   ) {}
 
   /**
@@ -128,7 +130,21 @@ export class HacktivityService {
       domain: data.domain ?? null,
       result,
       toolArgs: data.toolArgs ?? null,
+      toolName: data.toolName ?? null,
+      action: data.action ?? null,
+      parsedResult: null as any,  // will be set below if parseable
     });
+
+    // Parse tool output into structured data
+    try {
+      const parsed = this.parser.parse(result, data.toolName, data.toolArgs);
+      if (parsed) {
+        row.parsedResult = parsed as any;
+      }
+    } catch {
+      // Parse failure is non-fatal — save raw result only
+    }
+
     const saved = await this.hacktivityRepo.save(row);
     // Invalidate conversations cache for this user (new activity may change the list)
     this.conversationsCache.delete(userId);
@@ -297,6 +313,38 @@ export class HacktivityService {
   }
 
   /**
+   * Get parsed result for a hacktivity entry. User-scoped.
+   * Returns { parsedResult } or { parsedResult: null } if not parseable.
+   * If entry has no parsedResult but has raw result, attempts live re-parse.
+   */
+  async getParsed(userId: string, id: string): Promise<{ parsedResult: ParsedToolResult }> {
+    const row = await this.hacktivityRepo.findOne({
+      where: { id, userId },
+      select: ['id', 'result', 'toolName', 'toolArgs', 'parsedResult'],
+    });
+    if (!row) {
+      throw new NotFoundException('Activity not found');
+    }
+
+    // Return cached parse if available
+    if (row.parsedResult) {
+      return { parsedResult: row.parsedResult as any };
+    }
+
+    // Attempt live re-parse from raw result
+    if (row.result) {
+      const parsed = this.parser.parse(row.result, row.toolName, row.toolArgs);
+      if (parsed) {
+        // Cache for future requests (non-blocking)
+        this.hacktivityRepo.update(row.id, { parsedResult: parsed as any }).catch(() => {});
+        return { parsedResult: parsed };
+      }
+    }
+
+    return { parsedResult: null };
+  }
+
+  /**
    * Admin-level stream: emits every new Hacktivity row as it is created.
    * Used by /admin/hacktivity/stream SSE so admin UI can update in realtime.
    */
@@ -313,6 +361,9 @@ export class HacktivityService {
                 domain: row.domain,
                 result: row.result,
                 toolArgs: row.toolArgs,
+                toolName: row.toolName,
+                action: row.action,
+                parsedResult: row.parsedResult,
                 createdAt: row.createdAt,
               },
             }),
