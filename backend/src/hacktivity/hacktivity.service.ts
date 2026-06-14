@@ -111,6 +111,8 @@ export class HacktivityService {
       domain?: string | null;
       result: string;
       toolArgs?: Record<string, any> | null;
+      toolName?: string | null;
+      action?: string | null;
     },
   ): Promise<Hacktivity | null> {
     // Strip ANSI escape codes from terminal output before saving to DB
