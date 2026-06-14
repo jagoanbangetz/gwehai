@@ -1,6 +1,5 @@
 import SeverityBadge from '../../../components/pentest/results/SeverityBadge'
 import ToolResultTable from '../../../components/pentest/results/ToolResultTable'
-import PortVisualizer from '../../../components/pentest/results/PortVisualizer'
 import { useState, useMemo } from 'react'
 import type { ReportGroupRow, FindingRow } from '../types'
 import { formatReportTime, formatReportDuration } from '../utils'
