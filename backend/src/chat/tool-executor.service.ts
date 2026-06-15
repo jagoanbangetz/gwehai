@@ -23,6 +23,20 @@ import { OobDetectorService } from '../tools/oob-detector.service';
 import { WebSearchService } from '../tools/web-search.service';
 import { stripAnsi } from '../utils/ansi.util';
 import { OobPayloadType } from '../entities/oob-log.entity';
+
+/** Max chars for a single tool output before truncation. */
+const MAX_TOOL_OUTPUT_CHARS = 8000;
+
+/**
+ * Strip ANSI escape codes and truncate tool output to prevent context overflow.
+ * Appends a truncation notice if output was cut.
+ */
+function cleanToolOutput(raw: string, max = MAX_TOOL_OUTPUT_CHARS): string {
+  const stripped = stripAnsi(raw || '');
+  if (stripped.length <= max) return stripped;
+  const notice = `\n\n[Output truncated: ${stripped.length} → ${max} chars]`;
+  return stripped.slice(0, max) + notice;
+}
 import { getAgentLabel } from './agent-names';
 import type { ModelOptionKey } from '../config/model-options.config';
 
@@ -230,7 +244,11 @@ export class ToolExecutorService {
       commandLine: cmdLine,
       target,
     });
-    return JSON.stringify({ stdout: out.stdout, stderr: out.stderr, exitCode: out.exitCode });
+    return JSON.stringify({
+      stdout: cleanToolOutput(out.stdout),
+      stderr: cleanToolOutput(out.stderr),
+      exitCode: out.exitCode,
+    });
   }
 
   private async handleCraftPayload(args: Record<string, any>): Promise<string> {
@@ -239,7 +257,11 @@ export class ToolExecutorService {
       return JSON.stringify({ error: 'craft_payload requires script (e.g. bash or python3 -c "...")' });
     }
     const out = await this.toolsService.runPayloadScript(script);
-    return JSON.stringify({ stdout: out.stdout, stderr: out.stderr, exitCode: out.exitCode });
+    return JSON.stringify({
+      stdout: cleanToolOutput(out.stdout),
+      stderr: cleanToolOutput(out.stderr),
+      exitCode: out.exitCode,
+    });
   }
 
   private async handleReportFinding(args: Record<string, any>, context: ToolExecutionContext): Promise<string> {

@@ -17,7 +17,7 @@ export const MAX_CONTEXT_CHARS_PER_ROLE = {
   system: 16_000,
   user: 10_000,
   assistant: 7_000,
-  tool: 3_500,
+  tool: 6_000,
   default: 6_000,
 } as const;
 
