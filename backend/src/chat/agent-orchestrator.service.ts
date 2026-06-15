@@ -346,7 +346,7 @@ export class AgentOrchestratorService {
     }
 
     // Save user message + assistant placeholder
-    const userMessage = repos.message.create({ conversationId: conversation.id, role: 'user' as any, content: message });
+    const userMessage = repos.message.create({ conversationId: conversation.id, role: 'system' as any, content: message });
     await repos.message.save(userMessage);
     await repos.messagePart.save(repos.messagePart.create({ messageId: userMessage.id, type: 'text' as any, content: message, order: 0 }));
 
@@ -777,7 +777,7 @@ export class AgentOrchestratorService {
           const vulnHint = detectVulnIndicators(tc.name, r.result);
           if (vulnHint) {
             messages.push({
-              role: 'user' as any,
+              role: 'system' as any,
               content: `⚠️ EXPLOITABLE VULN INDICATOR (ignore info disclosure like stack traces/headers — only act on SQL errors, XSS reflections, LFI, RCE, auth bypass): ${vulnHint}`,
             });
             push({ type: 'status', data: { message: `⚠️ Vuln indicator found — remind to call report_finding` } });
@@ -788,7 +788,7 @@ export class AgentOrchestratorService {
         // Layer 3: Periodic enforcement — every 5 turns without report_finding, inject mandatory reminder
         if (turn > 0 && turn % 5 === 0 && reportFindingCalledThisRun === 0) {
           messages.push({
-            role: 'user' as any,
+            role: 'system' as any,
             content: '⚠️ MANDATORY REMINDER: You have run multiple tool calls without calling report_finding. If exec output showed SQL errors, reflected XSS payloads, LFI file contents, RCE command output, or auth bypass — call report_finding NOW. SKIP info disclosure (stack traces, server headers, version strings). Continue exploitation on remaining checklist sections.',
           });
           push({ type: 'status', data: { message: '⚠️ Enforcement: report_finding not yet called — injecting reminder' } });
@@ -819,18 +819,18 @@ export class AgentOrchestratorService {
                     plan.current_phase++;
                     plan.current_step = 0;
                     const nextPhase = plan.phases[plan.current_phase];
-                    messages.push({ role: 'user' as any, content: `✅ Phase "${phase.name}" complete! Now starting: ${nextPhase.name} — ${nextPhase.steps[0]?.description}` });
+                    messages.push({ role: 'system' as any, content: `✅ Phase "${phase.name}" complete! Now starting: ${nextPhase.name} — ${nextPhase.steps[0]?.description}` });
                     console.log(`[PlanTracker] advanced to phase ${nextPhase.name}`);
                   } else {
                     plan.plan_active = false;
-                    messages.push({ role: 'user' as any, content: '✅ ALL PLAN STEPS COMPLETED. Write final summary with all findings and stop.' });
+                    messages.push({ role: 'system' as any, content: '✅ ALL PLAN STEPS COMPLETED. Write final summary with all findings and stop.' });
                     console.log('[PlanTracker] all phases complete');
                   }
                   await this.pentestJobs.updateStateByConversationId(userId, cid, { plan, plan_active: plan.plan_active ?? true });
                 } else {
                   // Inject CURRENT STEP reminder
                   const stepPrompt = `📋 PLAN STEP ${plan.current_phase}.${plan.current_step}/${plan.total_steps}: [${phase.name}] ${step.description}\n→ RUN: ${step.tool} — ${step.command}\n→ EXPECT: ${step.expect || 'any output'}`;
-                  messages.push({ role: 'user' as any, content: stepPrompt });
+                  messages.push({ role: 'system' as any, content: stepPrompt });
                   console.log(`[PlanTracker] turn=${turn} current=${phase.name}.${step.id}`);
                 }
               }
@@ -958,7 +958,7 @@ export class AgentOrchestratorService {
         const enforceMessages = truncateMessagesForContext([
           ...messages,
           {
-            role: 'user' as any,
+            role: 'system' as any,
             content: 'CRITICAL: You have completed your scans but called report_finding ZERO times. Review ALL exec outputs from this session. If ANY output contained SQL errors, XSS reflections, stack traces, sensitive data, auth bypasses, or other vulnerability evidence, you MUST call report_finding NOW for each one. This is mandatory — do NOT summarize without reporting findings. If you truly found zero vulnerabilities, respond with "No vulnerabilities confirmed." and skip report_finding.',
           },
         ]);
