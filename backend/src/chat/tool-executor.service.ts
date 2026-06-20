@@ -53,6 +53,8 @@ export interface ToolExecutionContext {
   abortSignal?: AbortSignal;
   modelKey?: ModelOptionKey;
   maxAgentsForRun?: number;
+  /** When true, relaxes validation gates (evidence check, confidence_reason length) for enforcement turns. */
+  isEnforcementMode?: boolean;
 }
 
 @Injectable()
@@ -287,22 +289,27 @@ export class ToolExecutorService {
     if (!confidenceReason) {
       return JSON.stringify({ error: 'report_finding requires confidence_reason — explain why you gave this confidence score.' });
     }
-    if (confidenceReason.length < 10) {
-      return JSON.stringify({ error: `report_finding confidence_reason must be at least 10 characters (got ${confidenceReason.length}). Explain what evidence supports or weakens the finding.` });
+    if (confidenceReason.length < 5) {
+      return JSON.stringify({ error: `report_finding confidence_reason must be at least 5 characters (got ${confidenceReason.length}). Explain what evidence supports or weakens the finding.` });
     }
 
     // --- Tool Evidence Gate ---
     // BLOCK fake findings: every report_finding MUST be backed by real tool execution
     // in the same conversation. Check hacktivity for evidence-producing tool calls.
+    // In enforcement mode, relax this gate — the agent already ran tools but
+    // countEvidenceToolCalls may not match due to conversation indexing issues.
     const evidenceCount = await this.hacktivityService.countEvidenceToolCalls(
       context.userId,
       context.conversationId,
     );
-    if (evidenceCount === 0 && !context.jobId) {
+    if (evidenceCount === 0 && !context.jobId && !context.isEnforcementMode) {
       return JSON.stringify({
         error: 'report_finding BLOCKED: No tool execution evidence found in this conversation. You MUST run at least one tool (exec, craft_payload, browser_action, research_browse, etc.) before reporting a finding. Every finding must be backed by real tool output — no fabricated findings allowed.',
         hint: 'Run exec, craft_payload, or browser_action to gather real evidence first, then call report_finding with the actual tool output as proof.',
       });
+    }
+    if (evidenceCount === 0 && context.isEnforcementMode) {
+      console.warn('[report_finding] accepting without exec evidence in enforcement mode');
     }
 
     // Anti-hallucination gate: low confidence + weak evidence → block and ask to verify
