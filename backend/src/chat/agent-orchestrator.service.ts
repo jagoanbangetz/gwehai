@@ -1140,7 +1140,7 @@ export class AgentOrchestratorService {
 
     if (waitForReply) {
       const result = await this.processMessageWithTools(
-        userId, msg.trim(), sessionId, sessionId, push, agentInfo,
+        userId, msg.trim(), sessionId, jobId, push, agentInfo,
         memoryScopeId, { emitDoneEvent: false, abortSignal, ...(modelKey && { model_key: modelKey }) },
       );
       push({ type: 'status', data: { message: "I'm done with my work. Please continue with the next step." } });
@@ -1161,7 +1161,7 @@ export class AgentOrchestratorService {
 
     // Track promise so main agent can wait for parallel completion
     const subAgentPromise = this.processMessageWithTools(
-      userId, msg.trim(), sessionId, sessionId, push, agentInfo,
+      userId, msg.trim(), sessionId, jobId, push, agentInfo,
       memoryScopeId, { emitDoneEvent: false, abortSignal, ...(modelKey && { model_key: modelKey }) },
     ).then(async () => {
       push({ type: 'status', data: { message: "I'm done with my work. Please continue with the next step." } });

@@ -6,7 +6,7 @@
  * Extracted from ChatService for single-responsibility and testability.
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ToolsService } from '../tools/tools.service';
 import { ToolAvailabilityService } from '../tools/tool-availability.service';
 import { ReportsService } from '../reports/reports.service';
@@ -75,6 +75,7 @@ export class ToolExecutorService {
     private oobDetectorService: OobDetectorService,
     private webSearchService: WebSearchService,
   ) {}
+  private readonly logger = new Logger(ToolExecutorService.name);
 
   /**
    * Run a tool by name with the given arguments.
@@ -353,9 +354,19 @@ export class ToolExecutorService {
 
     // Bridge: also save to pentest_findings table when running inside a pentest job
     // This ensures the pentest job's findingCount in getSummary() reflects actual findings
-    if (context.jobId) {
+    let jobId = context.jobId;
+    // Fix: fallback lookup if jobId not passed (e.g. sub-agent context)
+    if (!jobId && context.conversationId) {
       try {
-        await this.pentestJobs.createPentestFinding(context.jobId, {
+        const job = await this.pentestJobs.findOneByConversationId(context.conversationId);
+        jobId = job?.id;
+      } catch {
+        // Non-blocking: fallback lookup is best-effort
+      }
+    }
+    if (jobId) {
+      try {
+        await this.pentestJobs.createPentestFinding(jobId, {
           title: args.title ? String(args.title) : (detail.substring(0, 200) || undefined),
           severity: args.severity ? String(args.severity) : undefined,
           poc: args.poc ? String(args.poc) : undefined,
@@ -368,8 +379,9 @@ export class ToolExecutorService {
           confidence,
           confidenceReason,
         });
-      } catch {
-        // Non-blocking: pentest_findings bridge is best-effort
+      } catch (err: any) {
+        // Fix: log instead of silent fail
+        this.logger.warn(`[report_finding] pentest_findings bridge failed for job ${jobId}: ${err?.message}`);
       }
     }
 
