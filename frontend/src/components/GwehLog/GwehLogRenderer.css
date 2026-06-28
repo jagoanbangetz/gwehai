@@ -11,11 +11,11 @@
   font-family: var(--font-sans), system-ui, sans-serif;
   font-size: 13px;
   line-height: 1.55;
-  background: oklch(0.97 0 0 / 0.03);
-  border: 1px solid oklch(0.85 0 0 / 0.12);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(216,216,216,0.12);
   border-radius: 12px;
   padding: 0;
-  color: var(--text-primary, oklch(0.2 0 0));
+  color: var(--text-primary, #333333);
   overflow: hidden;
 }
 

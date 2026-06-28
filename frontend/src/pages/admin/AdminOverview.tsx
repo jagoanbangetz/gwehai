@@ -90,7 +90,7 @@ export default function AdminOverview() {
       })
     : []
 
-  const barColors = ['oklch(0.65 0.2 250)', 'oklch(0.7 0.18 160)', 'oklch(0.65 0.2 330)']
+  const barColors = ['#a5a5a5', '#b2b2b2', '#a5a5a5']
 
   const rangeLabel = range === 1 ? '1 day' : range === 7 ? '1 week' : '1 month'
 
@@ -165,26 +165,26 @@ export default function AdminOverview() {
                 data={barData}
                 margin={{ top: 12, right: 12, bottom: 24, left: 8 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.25 0 0 / 0.5)" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(63,63,63,0.50)" vertical={false} />
                 <XAxis
                   dataKey="name"
-                  tick={{ fill: 'oklch(0.7 0 0)', fontSize: 11 }}
-                  axisLine={{ stroke: 'oklch(0.3 0 0)' }}
+                  tick={{ fill: '#b2b2b2', fontSize: 11 }}
+                  axisLine={{ stroke: '#4c4c4c' }}
                   tickLine={false}
                 />
                 <YAxis
-                  tick={{ fill: 'oklch(0.7 0 0)', fontSize: 11 }}
+                  tick={{ fill: '#b2b2b2', fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                   allowDecimals={false}
                 />
                 <Tooltip
                   contentStyle={{
-                    background: 'oklch(0.14 0 0)',
-                    border: '1px solid oklch(0.28 0 0)',
+                    background: '#232323',
+                    border: '1px solid #474747',
                     borderRadius: 8,
                   }}
-                  labelStyle={{ color: 'oklch(0.9 0 0)' }}
+                  labelStyle={{ color: '#e5e5e5' }}
                   labelFormatter={(label, payload) => {
                     const p = payload?.[0] as { payload?: { fullDate?: string } } | undefined
                     return p?.payload?.fullDate ?? label
@@ -192,7 +192,7 @@ export default function AdminOverview() {
                 />
                 <Legend
                   wrapperStyle={{ paddingTop: 8 }}
-                  formatter={(value) => <span style={{ color: 'oklch(0.8 0 0)' }}>{value}</span>}
+                  formatter={(value) => <span style={{ color: '#cccccc' }}>{value}</span>}
                 />
                 {chartData?.datasets.map((ds, idx) => (
                   <Bar

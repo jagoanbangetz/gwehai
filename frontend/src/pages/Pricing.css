@@ -2,7 +2,7 @@
   min-height: 100vh;
   position: relative;
   padding: 8rem 2rem 4rem;
-  color: oklch(1 0 0);
+  color: #fff;
 }
 
 .pricing-container {
@@ -21,13 +21,13 @@
   font-size: 3.5rem;
   font-weight: 700;
   margin-bottom: 1rem;
-  color: oklch(1 0 0);
+  color: #fff;
   font-family: var(--font-mono);
 }
 
 .pricing-subtitle {
   font-size: 1.2rem;
-  color: oklch(0.72 0.005 60);
+  color: #bbb;
   max-width: 600px;
   margin: 0 auto;
   line-height: 1.6;
@@ -35,7 +35,7 @@
 
 .pricing-footnote {
   font-size: 0.9rem;
-  color: oklch(0.57 0.005 60);
+  color: #919191;
   margin-top: 0.75rem;
   font-style: italic;
 }
@@ -51,26 +51,26 @@
 }
 
 .pricing-message.success {
-  background: oklch(0.25 0.15 145 / 0.2);
-  border: 1px solid oklch(0.5 0.2 145);
-  color: oklch(0.85 0.1 145);
+  background: rgba(63,63,63,0.20);
+  border: 1px solid #7f7f7f;
+  color: #d8d8d8;
 }
 
 .pricing-message.cancelled {
-  background: oklch(0.25 0.05 50 / 0.2);
-  border: 1px solid oklch(0.5 0.1 50);
-  color: oklch(0.8 0.05 50);
+  background: rgba(63,63,63,0.20);
+  border: 1px solid #7f7f7f;
+  color: #cccccc;
 }
 
 .pricing-message.error {
-  background: oklch(0.3 0.2 25 / 0.2);
-  border: 1px solid oklch(0.55 0.2 25);
-  color: oklch(0.9 0.1 25);
+  background: rgba(76,76,76,0.20);
+  border: 1px solid #8c8c8c;
+  color: #e5e5e5;
 }
 
 .price-period {
   font-size: 1.25rem;
-  color: oklch(0.72 0.005 60);
+  color: #bbb;
   font-weight: 500;
   margin-left: 0.15rem;
 }
@@ -93,7 +93,7 @@
 
 .pack-limits {
   font-size: 0.85rem;
-  color: oklch(0.62 0.005 60);
+  color: #999;
   margin-bottom: 1.5rem;
   line-height: 1.4;
 }
@@ -111,9 +111,9 @@
 }
 
 .credit-pack-card {
-  background: oklch(0.1 0 0 / 0.8);
+  background: rgba(25,25,25,0.80);
   backdrop-filter: blur(20px);
-  border: 1px solid oklch(0.24 0.006 60 / 0.3);
+  border: 1px solid rgba(61,61,61,0.30);
   border-radius: 16px;
   padding: 2.5rem 2rem;
   position: relative;
@@ -124,18 +124,18 @@
 
 .credit-pack-card:hover {
   transform: translateY(-4px);
-  border-color: oklch(0.4 0 0 / 0.5);
-  box-shadow: 0 8px 24px oklch(0.07 0.005 60 / 0.35);
+  border-color: rgba(102,102,102,0.50);
+  box-shadow: 0 8px 24px rgba(17,17,17,0.35);
 }
 
 .credit-pack-card.popular {
-  border-color: oklch(0.5 0 0 / 0.6);
-  background: oklch(0.12 0 0 / 0.9);
+  border-color: rgba(127,127,127,0.60);
+  background: rgba(30,30,30,0.90);
 }
 
 .credit-pack-card:has(.free) {
-  border-color: oklch(0.4 0.15 200 / 0.6);
-  background: oklch(0.12 0.05 200 / 0.9);
+  border-color: rgba(102,102,102,0.60);
+  background: rgba(30,30,30,0.90);
 }
 
 .popular-badge {
@@ -143,8 +143,8 @@
   top: -12px;
   left: 50%;
   transform: translateX(-50%);
-  background: oklch(1 0 0);
-  color: oklch(0 0 0);
+  background: #fff;
+  color: #000;
   padding: 0.5rem 1.5rem;
   border-radius: 20px;
   font-size: 0.85rem;
@@ -168,25 +168,25 @@
 .points-amount {
   font-size: 3rem;
   font-weight: 700;
-  color: oklch(1 0 0);
+  color: #fff;
   font-family: var(--font-mono);
   line-height: 1;
 }
 
 .points-label {
   font-size: 1rem;
-  color: oklch(0.72 0.005 60);
+  color: #bbb;
   margin-top: 0.25rem;
   font-family: var(--font-mono);
 }
 
 .pack-savings {
   padding: 0.5rem 1rem;
-  background: oklch(0.2 0.1 120 / 0.3);
-  border: 1px solid oklch(0.4 0.1 120 / 0.5);
+  background: rgba(51,51,51,0.30);
+  border: 1px solid rgba(102,102,102,0.50);
   border-radius: 6px;
   font-size: 0.85rem;
-  color: oklch(0.9 0.05 120);
+  color: #e5e5e5;
   font-weight: 600;
   font-family: var(--font-mono);
 }
@@ -201,25 +201,25 @@
 .price-symbol {
   font-size: 1.5rem;
   font-weight: 600;
-  color: oklch(1 0 0);
+  color: #fff;
   font-family: var(--font-mono);
 }
 
 .price-amount {
   font-size: 3rem;
   font-weight: 700;
-  color: oklch(1 0 0);
+  color: #fff;
   font-family: var(--font-mono);
   line-height: 1;
 }
 
 .price-amount.free {
   font-size: 2.5rem;
-  color: oklch(0.7 0.15 200);
+  color: #b2b2b2;
 }
 
 .pack-value {
-  color: oklch(0.62 0.005 60);
+  color: #999;
   font-size: 0.9rem;
   margin-bottom: 2rem;
   font-family: var(--font-mono);
@@ -228,8 +228,8 @@
 .pack-purchase-button {
   width: 100%;
   padding: 1rem;
-  background: oklch(1 0 0);
-  color: oklch(0 0 0);
+  background: #fff;
+  color: #000;
   border: none;
   border-radius: 8px;
   font-size: 1rem;
@@ -242,19 +242,19 @@
 
 .pack-purchase-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px oklch(0.07 0.005 60 / 0.35);
+  box-shadow: 0 4px 12px rgba(17,17,17,0.35);
 }
 
 .pack-purchase-button.free-button {
-  background: oklch(0.2 0.1 200 / 0.8);
-  color: oklch(0.9 0.15 200);
-  border: 1px solid oklch(0.4 0.15 200 / 0.5);
+  background: rgba(51,51,51,0.80);
+  color: #e5e5e5;
+  border: 1px solid rgba(102,102,102,0.50);
 }
 
 .pack-purchase-button.free-button:hover {
-  background: oklch(0.25 0.1 200 / 0.9);
-  border-color: oklch(0.5 0.15 200 / 0.6);
-  box-shadow: 0 4px 12px oklch(0.3 0.1 200 / 0.3);
+  background: rgba(63,63,63,0.90);
+  border-color: rgba(127,127,127,0.60);
+  box-shadow: 0 4px 12px rgba(76,76,76,0.30);
 }
 
 .pack-features {
@@ -268,12 +268,12 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  color: oklch(0.92 0.003 60);
+  color: #eee;
   font-size: 0.9rem;
 }
 
 .feature-icon {
-  color: oklch(0.72 0.005 60);
+  color: #bbb;
   font-weight: 600;
 }
 
@@ -286,9 +286,9 @@
 }
 
 .enterprise-card {
-  background: oklch(0.1 0 0 / 0.8);
+  background: rgba(25,25,25,0.80);
   backdrop-filter: blur(20px);
-  border: 1px solid oklch(0.24 0.006 60 / 0.3);
+  border: 1px solid rgba(61,61,61,0.30);
   border-radius: 16px;
   padding: 3rem;
   text-align: center;
@@ -304,13 +304,13 @@
   font-size: 2.5rem;
   font-weight: 700;
   margin-bottom: 0.5rem;
-  color: oklch(1 0 0);
+  color: #fff;
   font-family: var(--font-mono);
 }
 
 .enterprise-subtitle {
   font-size: 1.1rem;
-  color: oklch(0.72 0.005 60);
+  color: #bbb;
   line-height: 1.6;
 }
 
@@ -326,20 +326,20 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  color: oklch(0.92 0.003 60);
+  color: #eee;
   font-size: 0.95rem;
   font-family: var(--font-mono);
 }
 
 .enterprise-feature .feature-icon {
-  color: oklch(0.72 0.005 60);
+  color: #bbb;
   font-weight: 600;
 }
 
 .enterprise-button {
   padding: 1rem 2.5rem;
-  background: oklch(1 0 0);
-  color: oklch(0 0 0);
+  background: #fff;
+  color: #000;
   border: none;
   border-radius: 8px;
   font-size: 1.1rem;
@@ -351,7 +351,7 @@
 
 .enterprise-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px oklch(0.07 0.005 60 / 0.35);
+  box-shadow: 0 4px 12px rgba(17,17,17,0.35);
 }
 
 @media (max-width: 968px) {

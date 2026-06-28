@@ -3,8 +3,8 @@
   position: relative;
   width: 100%;
   min-height: 56px;
-  background: oklch(0.09 0.006 60);
-  border-bottom: 1px solid oklch(0.24 0.006 60 / 0.3);
+  background: #0a0a0a;
+  border-bottom: 1px solid rgba(61,61,61,0.30);
   backdrop-filter: blur(20px);
 }
 
@@ -20,15 +20,15 @@
   justify-content: center;
   background: transparent;
   border: none;
-  color: oklch(0.92 0.003 60);
+  color: #eee;
   cursor: pointer;
   border-radius: 8px;
   transition: background 0.2s, color 0.2s;
 }
 
 .app-topbar-hamburger:hover {
-  background: oklch(0.15 0 0 / 0.5);
-  color: oklch(1 0 0);
+  background: rgba(38,38,38,0.50);
+  color: #fff;
 }
 
 .app-topbar-hamburger:active {
@@ -55,13 +55,13 @@
 .app-topbar-title-text {
   font-size: 1.1rem;
   font-weight: 600;
-  color: oklch(1 0 0);
+  color: #fff;
   font-family: var(--font-sans);
 }
 
 .app-topbar-title-chevron {
   display: flex;
-  color: oklch(0.72 0.005 60);
+  color: #bbb;
 }
 
 .app-topbar-nav {
@@ -73,7 +73,7 @@
 .app-topbar-link {
   background: none;
   border: none;
-  color: oklch(0.82 0.003 60);
+  color: #ddd;
   font-size: 0.9rem;
   font-family: var(--font-mono);
   cursor: pointer;
@@ -82,7 +82,7 @@
 }
 
 .app-topbar-link:hover {
-  color: oklch(1 0 0);
+  color: #fff;
 }
 
 /* Right icons: pinned top-right (right=12px, top=8px) */
@@ -103,20 +103,20 @@
   justify-content: center;
   background: transparent;
   border: none;
-  color: oklch(0.87 0.003 60);
+  color: #e5e5e5;
   cursor: pointer;
   border-radius: 8px;
   transition: background 0.2s, color 0.2s;
 }
 
 .app-topbar-icon:hover {
-  background: oklch(0.15 0 0 / 0.4);
-  color: oklch(1 0 0);
+  background: rgba(38,38,38,0.40);
+  color: #fff;
 }
 
 .app-topbar-email {
   font-size: 0.85rem;
-  color: oklch(0.72 0.005 60);
+  color: #bbb;
   font-family: var(--font-mono);
   margin-left: 0.25rem;
 }

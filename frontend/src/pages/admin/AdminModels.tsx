@@ -48,11 +48,11 @@ const emptyForm: ModelForm = {
 }
 
 const PROVIDERS: { value: Provider; label: string; icon: string; color: string }[] = [
-  { value: 'openai', label: 'OpenAI', icon: 'fa-brain', color: 'oklch(0.72 0.15 145)' },
-  { value: 'anthropic', label: 'Anthropic', icon: 'fa-feather-pointed', color: 'oklch(0.7 0.15 30)' },
-  { value: 'google', label: 'Google', icon: 'fa-gem', color: 'oklch(0.7 0.15 250)' },
-  { value: 'deepseek', label: 'DeepSeek', icon: 'fa-water', color: 'oklch(0.7 0.15 200)' },
-  { value: 'custom', label: 'Custom', icon: 'fa-puzzle-piece', color: 'oklch(0.65 0.1 280)' },
+  { value: 'openai', label: 'OpenAI', icon: 'fa-brain', color: '#b7b7b7' },
+  { value: 'anthropic', label: 'Anthropic', icon: 'fa-feather-pointed', color: '#b2b2b2' },
+  { value: 'google', label: 'Google', icon: 'fa-gem', color: '#b2b2b2' },
+  { value: 'deepseek', label: 'DeepSeek', icon: 'fa-water', color: '#b2b2b2' },
+  { value: 'custom', label: 'Custom', icon: 'fa-puzzle-piece', color: '#a5a5a5' },
 ]
 
 const providerMeta = Object.fromEntries(PROVIDERS.map((p) => [p.value, p])) as Record<Provider, (typeof PROVIDERS)[number]>
@@ -285,7 +285,7 @@ export default function AdminModels() {
                 </span>
                 <span style={{
                   fontSize: '0.7rem',
-                  color: 'oklch(0.55 0 0)',
+                  color: '#8c8c8c',
                   marginLeft: '0.25rem',
                 }}>
                   ({rows.length})
@@ -313,25 +313,25 @@ export default function AdminModels() {
                             <i className={`fa-solid ${meta.icon}`} style={{ color: meta.color, fontSize: '0.75rem', opacity: 0.7 }} />
                             <span style={{ fontWeight: 600 }}>{row.displayName}</span>
                           </div>
-                          <code style={{ fontSize: '0.7rem', color: 'oklch(0.55 0 0)', display: 'block', marginTop: '0.15rem' }}>{row.name}</code>
+                          <code style={{ fontSize: '0.7rem', color: '#8c8c8c', display: 'block', marginTop: '0.15rem' }}>{row.name}</code>
                         </td>
                         <td>
                           {row.apiModelId ? (
                             <code className="admin-payment-tx-code">{row.apiModelId}</code>
                           ) : (
-                            <span style={{ color: 'oklch(0.45 0 0)', fontSize: '0.8rem' }}>—</span>
+                            <span style={{ color: '#727272', fontSize: '0.8rem' }}>—</span>
                           )}
                         </td>
                         <td>{row.pointsPer1kInputTokens}</td>
                         <td>{row.pointsPer1kOutputTokens}</td>
                         <td>
                           {row.isDefault ? (
-                            <span style={{ color: 'oklch(0.72 0.15 145)', fontWeight: 600 }}>
+                            <span style={{ color: '#b7b7b7', fontWeight: 600 }}>
                               <i className="fa-solid fa-star" style={{ marginRight: '0.3rem' }} />
                               Default
                             </span>
                           ) : (
-                            <span style={{ color: 'oklch(0.45 0 0)', fontSize: '0.8rem' }}>—</span>
+                            <span style={{ color: '#727272', fontSize: '0.8rem' }}>—</span>
                           )}
                         </td>
                         <td>
@@ -340,8 +340,8 @@ export default function AdminModels() {
                             onClick={() => handleToggle(row)}
                             title={row.isActive ? 'Deactivate model' : 'Activate model'}
                             style={{
-                              background: row.isActive ? 'oklch(0.25 0.08 145 / 0.3)' : 'oklch(0.2 0 0)',
-                              border: `1px solid ${row.isActive ? 'oklch(0.45 0.12 145 / 0.5)' : 'oklch(0.3 0 0)'}`,
+                              background: row.isActive ? 'rgba(63,63,63,0.30)' : '#333333',
+                              border: `1px solid ${row.isActive ? 'rgba(114,114,114,0.50)' : '#4c4c4c'}`,
                               borderRadius: '999px',
                               padding: '0.2rem 0.6rem',
                               cursor: 'pointer',
@@ -349,7 +349,7 @@ export default function AdminModels() {
                               alignItems: 'center',
                               gap: '0.3rem',
                               fontSize: '0.78rem',
-                              color: row.isActive ? 'oklch(0.78 0.12 145)' : 'oklch(0.55 0 0)',
+                              color: row.isActive ? '#c6c6c6' : '#8c8c8c',
                               transition: 'all 0.15s',
                             }}
                           >
@@ -357,7 +357,7 @@ export default function AdminModels() {
                               width: '8px',
                               height: '8px',
                               borderRadius: '50%',
-                              background: row.isActive ? 'oklch(0.72 0.18 145)' : 'oklch(0.4 0 0)',
+                              background: row.isActive ? '#b7b7b7' : '#666666',
                               display: 'inline-block',
                             }} />
                             {row.isActive ? 'Active' : 'Inactive'}
@@ -376,7 +376,7 @@ export default function AdminModels() {
                             <button
                               type="button"
                               className="admin-btn admin-btn-secondary admin-btn-sm"
-                              style={{ color: 'oklch(0.65 0.18 25)' }}
+                              style={{ color: '#a5a5a5' }}
                               onClick={() => setDeleteTarget(row)}
                               title="Delete model"
                             >
@@ -577,18 +577,18 @@ export default function AdminModels() {
           <div className="admin-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
             <div className="admin-modal-header">
               <h3 className="admin-modal-title">
-                <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: '0.5rem', color: 'oklch(0.7 0.18 25)' }} />
+                <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: '0.5rem', color: '#b2b2b2' }} />
                 Delete model
               </h3>
             </div>
             <div className="admin-modal-body">
-              <p style={{ margin: '0 0 0.75rem', fontSize: '0.9rem', color: 'oklch(0.88 0.003 60)' }}>
+              <p style={{ margin: '0 0 0.75rem', fontSize: '0.9rem', color: '#e0e0e0' }}>
                 Are you sure you want to delete <strong>{deleteTarget.displayName}</strong>?
               </p>
-              <p style={{ margin: '0 0 1rem', fontSize: '0.82rem', color: 'oklch(0.62 0.005 60)' }}>
+              <p style={{ margin: '0 0 1rem', fontSize: '0.82rem', color: '#999' }}>
                 <code>{deleteTarget.name}</code> · {deleteTarget.provider}
               </p>
-              <p style={{ margin: '0 0 1rem', fontSize: '0.82rem', color: 'oklch(0.65 0.15 25)' }}>
+              <p style={{ margin: '0 0 1rem', fontSize: '0.82rem', color: '#a5a5a5' }}>
                 <i className="fa-solid fa-circle-info" style={{ marginRight: '0.3rem' }} />
                 If this model has usage history, deletion will be blocked. Deactivate it instead.
               </p>
@@ -596,7 +596,7 @@ export default function AdminModels() {
                 <button
                   type="button"
                   className="admin-btn"
-                  style={{ background: 'oklch(0.45 0.18 25)', color: 'oklch(1 0 0)' }}
+                  style={{ background: '#727272', color: '#fff' }}
                   disabled={deleting}
                   onClick={handleDelete}
                 >

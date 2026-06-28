@@ -55,7 +55,7 @@ export default function AdminMargin() {
   return (
     <>
       <h2 className="admin-page-title">Margin & Revenue</h2>
-      <p style={{ margin: '0 0 1rem 0', fontSize: '0.88rem', color: 'oklch(0.65 0 0)' }}>
+      <p style={{ margin: '0 0 1rem 0', fontSize: '0.88rem', color: '#a5a5a5' }}>
         Revenue from completed orders; AI cost from usage (recorded when users use chat/pentest). All users are listed below with their totals.
       </p>
       {error && <div className="admin-error">{error}</div>}
@@ -82,7 +82,7 @@ export default function AdminMargin() {
 
       <div className="admin-card">
         <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Revenue vs Cost over time</h3>
-        <p style={{ margin: 0, color: 'oklch(0.65 0 0)', fontSize: '0.9rem' }}>Line chart placeholder — connect to time-series endpoint when available.</p>
+        <p style={{ margin: 0, color: '#a5a5a5', fontSize: '0.9rem' }}>Line chart placeholder — connect to time-series endpoint when available.</p>
       </div>
 
       <div className="admin-card">
@@ -113,7 +113,7 @@ export default function AdminMargin() {
             </tbody>
           </table>
         </div>
-        {users.length === 0 && !loading && <p style={{ margin: '0.5rem 0 0', color: 'oklch(0.6 0 0)', fontSize: '0.9rem' }}>No users in the system yet.</p>}
+        {users.length === 0 && !loading && <p style={{ margin: '0.5rem 0 0', color: '#999999', fontSize: '0.9rem' }}>No users in the system yet.</p>}
         {total > limit && (
           <div className="admin-page-controls">
             <button type="button" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Prev</button>

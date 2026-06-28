@@ -173,12 +173,12 @@ export default function AdminAbuseCenter() {
             <div className="admin-modal-body">
               <p style={{ margin: '0 0 0.75rem 0' }}>User: {actionModal.email ?? actionModal.userId}</p>
               <label style={{ display: 'block', marginBottom: '0.75rem' }}>
-                <span style={{ fontSize: '0.85rem', color: 'oklch(0.7 0 0)' }}>Reason (optional)</span>
+                <span style={{ fontSize: '0.85rem', color: '#b2b2b2' }}>Reason (optional)</span>
                 <input
                   type="text"
                   value={actionReason}
                   onChange={(e) => setActionReason(e.target.value)}
-                  style={{ display: 'block', marginTop: 4, padding: '0.4rem 0.5rem', width: '100%', borderRadius: 6, background: 'oklch(0.12 0 0)', border: '1px solid oklch(0.3 0 0)', color: 'inherit' }}
+                  style={{ display: 'block', marginTop: 4, padding: '0.4rem 0.5rem', width: '100%', borderRadius: 6, background: '#1e1e1e', border: '1px solid #4c4c4c', color: 'inherit' }}
                 />
               </label>
               <div style={{ display: 'flex', gap: '0.5rem' }}>

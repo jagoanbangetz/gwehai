@@ -288,11 +288,11 @@ export default function AdminPlans() {
                   </td>
                   <td>
                     {row.isActive ? (
-                      <span style={{ color: 'oklch(0.72 0.15 145)' }}>
+                      <span style={{ color: '#b7b7b7' }}>
                         <i className="fa-solid fa-circle-check" /> Yes
                       </span>
                     ) : (
-                      <span style={{ color: 'oklch(0.55 0 0)' }}>
+                      <span style={{ color: '#8c8c8c' }}>
                         <i className="fa-solid fa-circle-xmark" /> No
                       </span>
                     )}
@@ -310,7 +310,7 @@ export default function AdminPlans() {
                       <button
                         type="button"
                         className="admin-btn admin-btn-secondary admin-btn-sm"
-                        style={{ color: 'oklch(0.65 0.18 25)' }}
+                        style={{ color: '#a5a5a5' }}
                         onClick={() => setDeleteTarget(row)}
                         title="Delete plan"
                       >
@@ -522,12 +522,12 @@ export default function AdminPlans() {
           <div className="admin-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px' }}>
             <div className="admin-modal-header">
               <h3 className="admin-modal-title">
-                <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: '0.5rem', color: 'oklch(0.65 0.18 25)' }} />
+                <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: '0.5rem', color: '#a5a5a5' }} />
                 Delete plan
               </h3>
             </div>
             <div className="admin-modal-body">
-              <p style={{ margin: '0 0 1rem', color: 'oklch(0.85 0 0)', lineHeight: 1.5 }}>
+              <p style={{ margin: '0 0 1rem', color: '#d8d8d8', lineHeight: 1.5 }}>
                 Are you sure you want to delete <strong>{deleteTarget.name}</strong> (<code>{deleteTarget.code}</code>)?
                 This action cannot be undone.
               </p>
@@ -535,7 +535,7 @@ export default function AdminPlans() {
                 <button
                   type="button"
                   className="admin-btn"
-                  style={{ background: 'oklch(0.45 0.18 25)', color: '#fff' }}
+                  style={{ background: '#727272', color: '#fff' }}
                   disabled={deleting}
                   onClick={handleDelete}
                 >

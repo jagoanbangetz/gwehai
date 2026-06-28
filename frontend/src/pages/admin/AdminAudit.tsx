@@ -66,27 +66,27 @@ export default function AdminAudit() {
       <h2 className="admin-page-title">Audit</h2>
       <div className="admin-card">
         <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Export data</h3>
-        <p style={{ margin: '0 0 0.5rem 0', color: 'oklch(0.7 0 0)', fontSize: '0.9rem' }}>Download up to 1000 rows as JSON. Action is logged.</p>
+        <p style={{ margin: '0 0 0.5rem 0', color: '#b2b2b2', fontSize: '0.9rem' }}>Download up to 1000 rows as JSON. Action is logged.</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
           <select
             value={exportType}
             onChange={(e) => setExportType(e.target.value)}
-            style={{ padding: '0.4rem 0.6rem', borderRadius: 6, background: 'oklch(0.12 0 0)', border: '1px solid oklch(0.25 0 0)', color: 'inherit' }}
+            style={{ padding: '0.4rem 0.6rem', borderRadius: 6, background: '#1e1e1e', border: '1px solid #3f3f3f', color: 'inherit' }}
           >
             <option value="users">Users</option>
             <option value="conversations">Conversations</option>
             <option value="reports">Reports</option>
             <option value="hacktivity">Hacktivity</option>
           </select>
-          <button type="button" onClick={handleExport} disabled={exporting} style={{ padding: '0.4rem 0.8rem', borderRadius: 6, background: 'oklch(0.3 0.05 250)', border: 'none', color: 'white', cursor: 'pointer' }}>
+          <button type="button" onClick={handleExport} disabled={exporting} style={{ padding: '0.4rem 0.8rem', borderRadius: 6, background: '#4c4c4c', border: 'none', color: 'white', cursor: 'pointer' }}>
             {exporting ? 'Exporting…' : 'Export'}
           </button>
         </div>
-        {exportResult && <p style={{ margin: '0.5rem 0 0', color: 'oklch(0.85 0 0)', fontSize: '0.9rem' }}>{exportResult}</p>}
+        {exportResult && <p style={{ margin: '0.5rem 0 0', color: '#d8d8d8', fontSize: '0.9rem' }}>{exportResult}</p>}
       </div>
       <div className="admin-card">
         <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Audit log</h3>
-        <p style={{ margin: '0 0 0.5rem 0', color: 'oklch(0.65 0 0)', fontSize: '0.9rem' }}>Total: {data.total}</p>
+        <p style={{ margin: '0 0 0.5rem 0', color: '#a5a5a5', fontSize: '0.9rem' }}>Total: {data.total}</p>
         {loading && <div className="admin-loading">Loading…</div>}
         {!loading && (
           <>
@@ -114,7 +114,7 @@ export default function AdminAudit() {
                 </tbody>
               </table>
             </div>
-            {data.items.length === 0 && <p style={{ margin: 0, color: 'oklch(0.6 0 0)' }}>No audit entries yet.</p>}
+            {data.items.length === 0 && <p style={{ margin: 0, color: '#999999' }}>No audit entries yet.</p>}
             {data.total > limit && (
               <div className="admin-page-controls">
                 <button

@@ -22,19 +22,19 @@
 
 .ac-header .admin-page-title i {
   margin-right: 0.5rem;
-  color: oklch(0.7 0.1 260);
+  color: #b2b2b2;
 }
 
 .ac-unread-badge {
   display: inline-flex;
   align-items: center;
   padding: 0.2rem 0.6rem;
-  background: oklch(0.55 0.2 20 / 0.2);
-  border: 1px solid oklch(0.55 0.2 20 / 0.4);
+  background: rgba(140,140,140,0.20);
+  border: 1px solid rgba(140,140,140,0.40);
   border-radius: 20px;
   font-size: 0.72rem;
   font-weight: 700;
-  color: oklch(0.8 0.18 20);
+  color: #cccccc;
   font-family: var(--font-mono);
 }
 
@@ -43,10 +43,10 @@
   align-items: center;
   gap: 0.4rem;
   padding: 0.45rem 0.85rem;
-  background: oklch(0.16 0 0 / 0.6);
-  border: 1px solid oklch(0.24 0.006 60 / 0.3);
+  background: rgba(40,40,40,0.60);
+  border: 1px solid rgba(61,61,61,0.30);
   border-radius: 8px;
-  color: oklch(0.77 0.005 60);
+  color: #c4c4c4;
   font-size: 0.82rem;
   font-family: var(--font-mono);
   cursor: pointer;
@@ -54,8 +54,8 @@
 }
 
 .ac-refresh-btn:hover:not(:disabled) {
-  background: oklch(0.2 0 0 / 0.7);
-  color: oklch(0.96 0.003 60);
+  background: rgba(51,51,51,0.70);
+  color: #f5f5f5;
 }
 
 .ac-refresh-btn:disabled {
@@ -85,7 +85,7 @@
   justify-content: center;
   gap: 0.75rem;
   padding: 4rem 2rem;
-  color: oklch(0.52 0.005 60);
+  color: #888;
   font-size: 0.95rem;
 }
 
@@ -97,8 +97,8 @@
 .ac-empty-spinner {
   width: 28px;
   height: 28px;
-  border: 3px solid oklch(0.24 0.006 60 / 0.4);
-  border-top-color: oklch(0.6 0.1 260);
+  border: 3px solid rgba(61,61,61,0.40);
+  border-top-color: #999999;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
 }
@@ -117,8 +117,8 @@
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: oklch(0.55 0.005 60);
-  border-bottom: 1px solid oklch(0.24 0.006 60 / 0.3);
+  color: #8c8c8c;
+  border-bottom: 1px solid rgba(61,61,61,0.30);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -145,21 +145,21 @@
 }
 
 .ac-row:hover {
-  background: oklch(0.14 0 0 / 0.5);
+  background: rgba(35,35,35,0.50);
 }
 
 .ac-row td {
   padding: 0.85rem 1rem;
-  border-bottom: 1px solid oklch(0.24 0.006 60 / 0.15);
+  border-bottom: 1px solid rgba(61,61,61,0.15);
   vertical-align: middle;
 }
 
 .ac-row-unread td {
-  background: oklch(0.14 0.02 260 / 0.15);
+  background: rgba(35,35,35,0.15);
 }
 
 .ac-row-unread:hover td {
-  background: oklch(0.16 0.02 260 / 0.25);
+  background: rgba(40,40,40,0.25);
 }
 
 .ac-row-open td {
@@ -173,50 +173,50 @@
   height: 8px;
   border-radius: 50%;
   background: transparent;
-  border: 1.5px solid oklch(0.35 0.006 60);
+  border: 1.5px solid #595959;
 }
 
 .ac-dot-unread {
-  background: oklch(0.65 0.2 260);
-  border-color: oklch(0.65 0.2 260);
-  box-shadow: 0 0 6px oklch(0.65 0.2 260 / 0.5);
+  background: #a5a5a5;
+  border-color: #a5a5a5;
+  box-shadow: 0 0 6px rgba(165,165,165,0.50);
 }
 
 /* ── Cell content ── */
 .ac-name {
   font-weight: 600;
-  color: oklch(0.95 0.003 60);
+  color: #f2f2f2;
 }
 
 .ac-row-unread .ac-name {
-  color: oklch(1 0 0);
+  color: #fff;
 }
 
 .ac-email {
-  color: oklch(0.65 0.005 60);
+  color: #a5a5a5;
   font-size: 0.82rem;
 }
 
 .ac-subject-tag {
   display: inline-block;
   padding: 0.15rem 0.5rem;
-  background: oklch(0.18 0.02 260 / 0.4);
-  border: 1px solid oklch(0.3 0.06 260 / 0.3);
+  background: rgba(45,45,45,0.40);
+  border: 1px solid rgba(76,76,76,0.30);
   border-radius: 6px;
   font-size: 0.75rem;
-  color: oklch(0.8 0.08 260);
+  color: #cccccc;
   white-space: nowrap;
 }
 
 .ac-date {
   display: block;
-  color: oklch(0.77 0.005 60);
+  color: #c4c4c4;
   font-size: 0.82rem;
 }
 
 .ac-time {
   display: block;
-  color: oklch(0.48 0.005 60);
+  color: #7a7a7a;
   font-size: 0.72rem;
   margin-top: 0.1rem;
 }
@@ -228,10 +228,10 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  background: oklch(0.2 0.08 145 / 0.2);
-  border: 1px solid oklch(0.4 0.12 145 / 0.3);
+  background: rgba(51,51,51,0.20);
+  border: 1px solid rgba(102,102,102,0.30);
   border-radius: 6px;
-  color: oklch(0.7 0.12 145);
+  color: #b2b2b2;
   font-size: 0.72rem;
   cursor: pointer;
   transition: all 0.15s;
@@ -239,8 +239,8 @@
 }
 
 .ac-mark-read-btn:hover {
-  background: oklch(0.25 0.1 145 / 0.35);
-  color: oklch(0.9 0.1 145);
+  background: rgba(63,63,63,0.35);
+  color: #e5e5e5;
 }
 
 .ac-chevron {
@@ -249,7 +249,7 @@
   justify-content: center;
   width: 24px;
   height: 24px;
-  color: oklch(0.48 0.005 60);
+  color: #7a7a7a;
   font-size: 0.65rem;
   transition: transform 0.2s;
 }
@@ -261,12 +261,12 @@
 /* ── Detail row ── */
 .ac-detail-row td {
   padding: 0;
-  border-bottom: 1px solid oklch(0.24 0.006 60 / 0.2);
+  border-bottom: 1px solid rgba(61,61,61,0.20);
 }
 
 .ac-detail {
   padding: 1.25rem 1rem 1.25rem 3rem;
-  background: oklch(0.12 0.01 260 / 0.15);
+  background: rgba(30,30,30,0.15);
   animation: expandIn 0.2s ease;
 }
 
@@ -288,17 +288,17 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: oklch(0.88 0.003 60);
+  color: #e0e0e0;
   font-size: 0.88rem;
 }
 
 .ac-detail-from i {
-  color: oklch(0.6 0.08 260);
+  color: #999999;
   font-size: 1.2rem;
 }
 
 .ac-detail-email {
-  color: oklch(0.55 0.005 60);
+  color: #8c8c8c;
   font-size: 0.82rem;
 }
 
@@ -311,24 +311,24 @@
 .ac-detail-subject-tag {
   display: inline-block;
   padding: 0.15rem 0.5rem;
-  background: oklch(0.18 0.02 260 / 0.5);
-  border: 1px solid oklch(0.3 0.06 260 / 0.3);
+  background: rgba(45,45,45,0.50);
+  border: 1px solid rgba(76,76,76,0.30);
   border-radius: 6px;
   font-size: 0.72rem;
-  color: oklch(0.8 0.08 260);
+  color: #cccccc;
 }
 
 .ac-detail-date {
   font-size: 0.78rem;
-  color: oklch(0.55 0.005 60);
+  color: #8c8c8c;
 }
 
 .ac-detail-message {
   padding: 1rem;
-  background: oklch(0.08 0 0 / 0.5);
-  border: 1px solid oklch(0.24 0.006 60 / 0.2);
+  background: rgba(20,20,20,0.50);
+  border: 1px solid rgba(61,61,61,0.20);
   border-radius: 8px;
-  color: oklch(0.88 0.003 60);
+  color: #e0e0e0;
   font-size: 0.88rem;
   line-height: 1.65;
   white-space: pre-wrap;
@@ -345,10 +345,10 @@
   align-items: center;
   gap: 0.4rem;
   padding: 0.45rem 0.85rem;
-  background: oklch(0.18 0.04 260 / 0.4);
-  border: 1px solid oklch(0.35 0.1 260 / 0.4);
+  background: rgba(45,45,45,0.40);
+  border: 1px solid rgba(89,89,89,0.40);
   border-radius: 8px;
-  color: oklch(0.8 0.1 260);
+  color: #cccccc;
   font-size: 0.82rem;
   font-family: var(--font-mono);
   text-decoration: none;
@@ -356,8 +356,8 @@
 }
 
 .ac-reply-btn:hover {
-  background: oklch(0.22 0.06 260 / 0.5);
-  color: oklch(0.95 0.08 260);
+  background: rgba(56,56,56,0.50);
+  color: #f2f2f2;
 }
 
 /* ── Pagination ── */
@@ -375,10 +375,10 @@
   align-items: center;
   gap: 0.35rem;
   padding: 0.45rem 0.85rem;
-  background: oklch(0.14 0 0 / 0.6);
-  border: 1px solid oklch(0.24 0.006 60 / 0.3);
+  background: rgba(35,35,35,0.60);
+  border: 1px solid rgba(61,61,61,0.30);
   border-radius: 8px;
-  color: oklch(0.77 0.005 60);
+  color: #c4c4c4;
   font-size: 0.82rem;
   font-family: var(--font-mono);
   cursor: pointer;
@@ -386,8 +386,8 @@
 }
 
 .ac-page-btn:hover:not(:disabled) {
-  background: oklch(0.2 0 0 / 0.7);
-  color: oklch(0.96 0.003 60);
+  background: rgba(51,51,51,0.70);
+  color: #f5f5f5;
 }
 
 .ac-page-btn:disabled {
@@ -397,12 +397,12 @@
 
 .ac-page-info {
   font-size: 0.82rem;
-  color: oklch(0.72 0.005 60);
+  color: #bbb;
 }
 
 .ac-page-total {
   margin-left: 0.4rem;
-  color: oklch(0.48 0.005 60);
+  color: #7a7a7a;
 }
 
 /* ═══ Responsive ═══ */

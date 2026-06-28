@@ -53,7 +53,7 @@ export default function AdminSystem() {
       {health && (
         <div className="admin-card">
           <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Health</h3>
-          <p style={{ margin: 0, color: health.ok ? 'oklch(0.7 0.15 145)' : 'oklch(0.7 0.2 25)' }}>
+          <p style={{ margin: 0, color: health.ok ? '#b2b2b2' : '#b2b2b2' }}>
             Database: {health.database} · {health.timestamp}
           </p>
         </div>
@@ -61,12 +61,12 @@ export default function AdminSystem() {
       {settings && (
         <div className="admin-card">
           <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Settings</h3>
-          <pre style={{ margin: 0, fontSize: '0.85rem', color: 'oklch(0.85 0 0)' }}>{JSON.stringify(settings, null, 2)}</pre>
+          <pre style={{ margin: 0, fontSize: '0.85rem', color: '#d8d8d8' }}>{JSON.stringify(settings, null, 2)}</pre>
         </div>
       )}
-      <div className="admin-card" style={{ borderColor: 'oklch(0.4 0.15 25 / 0.5)' }}>
-        <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem', color: 'oklch(0.8 0.15 25)' }}>Danger zone</h3>
-        <p style={{ margin: '0 0 0.75rem 0', color: 'oklch(0.7 0 0)', fontSize: '0.9rem' }}>
+      <div className="admin-card" style={{ borderColor: 'rgba(102,102,102,0.50)' }}>
+        <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem', color: '#cccccc' }}>Danger zone</h3>
+        <p style={{ margin: '0 0 0.75rem 0', color: '#b2b2b2', fontSize: '0.9rem' }}>
           Wipe all chat, reports, and hacktivity. This cannot be undone. Type <code>{WIPE_CONFIRM_PHRASE}</code> to confirm.
         </p>
         <input
@@ -74,18 +74,18 @@ export default function AdminSystem() {
           value={wipeConfirm}
           onChange={(e) => setWipeConfirm(e.target.value)}
           placeholder={WIPE_CONFIRM_PHRASE}
-          style={{ padding: '0.5rem 0.75rem', width: '100%', maxWidth: 280, marginBottom: '0.5rem', borderRadius: 6, background: 'oklch(0.12 0 0)', border: '1px solid oklch(0.3 0 0)', color: 'inherit' }}
+          style={{ padding: '0.5rem 0.75rem', width: '100%', maxWidth: 280, marginBottom: '0.5rem', borderRadius: 6, background: '#1e1e1e', border: '1px solid #4c4c4c', color: 'inherit' }}
         />
         <br />
         <button
           type="button"
           onClick={handleWipe}
           disabled={wiping || wipeConfirm !== WIPE_CONFIRM_PHRASE}
-          style={{ padding: '0.5rem 1rem', borderRadius: 6, background: 'oklch(0.35 0.15 25)', border: 'none', color: 'white', cursor: wipeConfirm !== WIPE_CONFIRM_PHRASE ? 'not-allowed' : 'pointer', opacity: wipeConfirm !== WIPE_CONFIRM_PHRASE ? 0.6 : 1 }}
+          style={{ padding: '0.5rem 1rem', borderRadius: 6, background: '#595959', border: 'none', color: 'white', cursor: wipeConfirm !== WIPE_CONFIRM_PHRASE ? 'not-allowed' : 'pointer', opacity: wipeConfirm !== WIPE_CONFIRM_PHRASE ? 0.6 : 1 }}
         >
           {wiping ? 'Wiping…' : 'Wipe all chat & reports'}
         </button>
-        {wipeResult && <p style={{ margin: '0.75rem 0 0', color: 'oklch(0.85 0 0)', fontSize: '0.9rem' }}>{wipeResult}</p>}
+        {wipeResult && <p style={{ margin: '0.75rem 0 0', color: '#d8d8d8', fontSize: '0.9rem' }}>{wipeResult}</p>}
       </div>
     </>
   )

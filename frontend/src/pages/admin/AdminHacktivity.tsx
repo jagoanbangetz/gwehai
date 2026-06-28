@@ -121,7 +121,7 @@ export default function AdminHacktivity() {
       {loading && <div className="admin-loading">Loading…</div>}
       {!loading && (
         <div className="admin-card">
-          <p style={{ margin: '0 0 0.75rem 0', color: 'oklch(0.65 0 0)', fontSize: '0.9rem' }}>Total: {data.total}</p>
+          <p style={{ margin: '0 0 0.75rem 0', color: '#a5a5a5', fontSize: '0.9rem' }}>Total: {data.total}</p>
           <div className="admin-table-wrap">
             <table className="admin-table">
               <thead>
@@ -163,7 +163,7 @@ export default function AdminHacktivity() {
               </tbody>
             </table>
           </div>
-          {data.items.length === 0 && <p style={{ margin: 0, color: 'oklch(0.6 0 0)' }}>No hacktivity.</p>}
+          {data.items.length === 0 && <p style={{ margin: 0, color: '#999999' }}>No hacktivity.</p>}
           {data.total > limit && (
             <div className="admin-page-controls">
               <button

@@ -8,11 +8,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: oklch(0.96 0.003 60);
-  border: 1px solid oklch(0.85 0 0 / 0.3);
+  background: #f5f5f5;
+  border: 1px solid rgba(216,216,216,0.30);
   border-radius: 8px;
   padding: 0.75rem 1rem;
-  color: oklch(0 0 0);
+  color: #000;
   font-size: 0.95rem;
   font-weight: 500;
   cursor: pointer;
@@ -38,8 +38,8 @@
 }
 
 .custom-select-trigger-tag {
-  background: oklch(0.2 0 0 / 0.1);
-  color: oklch(0.42 0.005 60);
+  background: rgba(51,51,51,0.10);
+  color: #6b6b6b;
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
   font-size: 0.75rem;
@@ -49,16 +49,16 @@
 }
 
 .custom-select-trigger:hover {
-  border-color: oklch(0.7 0 0 / 0.4);
-  background: oklch(0.98 0.003 60);
+  border-color: rgba(178,178,178,0.40);
+  background: #fafafa;
 }
 
 .custom-select.open .custom-select-trigger {
-  border-color: oklch(0.6 0 0 / 0.5);
-  background: oklch(0.98 0.003 60);
+  border-color: rgba(153,153,153,0.50);
+  background: #fafafa;
   box-shadow: 
-    0 0 0 1px oklch(0.7 0 0 / 0.2),
-    0 4px 12px oklch(0 0 0 / 0.1);
+    0 0 0 1px rgba(178,178,178,0.20),
+    0 4px 12px rgba(0,0,0,0.10);
 }
 
 .custom-select-value {
@@ -67,13 +67,13 @@
 }
 
 .custom-select-value.placeholder {
-  color: oklch(0.52 0.005 60);
+  color: #888;
 }
 
 .custom-select-arrow {
   flex-shrink: 0;
   margin-left: 0.75rem;
-  color: oklch(0.42 0.005 60);
+  color: #6b6b6b;
   transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -86,12 +86,12 @@
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  background: oklch(1 0 0);
-  border: 1px solid oklch(0.85 0 0 / 0.3);
+  background: #fff;
+  border: 1px solid rgba(216,216,216,0.30);
   border-radius: 8px;
   box-shadow: 
-    0 8px 32px oklch(0.07 0.005 60 / 0.18),
-    0 0 0 1px oklch(0.9 0 0 / 0.2);
+    0 8px 32px rgba(17,17,17,0.18),
+    0 0 0 1px rgba(229,229,229,0.20);
   z-index: 1000;
   max-height: 320px;
   overflow-y: auto;
@@ -107,42 +107,42 @@
 .custom-select-search-input {
   width: 100%;
   border-radius: 6px;
-  border: 1px solid oklch(0.85 0 0 / 0.4);
+  border: 1px solid rgba(216,216,216,0.40);
   padding: 0.4rem 0.6rem;
   font-family: var(--font-mono);
   font-size: 0.85rem;
-  background: oklch(0.96 0 0);
-  color: oklch(0 0 0);
+  background: #f4f4f4;
+  color: #000;
 }
 
 .custom-select-search-input::placeholder {
-  color: oklch(0.62 0.005 60);
+  color: #999;
 }
 
 .custom-select-search-input:focus {
   outline: none;
-  border-color: oklch(0.6 0 0 / 0.7);
+  border-color: rgba(153,153,153,0.70);
 }
 
 /* Dark variant search styling inside chat model select */
 .chat-model-select .custom-select-search-input {
-  background: oklch(0.12 0 0 / 0.98);
-  border-color: oklch(0.4 0 0 / 0.9);
-  color: oklch(0.96 0 0);
+  background: rgba(30,30,30,0.98);
+  border-color: rgba(102,102,102,0.90);
+  color: #f4f4f4;
   box-shadow:
-    0 0 0 1px oklch(0.32 0 0 / 0.9),
-    0 6px 16px oklch(0 0 0 / 0.7);
+    0 0 0 1px rgba(81,81,81,0.90),
+    0 6px 16px rgba(0,0,0,0.70);
 }
 
 .chat-model-select .custom-select-search-input::placeholder {
-  color: oklch(0.72 0.005 60);
+  color: #bbb;
 }
 
 .chat-model-select .custom-select-search-input:focus {
-  border-color: oklch(0.7 0 0 / 0.9);
+  border-color: rgba(178,178,178,0.90);
   box-shadow:
-    0 0 0 1px oklch(0.7 0 0 / 0.9),
-    0 8px 20px oklch(0.07 0.005 60 / 0.85);
+    0 0 0 1px rgba(178,178,178,0.90),
+    0 8px 20px rgba(17,17,17,0.85);
 }
 
 .custom-select-dropdown::-webkit-scrollbar {
@@ -150,17 +150,17 @@
 }
 
 .custom-select-dropdown::-webkit-scrollbar-track {
-  background: oklch(0.1 0 0 / 0.5);
+  background: rgba(25,25,25,0.50);
   border-radius: 3px;
 }
 
 .custom-select-dropdown::-webkit-scrollbar-thumb {
-  background: oklch(0.3 0 0 / 0.6);
+  background: rgba(76,76,76,0.60);
   border-radius: 3px;
 }
 
 .custom-select-dropdown::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.4 0 0 / 0.7);
+  background: rgba(102,102,102,0.70);
 }
 
 .custom-select-option {
@@ -168,7 +168,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.875rem 1rem;
-  color: oklch(0 0 0);
+  color: #000;
   font-size: 0.95rem;
   font-weight: 500;
   cursor: pointer;
@@ -193,8 +193,8 @@
 }
 
 .custom-select-option-tag {
-  background: oklch(0.2 0.1 120 / 0.2);
-  color: oklch(0.3 0.1 120);
+  background: rgba(51,51,51,0.20);
+  color: #4c4c4c;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   font-size: 0.7rem;
@@ -217,18 +217,18 @@
 
 .custom-select-option:hover,
 .custom-select-option.highlighted {
-  background: oklch(0.96 0.003 60);
+  background: #f5f5f5;
 }
 
 .custom-select-option.selected {
-  background: oklch(0.4 0.2 240 / 0.15);
-  color: oklch(0 0 0);
+  background: rgba(102,102,102,0.15);
+  color: #000;
   font-weight: 600;
 }
 
 .custom-select-option.selected:hover,
 .custom-select-option.selected.highlighted {
-  background: oklch(0.45 0.2 240 / 0.2);
+  background: rgba(114,114,114,0.20);
 }
 
 .custom-select-option-label {
@@ -239,14 +239,14 @@
 .custom-select-checkmark {
   flex-shrink: 0;
   margin-left: 0.5rem;
-  color: oklch(0.4 0.2 240);
+  color: #666666;
   stroke-width: 3;
   width: 18px;
   height: 18px;
 }
 
 .custom-select-option.selected .custom-select-checkmark {
-  color: oklch(0.5 0.2 240);
+  color: #7f7f7f;
 }
 
 @keyframes slideDown {
@@ -266,55 +266,55 @@
 }
 
 .custom-select:focus .custom-select-trigger {
-  border-color: oklch(1 0 0 / 0.6);
+  border-color: rgba(255,255,255,0.60);
   box-shadow: 
-    0 0 0 3px oklch(1 0 0 / 0.1),
-    0 4px 12px oklch(0.07 0.005 60 / 0.25);
+    0 0 0 3px rgba(255,255,255,0.10),
+    0 4px 12px rgba(17,17,17,0.25);
 }
 
 /* Dark variant for chat input */
 .chat-model-select .custom-select-trigger {
-  background: oklch(0.1 0 0 / 0.95);
-  border: 1px solid oklch(0.3 0 0 / 0.7);
-  color: oklch(1 0 0);
+  background: rgba(25,25,25,0.95);
+  border: 1px solid rgba(76,76,76,0.70);
+  color: #fff;
 }
 
 .chat-model-select .custom-select-trigger:hover,
 .chat-model-select .custom-select.open .custom-select-trigger {
-  background: oklch(0.14 0 0 / 0.98);
-  border-color: oklch(0.6 0 0 / 0.8);
+  background: rgba(35,35,35,0.98);
+  border-color: rgba(153,153,153,0.80);
 }
 
 .chat-model-select .custom-select-arrow {
-  color: oklch(0.82 0.003 60);
+  color: #ddd;
 }
 
 .chat-model-select .custom-select-value.placeholder {
-  color: oklch(0.62 0.005 60);
+  color: #999;
 }
 
 .chat-model-select .custom-select-dropdown {
-  background: oklch(0.12 0 0 / 0.98);
-  border-color: oklch(0.4 0 0 / 0.9);
+  background: rgba(30,30,30,0.98);
+  border-color: rgba(102,102,102,0.90);
   box-shadow:
-    0 12px 32px oklch(0.07 0.005 60 / 0.65),
-    0 0 0 1px oklch(0.4 0 0 / 0.8);
+    0 12px 32px rgba(17,17,17,0.65),
+    0 0 0 1px rgba(102,102,102,0.80);
 }
 
 .chat-model-select .custom-select-option {
-  color: oklch(0.92 0.003 60);
+  color: #eee;
 }
 
 .chat-model-select .custom-select-option:hover,
 .chat-model-select .custom-select-option.highlighted {
-  background: oklch(0.2 0 0 / 0.9);
+  background: rgba(51,51,51,0.90);
 }
 
 .chat-model-select .custom-select-option.selected {
-  background: oklch(0.35 0.1 240 / 0.6);
-  color: oklch(1 0 0);
+  background: rgba(89,89,89,0.60);
+  color: #fff;
 }
 
 .chat-model-select .custom-select-option.selected .custom-select-checkmark {
-  color: oklch(0.9 0.15 240);
+  color: #e5e5e5;
 }

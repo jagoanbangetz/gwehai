@@ -126,7 +126,7 @@ export default function AdminCostCenter() {
   return (
     <>
       <h2 className="admin-page-title">Cost Center</h2>
-      <p style={{ margin: '0 0 1rem 0', fontSize: '0.88rem', color: 'oklch(0.65 0 0)' }}>
+      <p style={{ margin: '0 0 1rem 0', fontSize: '0.88rem', color: '#a5a5a5' }}>
         Usage is recorded when users use chat or pentest. Totals below are from usage; the table lists all users and their usage in the selected date range. Cost settings are saved for future enforcement.
       </p>
       {error && <div className="admin-error">{error}</div>}
@@ -153,7 +153,7 @@ export default function AdminCostCenter() {
 
       <div className="admin-card">
         <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Usage by user</h3>
-        <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.82rem', color: 'oklch(0.6 0 0)' }}>
+        <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.82rem', color: '#999999' }}>
           Filter by date range (click the field to open the date picker), model, or plan. Leave dates empty for all-time.
         </p>
         <div className="admin-cost-filters">
@@ -258,43 +258,43 @@ export default function AdminCostCenter() {
         <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Cost settings</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            <span style={{ fontSize: '0.8rem', color: 'oklch(0.65 0 0)' }}>Global Daily Token Cap</span>
+            <span style={{ fontSize: '0.8rem', color: '#a5a5a5' }}>Global Daily Token Cap</span>
             <input
               type="number"
               value={settings.globalDailyTokenCap}
               onChange={(e) => setSettings((s) => ({ ...s, globalDailyTokenCap: e.target.value }))}
               placeholder="e.g. 1000000"
-              style={{ padding: '0.4rem 0.5rem', borderRadius: 6, background: 'oklch(0.12 0 0)', border: '1px solid oklch(0.3 0 0)', color: 'inherit' }}
+              style={{ padding: '0.4rem 0.5rem', borderRadius: 6, background: '#1e1e1e', border: '1px solid #4c4c4c', color: 'inherit' }}
             />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            <span style={{ fontSize: '0.8rem', color: 'oklch(0.65 0 0)' }}>Global Monthly Token Cap</span>
+            <span style={{ fontSize: '0.8rem', color: '#a5a5a5' }}>Global Monthly Token Cap</span>
             <input
               type="number"
               value={settings.globalMonthlyTokenCap}
               onChange={(e) => setSettings((s) => ({ ...s, globalMonthlyTokenCap: e.target.value }))}
               placeholder="e.g. 50000000"
-              style={{ padding: '0.4rem 0.5rem', borderRadius: 6, background: 'oklch(0.12 0 0)', border: '1px solid oklch(0.3 0 0)', color: 'inherit' }}
+              style={{ padding: '0.4rem 0.5rem', borderRadius: 6, background: '#1e1e1e', border: '1px solid #4c4c4c', color: 'inherit' }}
             />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            <span style={{ fontSize: '0.8rem', color: 'oklch(0.65 0 0)' }}>Per User Token Cap</span>
+            <span style={{ fontSize: '0.8rem', color: '#a5a5a5' }}>Per User Token Cap</span>
             <input
               type="number"
               value={settings.perUserTokenCap}
               onChange={(e) => setSettings((s) => ({ ...s, perUserTokenCap: e.target.value }))}
               placeholder="e.g. 100000"
-              style={{ padding: '0.4rem 0.5rem', borderRadius: 6, background: 'oklch(0.12 0 0)', border: '1px solid oklch(0.3 0 0)', color: 'inherit' }}
+              style={{ padding: '0.4rem 0.5rem', borderRadius: 6, background: '#1e1e1e', border: '1px solid #4c4c4c', color: 'inherit' }}
             />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            <span style={{ fontSize: '0.8rem', color: 'oklch(0.65 0 0)' }}>Per Plan Token Cap (JSON)</span>
+            <span style={{ fontSize: '0.8rem', color: '#a5a5a5' }}>Per Plan Token Cap (JSON)</span>
             <input
               type="text"
               value={settings.perPlanTokenCap}
               onChange={(e) => setSettings((s) => ({ ...s, perPlanTokenCap: e.target.value }))}
               placeholder='{"FREE":100000}'
-              style={{ padding: '0.4rem 0.5rem', borderRadius: 6, background: 'oklch(0.12 0 0)', border: '1px solid oklch(0.3 0 0)', color: 'inherit' }}
+              style={{ padding: '0.4rem 0.5rem', borderRadius: 6, background: '#1e1e1e', border: '1px solid #4c4c4c', color: 'inherit' }}
             />
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
@@ -310,11 +310,11 @@ export default function AdminCostCenter() {
           type="button"
           onClick={handleSaveSettings}
           disabled={savingSettings}
-          style={{ padding: '0.5rem 1rem', borderRadius: 6, background: 'oklch(0.25 0.06 260)', border: '1px solid oklch(0.35 0.08 260)', color: 'oklch(0.95 0 0)', cursor: savingSettings ? 'wait' : 'pointer' }}
+          style={{ padding: '0.5rem 1rem', borderRadius: 6, background: '#3f3f3f', border: '1px solid #595959', color: '#f2f2f2', cursor: savingSettings ? 'wait' : 'pointer' }}
         >
           {savingSettings ? 'Saving…' : 'Save Settings'}
         </button>
-        {settingsSaved && <span style={{ marginLeft: '0.75rem', color: 'oklch(0.6 0.15 145)' }}>Saved.</span>}
+        {settingsSaved && <span style={{ marginLeft: '0.75rem', color: '#999999' }}>Saved.</span>}
       </div>
     </>
   )

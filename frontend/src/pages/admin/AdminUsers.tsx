@@ -106,7 +106,7 @@ export default function AdminUsers() {
             <select
               value={role}
               onChange={(e) => setRole(e.target.value)}
-              style={{ marginLeft: '0.5rem', padding: '0.4rem 0.6rem', borderRadius: 6, background: 'oklch(0.12 0 0)', border: '1px solid oklch(0.25 0 0)', color: 'inherit' }}
+              style={{ marginLeft: '0.5rem', padding: '0.4rem 0.6rem', borderRadius: 6, background: '#1e1e1e', border: '1px solid #3f3f3f', color: 'inherit' }}
             >
               <option value="">All</option>
               <option value="user">User</option>
@@ -120,10 +120,10 @@ export default function AdminUsers() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Email or name"
-              style={{ marginLeft: '0.5rem', padding: '0.4rem 0.6rem', width: 200, borderRadius: 6, background: 'oklch(0.12 0 0)', border: '1px solid oklch(0.25 0 0)', color: 'inherit' }}
+              style={{ marginLeft: '0.5rem', padding: '0.4rem 0.6rem', width: 200, borderRadius: 6, background: '#1e1e1e', border: '1px solid #3f3f3f', color: 'inherit' }}
             />
           </label>
-          <button type="button" onClick={load} style={{ padding: '0.4rem 0.8rem', borderRadius: 6, background: 'oklch(0.3 0.05 250)', border: 'none', color: 'white', cursor: 'pointer' }}>
+          <button type="button" onClick={load} style={{ padding: '0.4rem 0.8rem', borderRadius: 6, background: '#4c4c4c', border: 'none', color: 'white', cursor: 'pointer' }}>
             Search
           </button>
         </div>
@@ -176,7 +176,7 @@ export default function AdminUsers() {
               </tbody>
             </table>
           </div>
-          {users.length === 0 && <p style={{ margin: 0, color: 'oklch(0.6 0 0)' }}>No users found.</p>}
+          {users.length === 0 && <p style={{ margin: 0, color: '#999999' }}>No users found.</p>}
         </div>
       )}
 

@@ -87,7 +87,7 @@ export default function AdminReports() {
       {loading && <div className="admin-loading">Loading…</div>}
       {!loading && (
         <div className="admin-card">
-          <p style={{ margin: '0 0 0.75rem 0', color: 'oklch(0.65 0 0)', fontSize: '0.9rem' }}>Total: {data.total}</p>
+          <p style={{ margin: '0 0 0.75rem 0', color: '#a5a5a5', fontSize: '0.9rem' }}>Total: {data.total}</p>
           <div className="admin-table-wrap">
             <table className="admin-table">
               <thead>
@@ -124,7 +124,7 @@ export default function AdminReports() {
               </tbody>
             </table>
           </div>
-          {data.items.length === 0 && <p style={{ margin: 0, color: 'oklch(0.6 0 0)' }}>No reports.</p>}
+          {data.items.length === 0 && <p style={{ margin: 0, color: '#999999' }}>No reports.</p>}
           {data.total > limit && (
             <div className="admin-page-controls">
               <button type="button" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Prev</button>
@@ -179,7 +179,7 @@ export default function AdminReports() {
                     {detail.fileUrl && (
                       <>
                         <dt>File</dt>
-                        <dd><a href={detail.fileUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'oklch(0.7 0.15 250)' }}>Open file</a></dd>
+                        <dd><a href={detail.fileUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#b2b2b2' }}>Open file</a></dd>
                       </>
                     )}
                   </dl>

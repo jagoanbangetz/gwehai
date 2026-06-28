@@ -40,7 +40,7 @@ export default function AdminJobs() {
   return (
     <>
       <h2 className="admin-page-title">Pentests & jobs</h2>
-      <p style={{ color: 'oklch(0.65 0 0)', marginBottom: '1rem' }}>In-memory jobs (refreshes every 10s). Running count: {jobs.filter((j) => j.status === 'running').length}</p>
+      <p style={{ color: '#a5a5a5', marginBottom: '1rem' }}>In-memory jobs (refreshes every 10s). Running count: {jobs.filter((j) => j.status === 'running').length}</p>
       <div className="admin-card">
         <div className="admin-table-wrap">
           <table className="admin-table">
@@ -68,7 +68,7 @@ export default function AdminJobs() {
             </tbody>
           </table>
         </div>
-        {jobs.length === 0 && <p style={{ margin: 0, color: 'oklch(0.6 0 0)' }}>No active or recent jobs.</p>}
+        {jobs.length === 0 && <p style={{ margin: 0, color: '#999999' }}>No active or recent jobs.</p>}
       </div>
     </>
   )

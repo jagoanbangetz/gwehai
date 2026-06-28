@@ -23,13 +23,13 @@ interface SettingsResponse {
 
 /* ── Group visual config ── */
 const GROUP_CONFIG: Record<string, { icon: string; color: string; description: string }> = {
-  ai:       { icon: 'fa-brain',           color: 'oklch(0.55 0.15 280)',  description: 'AI model keys & inference settings' },
-  payment:  { icon: 'fa-credit-card',     color: 'oklch(0.55 0.15 160)',  description: 'Payment gateway & billing config' },
-  email:    { icon: 'fa-envelope',        color: 'oklch(0.6 0.14 220)',   description: 'SMTP & email delivery settings' },
-  security: { icon: 'fa-shield-halved',   color: 'oklch(0.55 0.14 25)',   description: 'Encryption, secrets & access control' },
-  auth:     { icon: 'fa-key',             color: 'oklch(0.6 0.14 60)',    description: 'Authentication & OAuth providers' },
-  general:  { icon: 'fa-sliders',         color: 'oklch(0.6 0.04 60)',    description: 'General application settings' },
-  branding: { icon: 'fa-palette',         color: 'oklch(0.65 0.12 300)',  description: 'Logo, favicon & visual identity' },
+  ai:       { icon: 'fa-brain',           color: '#8c8c8c',  description: 'AI model keys & inference settings' },
+  payment:  { icon: 'fa-credit-card',     color: '#8c8c8c',  description: 'Payment gateway & billing config' },
+  email:    { icon: 'fa-envelope',        color: '#999999',   description: 'SMTP & email delivery settings' },
+  security: { icon: 'fa-shield-halved',   color: '#8c8c8c',   description: 'Encryption, secrets & access control' },
+  auth:     { icon: 'fa-key',             color: '#999999',    description: 'Authentication & OAuth providers' },
+  general:  { icon: 'fa-sliders',         color: '#999999',    description: 'General application settings' },
+  branding: { icon: 'fa-palette',         color: '#a5a5a5',  description: 'Logo, favicon & visual identity' },
 }
 
 /* ── Field descriptions ── */
@@ -502,7 +502,7 @@ export default function AdminSettings() {
       <div className="settings-groups">
         {GROUP_ORDER.filter((gk) => data.groups[gk]).map((groupKey) => {
           const group = data.groups[groupKey]
-          const config = GROUP_CONFIG[groupKey] ?? { icon: 'fa-cube', color: 'oklch(0.6 0.04 60)', description: '' }
+          const config = GROUP_CONFIG[groupKey] ?? { icon: 'fa-cube', color: '#999999', description: '' }
           const dirty = hasDirtyInGroup(groupKey)
           const dirtyCount = dirtyCountInGroup(groupKey)
           const isCollapsed = collapsed.has(groupKey)

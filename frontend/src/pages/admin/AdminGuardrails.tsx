@@ -110,48 +110,48 @@ export default function AdminGuardrails() {
           ))}
         </div>
         <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Global limits (policy overrides)</h3>
-        <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.82rem', color: 'oklch(0.6 0 0)' }}>
+        <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.82rem', color: '#999999' }}>
           These cap all plans. <strong>Max parallel jobs per plan</strong> is applied when starting a scan: effective max = min(plan limit, value below). Others are stored and will be enforced as those paths are wired.
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            <span style={{ fontSize: '0.8rem', color: 'oklch(0.65 0 0)' }}>Max parallel jobs per plan</span>
+            <span style={{ fontSize: '0.8rem', color: '#a5a5a5' }}>Max parallel jobs per plan</span>
             <input
               type="number"
               min={1}
               value={policies.maxParallelJobsPerPlan}
               onChange={(e) => update('maxParallelJobsPerPlan', parseInt(e.target.value, 10) || 1)}
-              style={{ padding: '0.4rem 0.5rem', borderRadius: 6, background: 'oklch(0.12 0 0)', border: '1px solid oklch(0.3 0 0)', color: 'inherit' }}
+              style={{ padding: '0.4rem 0.5rem', borderRadius: 6, background: '#1e1e1e', border: '1px solid #4c4c4c', color: 'inherit' }}
             />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            <span style={{ fontSize: '0.8rem', color: 'oklch(0.65 0 0)' }}>Max sub-agents per plan</span>
+            <span style={{ fontSize: '0.8rem', color: '#a5a5a5' }}>Max sub-agents per plan</span>
             <input
               type="number"
               min={0}
               value={policies.maxSubAgentsPerPlan}
               onChange={(e) => update('maxSubAgentsPerPlan', parseInt(e.target.value, 10) || 0)}
-              style={{ padding: '0.4rem 0.5rem', borderRadius: 6, background: 'oklch(0.12 0 0)', border: '1px solid oklch(0.3 0 0)', color: 'inherit' }}
+              style={{ padding: '0.4rem 0.5rem', borderRadius: 6, background: '#1e1e1e', border: '1px solid #4c4c4c', color: 'inherit' }}
             />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            <span style={{ fontSize: '0.8rem', color: 'oklch(0.65 0 0)' }}>Max tool calls per job</span>
+            <span style={{ fontSize: '0.8rem', color: '#a5a5a5' }}>Max tool calls per job</span>
             <input
               type="number"
               min={1}
               value={policies.maxToolCallsPerJob}
               onChange={(e) => update('maxToolCallsPerJob', parseInt(e.target.value, 10) || 1)}
-              style={{ padding: '0.4rem 0.5rem', borderRadius: 6, background: 'oklch(0.12 0 0)', border: '1px solid oklch(0.3 0 0)', color: 'inherit' }}
+              style={{ padding: '0.4rem 0.5rem', borderRadius: 6, background: '#1e1e1e', border: '1px solid #4c4c4c', color: 'inherit' }}
             />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            <span style={{ fontSize: '0.8rem', color: 'oklch(0.65 0 0)' }}>Max steps per conversation</span>
+            <span style={{ fontSize: '0.8rem', color: '#a5a5a5' }}>Max steps per conversation</span>
             <input
               type="number"
               min={1}
               value={policies.maxStepsPerConversation}
               onChange={(e) => update('maxStepsPerConversation', parseInt(e.target.value, 10) || 1)}
-              style={{ padding: '0.4rem 0.5rem', borderRadius: 6, background: 'oklch(0.12 0 0)', border: '1px solid oklch(0.3 0 0)', color: 'inherit' }}
+              style={{ padding: '0.4rem 0.5rem', borderRadius: 6, background: '#1e1e1e', border: '1px solid #4c4c4c', color: 'inherit' }}
             />
           </label>
         </div>
@@ -159,16 +159,16 @@ export default function AdminGuardrails() {
           type="button"
           onClick={handleSave}
           disabled={saving}
-          style={{ padding: '0.5rem 1rem', borderRadius: 6, background: 'oklch(0.25 0.06 260)', border: '1px solid oklch(0.35 0.08 260)', color: 'oklch(0.95 0 0)', cursor: saving ? 'wait' : 'pointer' }}
+          style={{ padding: '0.5rem 1rem', borderRadius: 6, background: '#3f3f3f', border: '1px solid #595959', color: '#f2f2f2', cursor: saving ? 'wait' : 'pointer' }}
         >
           {saving ? 'Saving…' : 'Save'}
         </button>
-        {saved && <span style={{ marginLeft: '0.75rem', color: 'oklch(0.6 0.15 145)' }}>Saved.</span>}
+        {saved && <span style={{ marginLeft: '0.75rem', color: '#999999' }}>Saved.</span>}
       </div>
 
       <div className="admin-card">
         <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem' }}>Plan limits (source of truth — same as plan menu)</h3>
-        <p style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: 'oklch(0.65 0 0)' }}>
+        <p style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', color: '#a5a5a5' }}>
           Limits are read from backend config. Adjust in <code>plans.config.ts</code> to change.
         </p>
         <div className="admin-guardrails-plans-grid">

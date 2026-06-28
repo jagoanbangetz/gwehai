@@ -3,8 +3,8 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: oklch(0.09 0.006 60);
-  border-right: 1px solid oklch(0.24 0.006 60 / 0.3);
+  background: #0a0a0a;
+  border-right: 1px solid rgba(61,61,61,0.30);
   flex-shrink: 0;
   transition: width 180ms ease;
 }
@@ -16,7 +16,7 @@
   flex-direction: column;
   min-height: 0;
   flex: 1;
-  background: oklch(0.09 0.006 60);
+  background: #0a0a0a;
 }
 
 .sidebarHeader {
@@ -24,8 +24,8 @@
   top: 0;
   z-index: 5;
   flex-shrink: 0;
-  background: oklch(0.09 0.006 60);
-  border-bottom: 1px solid oklch(0.24 0.006 60 / 0.3);
+  background: #0a0a0a;
+  border-bottom: 1px solid rgba(61,61,61,0.30);
 }
 
 .sidebarScroll {
@@ -49,22 +49,22 @@
 }
 
 .sidebarScroll::-webkit-scrollbar-thumb {
-  background: oklch(0.35 0 0 / 0.5);
+  background: rgba(89,89,89,0.50);
   border-radius: 4px;
 }
 
 .sidebarScroll::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.45 0 0 / 0.6);
+  background: rgba(114,114,114,0.60);
 }
 
 .sidebarScroll::-webkit-scrollbar-thumb:active {
-  background: oklch(0.5 0 0 / 0.7);
+  background: rgba(127,127,127,0.70);
 }
 
 /* Firefox */
 .sidebarScroll {
   scrollbar-width: thin;
-  scrollbar-color: oklch(0.35 0 0 / 0.5) transparent;
+  scrollbar-color: rgba(89,89,89,0.50) transparent;
 }
 
 .sidebarFooter {
@@ -72,7 +72,7 @@
   bottom: 0;
   z-index: 10;
   flex-shrink: 0;
-  background: oklch(0.09 0.006 60);
+  background: #0a0a0a;
   border-top: 1px solid rgba(0, 0, 0, 0.08);
   padding: 12px;
 }
@@ -123,7 +123,7 @@
   display: none;
   position: fixed;
   inset: 0;
-  background: oklch(0.07 0.005 60 / 0.55);
+  background: rgba(17,17,17,0.55);
   z-index: 999;
   opacity: 0;
   pointer-events: none;
@@ -150,7 +150,7 @@
 
 .app-sidebar-drawer-open {
   transform: translateX(0);
-  box-shadow: 4px 0 24px oklch(0.07 0.005 60 / 0.55);
+  box-shadow: 4px 0 24px rgba(17,17,17,0.55);
 }
 
 /* Mobile: <1024px — drawer overlay. Align with useMediaQuery("(max-width: 1023px)"). */

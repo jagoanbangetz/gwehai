@@ -1,7 +1,7 @@
 .legal-page {
   min-height: 100vh;
   position: relative;
-  color: oklch(1 0 0);
+  color: #fff;
 }
 
 .legal-content {
@@ -13,9 +13,9 @@
 .legal-container {
   max-width: 900px;
   margin: 0 auto;
-  background: oklch(0.1 0 0 / 0.8);
+  background: rgba(25,25,25,0.80);
   backdrop-filter: blur(20px);
-  border: 1px solid oklch(0.24 0.006 60 / 0.3);
+  border: 1px solid rgba(61,61,61,0.30);
   border-radius: 16px;
   padding: 3rem;
   font-family: var(--font-mono);
@@ -25,15 +25,15 @@
   font-size: 2.5rem;
   font-weight: 700;
   margin-bottom: 0.5rem;
-  color: oklch(1 0 0);
+  color: #fff;
 }
 
 .legal-updated {
-  color: oklch(0.62 0.005 60);
+  color: #999;
   font-size: 0.9rem;
   margin-bottom: 2rem;
   padding-bottom: 2rem;
-  border-bottom: 1px solid oklch(0.24 0.006 60 / 0.3);
+  border-bottom: 1px solid rgba(61,61,61,0.30);
 }
 
 .legal-section {
@@ -44,12 +44,12 @@
   font-size: 1.5rem;
   font-weight: 600;
   margin-bottom: 1rem;
-  color: oklch(1 0 0);
+  color: #fff;
 }
 
 .legal-section p {
   line-height: 1.8;
-  color: oklch(0.92 0.003 60);
+  color: #eee;
   margin-bottom: 1rem;
 }
 
@@ -64,24 +64,24 @@
   padding-left: 1.5rem;
   margin-bottom: 0.75rem;
   line-height: 1.8;
-  color: oklch(0.92 0.003 60);
+  color: #eee;
 }
 
 .legal-section ul li::before {
   content: '→';
   position: absolute;
   left: 0;
-  color: oklch(0.72 0.005 60);
+  color: #bbb;
 }
 
 .legal-link {
-  color: oklch(1 0 0);
+  color: #fff;
   text-decoration: underline;
   transition: color 0.2s;
 }
 
 .legal-link:hover {
-  color: oklch(0.82 0.003 60);
+  color: #ddd;
 }
 
 @media (max-width: 768px) {

@@ -162,7 +162,7 @@ export default function AdminOpsConsole() {
             </tbody>
           </table>
         </div>
-        {jobs.length === 0 && <p style={{ margin: 0, color: 'oklch(0.6 0 0)' }}>No active jobs.</p>}
+        {jobs.length === 0 && <p style={{ margin: 0, color: '#999999' }}>No active jobs.</p>}
       </div>
 
       {actionModal && (

@@ -101,7 +101,7 @@ export default function AdminConversations() {
       {loading && <div className="admin-loading">Loading…</div>}
       {!loading && (
         <div className="admin-card">
-          <p style={{ margin: '0 0 0.75rem 0', color: 'oklch(0.65 0 0)', fontSize: '0.9rem' }}>Total: {data.total}</p>
+          <p style={{ margin: '0 0 0.75rem 0', color: '#a5a5a5', fontSize: '0.9rem' }}>Total: {data.total}</p>
           <div className="admin-table-wrap">
             <table className="admin-table">
               <thead>
@@ -136,7 +136,7 @@ export default function AdminConversations() {
               </tbody>
             </table>
           </div>
-          {data.items.length === 0 && <p style={{ margin: 0, color: 'oklch(0.6 0 0)' }}>No conversations.</p>}
+          {data.items.length === 0 && <p style={{ margin: 0, color: '#999999' }}>No conversations.</p>}
           {data.total > limit && (
             <div className="admin-page-controls">
               <button type="button" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Prev</button>
@@ -181,7 +181,7 @@ export default function AdminConversations() {
                   </dl>
                   <h4 className="admin-detail-section-title">Messages ({detail.messages.length})</h4>
                   <div className="admin-detail-messages">
-                    {detail.messages.length === 0 && <p style={{ color: 'oklch(0.6 0 0)' }}>No messages.</p>}
+                    {detail.messages.length === 0 && <p style={{ color: '#999999' }}>No messages.</p>}
                     {detail.messages.map((m) => (
                       <div key={m.id} className={`admin-detail-msg admin-detail-msg-${m.role}`}>
                         <div className="admin-detail-msg-meta">
