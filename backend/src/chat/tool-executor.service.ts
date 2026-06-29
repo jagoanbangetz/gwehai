@@ -239,19 +239,44 @@ export class ToolExecutorService {
       // and let the normal error handling catch it.
     }
 
+    // ── Shell escaping safety ──────────────────────────────────────────
+    // grep/sed/awk commands with complex regex patterns often break when
+    // passed verbatim to /bin/sh -c due to quote nesting. Detect these and
+    // write to a temp script for safe execution.
+    const needsScriptWrapper = this.commandNeedsScriptWrapper(cmdLine);
+
     const cmdArgs = parts.slice(1);
     const target = args.target != null ? String(args.target) : undefined;
     const out = await this.toolsService.execCommand({
       command,
-      args: cmdArgs.length ? cmdArgs : undefined,
-      commandLine: cmdLine,
+      args: needsScriptWrapper ? undefined : (cmdArgs.length ? cmdArgs : undefined),
+      commandLine: needsScriptWrapper ? undefined : cmdLine,
       target,
+      scriptContent: needsScriptWrapper ? cmdLine : undefined,
     });
     return JSON.stringify({
       stdout: cleanToolOutput(out.stdout),
       stderr: cleanToolOutput(out.stderr),
       exitCode: out.exitCode,
     });
+  }
+
+  /**
+   * Detect commands that need a script wrapper due to complex shell metacharacters.
+   * grep -oP, sed, awk, and anything with nested quotes in the pattern.
+   */
+  private commandNeedsScriptWrapper(cmdLine: string): boolean {
+    const riskyCommands = ['grep', 'sed', 'awk', 'perl', 'python3 -c', 'python -c', 'ruby -e'];
+    const lower = cmdLine.toLowerCase();
+    const hasRiskyCommand = riskyCommands.some((rc) => lower.startsWith(rc));
+    if (!hasRiskyCommand) return false;
+
+    const hasSingleQuotes = cmdLine.includes("'");
+    const hasDoubleQuotes = cmdLine.includes('"');
+    const hasPipes = cmdLine.includes('|');
+    const hasRedirect = cmdLine.includes('>') || cmdLine.includes('<');
+
+    return (hasSingleQuotes && hasDoubleQuotes) || (hasPipes && (hasSingleQuotes || hasDoubleQuotes)) || hasRedirect;
   }
 
   private async handleCraftPayload(args: Record<string, any>): Promise<string> {

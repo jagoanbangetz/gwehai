@@ -532,36 +532,65 @@ export class AgentOrchestratorService {
       const toolChoice = turn === 1 ? ('required' as const) : undefined;
       const modelKey = options?.model_key || 'auto';
 
-      // ── tool_calls protocol validation ─────────────────────────────────
-      // Log counts before sending to LLM to detect protocol issues early.
-      const truncatedForLlm = truncateMessagesForContext(messages);
+      // ── tool_calls protocol validation & cleanup ─────────────────────
+      // Strip orphaned assistant messages with tool_calls but no subsequent
+      // tool responses — prevents "tool_calls must be followed by tool messages" errors.
+      const truncatedForLlm = this.cleanOrphanedToolCalls(truncateMessagesForContext(messages));
       const toolCallsCount = truncatedForLlm.filter((m) => m.role === 'assistant' && m.tool_calls?.length).length;
       const toolResponsesCount = truncatedForLlm.filter((m) => m.role === 'tool').length;
       console.log(`[AgentOrchestrator] turn=${turn} tool_calls count: ${toolCallsCount}, tool responses count: ${toolResponsesCount}, total messages: ${truncatedForLlm.length}`);
       if (toolCallsCount > 0 && toolResponsesCount === 0) {
-        console.warn(`[AgentOrchestrator] WARNING: ${toolCallsCount} assistant messages with tool_calls but 0 tool responses — may trigger protocol error`);
+        console.warn(`[AgentOrchestrator] WARNING: ${toolCallsCount} assistant messages with tool_calls but 0 tool responses — stripped to prevent protocol error`);
       }
 
       const toolsCap = this.costManager.getToolsOutputCap();
       const fallbackCaps = this.costManager.getCaps('auto', 'decision');
       const maxTokensForTools = toolsCap ?? fallbackCaps.maxOutputTokens;
-      let response = modelKey
-        ? await this.providerRouter
-            .generateWithTools({
-              selectedModelKey: modelKey,
-              selectedModelIdOverride: options?.modelIdOverride,
-              messages: truncatedForLlm,
-              tools: PENTEST_TOOL_DEFS,
-              mode: 'decision',
-              tool_choice: toolChoice,
-            })
-            .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
-        : await this.llmService.generateWithTools(
-            model!,
-            truncatedForLlm,
-            PENTEST_TOOL_DEFS,
-            { tool_choice: toolChoice, max_tokens: maxTokensForTools },
-          );
+
+      let response: { content: string; tool_calls?: any[] } | null = null;
+      let llmError: string | null = null;
+
+      try {
+        response = modelKey
+          ? await this.providerRouter
+              .generateWithTools({
+                selectedModelKey: modelKey,
+                selectedModelIdOverride: options?.modelIdOverride,
+                messages: truncatedForLlm,
+                tools: PENTEST_TOOL_DEFS,
+                mode: 'decision',
+                tool_choice: toolChoice,
+              })
+              .then((r) => ({ content: r.content, tool_calls: r.tool_calls }))
+          : await this.llmService.generateWithTools(
+              model!,
+              truncatedForLlm,
+              PENTEST_TOOL_DEFS,
+              { tool_choice: toolChoice, max_tokens: maxTokensForTools },
+            );
+      } catch (err: any) {
+        llmError = err?.message || String(err);
+        console.error(`[AgentOrchestrator] LLM error turn=${turn}: ${llmError}`);
+        
+        // Handle model not available — auto-fallback to another model
+        if (llmError.includes('no longer available') || llmError.includes('model') || llmError.includes('not available')) {
+          push({ type: 'status', data: { message: `⚠️ Model error: ${llmError.slice(0, 100)} — auto-fallback...` } });
+          // Try with model=null to use system default
+          try {
+            response = await this.llmService.generateWithTools(
+              undefined as any, // null model = use default
+              truncatedForLlm,
+              PENTEST_TOOL_DEFS,
+              { tool_choice: toolChoice, max_tokens: maxTokensForTools },
+            );
+            llmError = null;
+            push({ type: 'status', data: { message: '✅ Fallback model OK — continuing.' } });
+          } catch (fallbackErr: any) {
+            llmError = `Fallback also failed: ${fallbackErr?.message || fallbackErr}`;
+            console.error(`[AgentOrchestrator] Fallback failed: ${llmError}`);
+          }
+        }
+      }
       if (!response) {
         // CHECKLIST GUARD: dont break if pentest checklist incomplete
         try {
@@ -1368,6 +1397,42 @@ export class AgentOrchestratorService {
     }
 
     return `Hi! I'm here to help with security — things like finding vulnerabilities, explaining attacks (SQL injection, XSS, etc.), and how to fix them. You can ask me anything: run a pentest on a URL, get step-by-step testing tips, or just chat about security. What's on your mind?`;
+  }
+
+  /**
+   * Strip orphaned assistant messages that have tool_calls but no subsequent
+   * tool response messages. Prevents "tool_calls must be followed by tool messages"
+   * protocol errors when the LLM API rejects malformed message sequences.
+   */
+  private cleanOrphanedToolCalls(messages: LlmMessage[]): LlmMessage[] {
+    const result: LlmMessage[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      // If this is an assistant message with tool_calls...
+      if (msg.role === 'assistant' && msg.tool_calls?.length) {
+        // Check if there's at least one tool message after it
+        let hasToolResponse = false;
+        for (let j = i + 1; j < messages.length; j++) {
+          if (messages[j].role === 'tool') {
+            hasToolResponse = true;
+            break;
+          }
+          // If we hit another assistant or user message before a tool response,
+          // the tool_calls are orphaned
+          if (messages[j].role === 'assistant' || messages[j].role === 'user') {
+            break;
+          }
+        }
+        if (!hasToolResponse) {
+          // Strip tool_calls from this message — keep the text content only
+          console.warn(`[cleanOrphanedToolCalls] Stripping orphaned tool_calls from assistant message at index ${i}`);
+          result.push({ role: 'assistant', content: msg.content || '' });
+          continue;
+        }
+      }
+      result.push(msg);
+    }
+    return result;
   }
 
   /**

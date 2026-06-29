@@ -152,18 +152,23 @@ export class PromptManagerService {
       }
     }
 
-    // Strategy 2: Check messages for phase keywords
+    // Strategy 2: Check messages for phase keywords (word-boundary match only)
     const recentText = messages
       .slice(-5)
       .map((m) => (typeof m.content === 'string' ? m.content : ''))
       .join(' ')
       .toLowerCase();
 
-    // Check for explicit phase mentions in tool results or messages
+    // Check for explicit phase mentions in tool results or messages.
+    // Use word-boundary matching to avoid: "report_finding" → "report", "recon_complete" → "recon".
     for (const phase of PHASE_ORDER) {
       if (phase === 'completed') continue;
-      const phaseVariants = [phase, phase.replace(/_/g, ' '), phase.replace(/_/g, '-')];
-      if (phaseVariants.some((v) => recentText.includes(v))) {
+      // Only match the phase name as a standalone word, not inside a compound like "report_finding" or "recon_complete"
+      const wordBoundary = new RegExp(`(?:^|[^a-z])${phase.replace(/_/g, '[ _]')}(?:[^a-z]|$)`, 'i');
+      if (wordBoundary.test(recentText)) {
+        // Verify it's not just a tool name (report_finding contains "report")
+        if (phase === 'report' && recentText.includes('report_finding')) continue;
+        if (phase === 'recon' && recentText.includes('recon_complete')) continue;
         return phase;
       }
     }

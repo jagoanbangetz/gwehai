@@ -365,6 +365,8 @@ export class ToolsService {
     target?: string;
     timeoutMs?: number;
     cwd?: string;
+    /** Script content to write to temp file and execute — safer for complex grep/sed/awk patterns. */
+    scriptContent?: string;
   }): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const command = options.command;
     if (!command) {
@@ -409,6 +411,42 @@ export class ToolsService {
     const timeoutMs = options.timeoutMs || 60000;
     const runInContainer = this.getRunInContainer();
     const containerName = this.getToolsContainerName();
+
+    // ── Script wrapper mode ─────────────────────────────────────────────
+    // When scriptContent is provided (complex grep/sed/awk patterns),
+    // write to temp file and execute it safely instead of passing through sh -c.
+    if (options.scriptContent) {
+      const os = require('os');
+      const fs = require('fs');
+      const path = require('path');
+      const tmpScript = path.join(os.tmpdir(), `gwehai-exec-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.sh`);
+      fs.writeFileSync(tmpScript, `#!/bin/sh\nset -e\n${options.scriptContent}`, { mode: 0o755 });
+      try {
+        const result = await new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) => {
+          const run = runInContainer && containerName
+            ? `docker cp ${tmpScript} ${containerName}:${tmpScript} && docker exec ${containerName} sh ${tmpScript}`
+            : `sh ${tmpScript}`;
+          exec(run, { cwd: runInContainer ? undefined : cwd, timeout: timeoutMs, shell: '/bin/sh' }, (error, stdout, stderr) => {
+            const out = stdout || '';
+            const err = stderr || '';
+            const exitCode = error && typeof (error as { code?: number }).code === 'number'
+              ? (error as { code: number }).code
+              : error ? 1 : 0;
+            const stderrWithCode = exitCode !== 0 && err.trim() === '' ? `Command exited with code ${exitCode}` : err;
+            resolve({ stdout: out, stderr: stderrWithCode, exitCode });
+          });
+        });
+        // Cleanup temp script
+        try { fs.unlinkSync(tmpScript); } catch {}
+        if (runInContainer && containerName) {
+          exec(`docker exec ${containerName} rm -f ${tmpScript}`, () => {});
+        }
+        return result;
+      } catch (err: any) {
+        try { fs.unlinkSync(tmpScript); } catch {}
+        throw err;
+      }
+    }
 
     const runWithShell = (cmdLine: string) => {
       return new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) => {
