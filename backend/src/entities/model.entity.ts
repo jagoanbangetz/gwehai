@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   OneToMany,
 } from 'typeorm';
+import { Exclude } from 'class-transformer';
 import { UsageEvent } from './usage-event.entity';
 
 export enum ModelProvider {
@@ -37,7 +38,8 @@ export class Model {
   apiModelId: string; // Actual model ID sent to the provider API (e.g., "gpt-4-turbo")
 
   @Column({ type: 'text', nullable: true })
-  apiKey: string; // API key for this provider (encrypted at rest ideally)
+  @Exclude()
+  apiKey: string; // API key for this provider — NEVER exposed in API responses
 
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   pointsPer1kInputTokens: number; // Cost in points per 1k input tokens

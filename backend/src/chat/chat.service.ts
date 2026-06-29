@@ -339,22 +339,34 @@ export class ChatService {
     ];
     let content: string;
     const modelKey = options?.model_key || (!model ? 'auto' : undefined);
+    let llmFailed = false;
     if (modelKey) {
-      const llmResult = await this.providerRouter.runChatCompletion({
-        selectedModelKey: modelKey,
-        selectedModelIdOverride: options?.modelIdOverride,
-        messages,
-        mode: 'decision',
-      });
-      content = llmResult.text?.trim() ? llmResult.text.trim() : this.agentOrchestrator['generateLocalResponse'](message);
-      if (llmResult.meta && this.costManager.isCostDebug()) {
-        pushEvent({ type: 'meta', data: llmResult.meta });
+      try {
+        const llmResult = await this.providerRouter.runChatCompletion({
+          selectedModelKey: modelKey,
+          selectedModelIdOverride: options?.modelIdOverride,
+          messages,
+          mode: 'decision',
+        });
+        content = llmResult.text?.trim() ? llmResult.text.trim() : this.agentOrchestrator['generateLocalResponse'](message);
+        if (llmResult.meta && this.costManager.isCostDebug()) {
+          pushEvent({ type: 'meta', data: llmResult.meta });
+        }
+      } catch (err: any) {
+        console.error(`[ChatService] runChatCompletion failed (key=${modelKey}): ${err?.message}`);
+        llmFailed = true;
       }
-    } else {
-      const response = await this.llmService.generate(model!, messages);
-      content = response?.content?.trim()
-        ? response.content.trim()
-        : this.agentOrchestrator['generateLocalResponse'](message);
+    }
+    if (!modelKey || llmFailed) {
+      try {
+        const response = await this.llmService.generate(model!, messages);
+        content = response?.content?.trim()
+          ? response.content.trim()
+          : this.agentOrchestrator['generateLocalResponse'](message);
+      } catch (err: any) {
+        console.error(`[ChatService] llmService.generate failed (model=${model?.name}): ${err?.message}`);
+        content = this.agentOrchestrator['generateLocalResponse'](message);
+      }
     }
 
     if (abortSignal?.aborted) {
@@ -571,9 +583,14 @@ export class ChatService {
       { role: 'system', content: PENTEST_SYSTEM_PROMPT },
       { role: 'user', content: message },
     ];
-    const llmResult = await this.llmService.generate(model, llmMessages);
-    if (llmResult && llmResult.content) {
-      return { content: llmResult.content, usage: llmResult.usage };
+    try {
+      const llmResult = await this.llmService.generate(model, llmMessages);
+      if (llmResult && llmResult.content) {
+        return { content: llmResult.content, usage: llmResult.usage };
+      }
+    } catch (err: any) {
+      console.error(`[ChatService] generateResponse failed (model=${model?.name}): ${err?.message}`);
+      // Fall through to local response
     }
     const fallback = this.agentOrchestrator['generateLocalResponse'](message);
     return { content: fallback };
