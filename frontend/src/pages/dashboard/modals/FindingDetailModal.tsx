@@ -14,6 +14,9 @@ export default function FindingDetailModal({ finding, onClose }: Props) {
   const sev = ((finding.metadata as any)?.severity || 'info').toLowerCase()
   const title = (finding.metadata as any)?.title || 'Finding detail'
   const confidence = (finding.metadata as any)?.confidence as number | undefined
+  const confidenceLabel = (finding.metadata as any)?.confidence_label as string | undefined
+  const confidenceReason = (finding.metadata as any)?.confidence_reason as string | undefined
+  const remediation = (finding.metadata as any)?.remediation as string | undefined
   const ports = ((finding.metadata as any)?.ports ?? []) as PortInfo[]
 
   return (
@@ -54,7 +57,15 @@ export default function FindingDetailModal({ finding, onClose }: Props) {
                     />
                   </span>
                   {Math.round(confidence * 100)}%
+                  {confidenceLabel && <span className="finding-detail-confidence-label"> • {confidenceLabel}</span>}
                 </span>
+              </div>
+            )}
+            {confidenceReason && (
+              <div className="finding-detail-meta-item finding-detail-meta-item--wide">
+                <i className="fa-solid fa-comment-dots" />
+                <span className="finding-detail-meta-label">Why this score</span>
+                <span className="finding-detail-meta-value finding-detail-confidence-reason">{confidenceReason}</span>
               </div>
             )}
             <div className="finding-detail-meta-item">
@@ -88,6 +99,16 @@ export default function FindingDetailModal({ finding, onClose }: Props) {
                 <i className="fa-solid fa-flask" /> Proof of Concept (POC)
               </h3>
               <CollapsibleRawOutput content={finding.poc} language="text" showLineNumbers />
+            </section>
+          )}
+
+          {/* Remediation */}
+          {remediation && (
+            <section className="report-poc-section finding-detail-section finding-detail-remediation">
+              <h3>
+                <i className="fa-solid fa-shield-haltered" /> How to Fix
+              </h3>
+              <pre className="report-poc-detail">{remediation}</pre>
             </section>
           )}
 

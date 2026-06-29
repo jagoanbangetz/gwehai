@@ -188,7 +188,7 @@ export class ReportsService {
     userId: string,
     conversationId: string,
     detail: string,
-    options?: { title?: string; severity?: string; target?: string; poc?: string; finding_key?: string; confidence?: number; confidence_reason?: string; confidence_label?: string },
+    options?: { title?: string; severity?: string; target?: string; poc?: string; finding_key?: string; confidence?: number; confidence_reason?: string; confidence_label?: string; remediation?: string },
   ) {
     const { randomUUID } = await import('crypto');
 
@@ -241,6 +241,7 @@ export class ReportsService {
         ...(options?.confidence != null && { confidence: options.confidence }),
         ...(options?.confidence_reason != null && { confidence_reason: options.confidence_reason }),
         ...(options?.confidence_label != null && { confidence_label: options.confidence_label }),
+        ...(options?.remediation != null && { remediation: options.remediation }),
       },
       startedAt: null,
       finishedAt: null,

@@ -350,6 +350,7 @@ export class ToolExecutorService {
       confidence,
       confidence_reason: confidenceReason,
       confidence_label: confidenceLabel,
+      remediation: args.remediation ? String(args.remediation) : undefined,
     });
 
     // Bridge: also save to pentest_findings table when running inside a pentest job
@@ -375,6 +376,7 @@ export class ToolExecutorService {
             target: args.target ? String(args.target) : undefined,
             finding_key: args.finding_key ? String(args.finding_key) : undefined,
             confidence_label: confidenceLabel,
+            remediation: args.remediation ? String(args.remediation) : undefined,
           },
           confidence,
           confidenceReason,

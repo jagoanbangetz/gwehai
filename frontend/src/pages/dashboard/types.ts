@@ -69,7 +69,14 @@ export interface FindingRow {
   detail: string | null
   poc: string | null
   target: string | null
-  metadata?: { title?: string; severity?: string }
+  metadata?: {
+    title?: string
+    severity?: string
+    confidence?: number
+    confidence_reason?: string
+    confidence_label?: string
+    remediation?: string
+  }
   createdAt: string
 }
 

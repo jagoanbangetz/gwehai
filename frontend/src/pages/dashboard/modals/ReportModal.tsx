@@ -23,12 +23,12 @@ interface Props {
 }
 
 const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low', 'info'] as const
-const SEVERITY_COLORS: Record<string, string> = {
-  critical: '#ff4444',
-  high: '#ff8800',
-  medium: '#ffcc00',
-  low: '#44aaff',
-  info: '#888888',
+const SEVERITY_BORDER: Record<string, string> = {
+  critical: '5px',
+  high: '4px',
+  medium: '3px',
+  low: '2px',
+  info: '1px',
 }
 
 function countSeverities(findings: FindingRow[]): Record<string, number> {
@@ -266,13 +266,41 @@ export default function ReportModal({
                   </div>
                 ) : (
                   <>
+                    {/* Executive Summary */}
+                    <div className="report-exec-summary">
+                      <div className="report-exec-summary-title">
+                        <i className="fa-solid fa-clipboard-list" /> Executive Summary
+                      </div>
+                      <div className="report-exec-summary-stats">
+                        {SEVERITY_ORDER.map((sev) => {
+                          const count = severityCounts[sev]
+                          if (count === 0 && sev !== 'info') return null
+                          return (
+                            <div key={sev} className="report-exec-stat">
+                              <span className="report-exec-stat-dot" style={{ borderLeft: `${SEVERITY_BORDER[sev]} solid #fff`, width: 0, height: 16 }} />
+                              <span className="report-exec-stat-count">{count}</span>
+                              <span className="report-exec-stat-label">{sev.charAt(0).toUpperCase() + sev.slice(1)}</span>
+                            </div>
+                          )
+                        })}
+                        <div className="report-exec-stat report-exec-stat--total">
+                          <span className="report-exec-stat-count">{findings.length}</span>
+                          <span className="report-exec-stat-label">Total</span>
+                        </div>
+                      </div>
+                      {severityCounts.critical > 0 && (
+                        <div className="report-exec-alert">
+                          <i className="fa-solid fa-triangle-exclamation" /> {severityCounts.critical} critical {severityCounts.critical === 1 ? 'finding requires' : 'findings require'} immediate attention
+                        </div>
+                      )}
+                    </div>
+
                     {/* Severity summary bar + view toggle */}
                     <div className="report-severity-bar">
                       {SEVERITY_ORDER.map((sev) => (
                         <div
                           key={sev}
                           className="report-severity-item"
-                          style={{ '--sev-color': SEVERITY_COLORS[sev] } as React.CSSProperties}
                         >
                           <span className="report-severity-dot" />
                           <span className="report-severity-label">{sev.charAt(0).toUpperCase() + sev.slice(1)}</span>
@@ -323,7 +351,7 @@ export default function ReportModal({
                               <div className="report-finding-card-left">
                                 <span
                                   className="report-finding-severity-indicator"
-                                  style={{ background: SEVERITY_COLORS[sev] || SEVERITY_COLORS.info }}
+                                  style={{ borderLeft: `${SEVERITY_BORDER[sev]} solid #fff`, background: 'transparent', width: 0, paddingLeft: 4 }}
                                 />
                               </div>
                               <div className="report-finding-card-body">
