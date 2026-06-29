@@ -462,6 +462,7 @@ export class AgentOrchestratorService {
     const CHECKLIST_STALE_THRESHOLD = 3;
     let continuationMode = false; // true = past step limit, checklist incomplete, auto-continuing
     let reportFindingCalledThisRun = 0; // Track report_finding calls for enforcement
+    let emptyResponseStreak = 0; // Track consecutive empty/failed LLM responses — break if >3
 
     while (turn < MAX_TURNS) {
       if (abortSignal?.aborted) throw new Error('Request was cancelled');
@@ -592,6 +593,13 @@ export class AgentOrchestratorService {
         }
       }
       if (!response) {
+        emptyResponseStreak++;
+        // After 3 consecutive empty/failed responses, break out — don't loop forever.
+        if (emptyResponseStreak >= 3) {
+          push({ type: 'status', data: { message: `⚠️ LLM failed ${emptyResponseStreak} times in a row. Stopping to prevent infinite loop.` } });
+          finalContent = this.generateLocalResponse(message);
+          break;
+        }
         // CHECKLIST GUARD: dont break if pentest checklist incomplete
         try {
           const pentestState = await this.pentestJobs.getStateByConversationId(userId, cid);
@@ -621,6 +629,9 @@ export class AgentOrchestratorService {
         finalContent = this.generateLocalResponse(message);
         break;
       }
+
+      // Reset empty response streak on successful LLM response
+      emptyResponseStreak = 0;
 
       // Refusal Detection & Re-prompt
       if (response.content && !response.tool_calls?.length && this.isRefusalResponse(response.content)) {
