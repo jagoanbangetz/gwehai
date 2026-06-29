@@ -1428,37 +1428,39 @@ export class AgentOrchestratorService {
   }
 
   /**
-   * Strip orphaned assistant messages that have tool_calls but no subsequent
-   * tool response messages. Prevents "tool_calls must be followed by tool messages"
+   * Strip orphaned or incomplete assistant tool_calls messages.
+   * Prevents "tool_calls must be followed by tool messages" / "insufficient tool messages"
    * protocol errors when the LLM API rejects malformed message sequences.
    */
   private cleanOrphanedToolCalls(messages: LlmMessage[]): LlmMessage[] {
     const result: LlmMessage[] = [];
+    let stripped = 0;
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
-      // If this is an assistant message with tool_calls...
       if (msg.role === 'assistant' && msg.tool_calls?.length) {
-        // Check if there's at least one tool message after it
-        let hasToolResponse = false;
+        // Count tool messages that follow before the next non-tool message
+        let toolCount = 0;
         for (let j = i + 1; j < messages.length; j++) {
           if (messages[j].role === 'tool') {
-            hasToolResponse = true;
-            break;
-          }
-          // If we hit another assistant or user message before a tool response,
-          // the tool_calls are orphaned
-          if (messages[j].role === 'assistant' || messages[j].role === 'user') {
-            break;
+            toolCount++;
+          } else {
+            break; // stop at first non-tool message
           }
         }
-        if (!hasToolResponse) {
-          // Strip tool_calls from this message — keep the text content only
-          console.warn(`[cleanOrphanedToolCalls] Stripping orphaned tool_calls from assistant message at index ${i}`);
+        // Only keep this message if ALL tool_calls have corresponding tool responses
+        if (toolCount < msg.tool_calls.length) {
+          console.warn(`[cleanOrphanedToolCalls] Stripping incomplete tool_calls: ${msg.tool_calls.length} calls but only ${toolCount} tool responses`);
           result.push({ role: 'assistant', content: msg.content || '' });
+          // Skip the orphaned/incomplete tool messages that follow
+          i += toolCount;
+          stripped++;
           continue;
         }
       }
       result.push(msg);
+    }
+    if (stripped > 0) {
+      console.warn(`[cleanOrphanedToolCalls] Stripped ${stripped} incomplete tool_calls message(s)`);
     }
     return result;
   }
