@@ -662,7 +662,7 @@ export class AgentOrchestratorService {
         push({ type: 'status', data: { message: 'Running tools...' } });
         messages.push({
           role: 'assistant',
-          content: response.content || '',
+          content: this.parseThinkingAndFinal(response.content || '').final,
           tool_calls: response.tool_calls,
         });
 
@@ -971,7 +971,7 @@ export class AgentOrchestratorService {
         push({ type: 'status', data: { message: `Checklist guard skipped: ${checkErr?.message || 'unknown'}` } });
       }
 
-      finalContent = response.content || '';
+      finalContent = this.parseThinkingAndFinal(response.content || '').final;
       const tokensFinalTurn = Math.ceil((response.content?.length || 0) / 4) + 500;
       await this.planUsage.recordStep(userId, cid, tokensFinalTurn);
       break;

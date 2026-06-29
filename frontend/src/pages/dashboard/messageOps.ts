@@ -170,6 +170,10 @@ export function cleanStreamChunk(raw: any): string {
   }
 
   clean = String(clean || '')
+
+  // Strip <think>...</think> blocks — these are internal reasoning, not for display.
+  clean = clean.replace(/<think>[\s\S]*?<\/think>/gi, '')
+
   if (INVALID_CONTENT.has(clean) || clean.trim().length === 0) {
     return ''
   }
