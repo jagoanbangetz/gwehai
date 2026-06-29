@@ -670,6 +670,23 @@ export class AgentOrchestratorService {
       }
 
       if (response.tool_calls && response.tool_calls.length > 0) {
+        // ═══ HARD STOP: If checklist is already 100% done, don't run more tools. ═══
+        // Prevents infinite "Planning next plan..." loop when agent keeps calling
+        // tools even after all checklist sections are completed.
+        try {
+          const pentestState = await this.pentestJobs.getStateByConversationId(userId, cid);
+          if (pentestState) {
+            const checklist = pentestState.state.checklist ?? {};
+            const CHECKLIST_ORDER = ['recon', 'input_handling', 'auth_session', 'access_control', 'business_logic', 'other'];
+            const incomplete = CHECKLIST_ORDER.filter((s) => !checklist[s]);
+            if (incomplete.length === 0) {
+              push({ type: 'status', data: { message: '✅ All checklist sections complete. Stopping agent.' } });
+              finalContent = response.content || '';
+              break;
+            }
+          }
+        } catch { /* best-effort */ }
+
         push({ type: 'status', data: { message: 'Running tools...' } });
         messages.push({
           role: 'assistant',
