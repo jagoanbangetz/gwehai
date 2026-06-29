@@ -47,7 +47,7 @@ export function getModelOptions(): ModelOption[] {
       key: 'auto',
       label: 'Auto',
       provider: 'deepseek',
-      defaultModel: getEnv('DEFAULT_AUTO_MODEL', getEnv('DEEPSEEK_CHAT_MODEL_ID', 'deepseek-chat')),
+      defaultModel: getEnv('DEFAULT_AUTO_MODEL', getEnv('DEEPSEEK_CHAT_MODEL_ID', 'deepseek-v4-pro')),
       apiKeyEnv: 'DEEPSEEK_API_KEY',
     },
     // ── DeepSeek ──
