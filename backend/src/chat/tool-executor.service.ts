@@ -201,16 +201,30 @@ export class ToolExecutorService {
   }
 
   private async handleExec(args: Record<string, any>): Promise<string> {
-    const cmdLine = String(args.command || '').trim();
+    let cmdLine = String(args.command || '').trim();
     if (!cmdLine) {
-      // LAYER 2: Return plain-text error (NOT JSON) for consistent noise filtering.
       // The '{ skipped: true }' flag in JSON form is also returned for programmatic consumers.
-      return JSON.stringify({ error: 'Error: exec requires a non-empty command. Provide a valid command (e.g. "curl -I https://target.com", "nmap -sV target.com").', skipped: true });
+      return JSON.stringify({ error: 'Error: exec requires a non-empty command.', skipped: true });
     }
+
+    // ── Strip inline env VAR=value prefix ────────────────────────────
+    // Agent sometimes writes "PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium chromium ..."
+    // Parse VAR=value prefixes so the actual command is found correctly.
+    const envVars: Record<string, string> = {};
+    while (/^[A-Za-z_][A-Za-z0-9_]*=/.test(cmdLine)) {
+      const eqIdx = cmdLine.indexOf('=');
+      const spaceIdx = cmdLine.indexOf(' ', eqIdx);
+      const valEnd = spaceIdx === -1 ? cmdLine.length : spaceIdx;
+      const varName = cmdLine.slice(0, eqIdx);
+      const varValue = cmdLine.slice(eqIdx + 1, valEnd);
+      envVars[varName] = varValue;
+      cmdLine = cmdLine.slice(valEnd).trim();
+    }
+
     const parts = cmdLine.split(/\s+/).filter(Boolean);
     const command = parts[0] || '';
     if (!command) {
-      return JSON.stringify({ error: 'Error: exec requires a non-empty command. Provide a valid command.', skipped: true });
+      return JSON.stringify({ error: 'Error: exec requires a non-empty command.', skipped: true });
     }
 
     // ── Tool availability pre-check ────────────────────────────────────
