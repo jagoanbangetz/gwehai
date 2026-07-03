@@ -16,7 +16,7 @@ import { getStoredModelKey, setStoredModelKey, getStoredModelId, type ModelKey }
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { PLAN_TIERS } from '../config/plans'
 import type { Message, Tool, ToolState, ChatHistory } from './dashboard/types'
-import { isConversationUuid, conversationToChatHistory } from './dashboard/utils'
+import { isConversationUuid, conversationToChatHistory, detectChatTypeFromInput, generateSummaryFromInput } from './dashboard/utils'
 import { makeAssistantMessage, makeUserMessage, makeErrorMessage, createMessageId } from './dashboard/messageOps'
 import { handleStreamEvent, type StreamHandlerContext } from './dashboard/streamHandler'
 import { useVoiceRecognition } from './dashboard/hooks/useVoiceRecognition'
@@ -358,7 +358,7 @@ const Dashboard = () => {
       const convId = jobRes.conversation_id ?? undefined
       if (convId) {
         setCurrentConversationId(convId); setConversationRunStatus((prev) => ({ ...prev, [convId]: 'running' }))
-        if (isNewChat) { setCurrentChatId(convId); setChatHistory((prev) => { const n: ChatHistory = { id: convId, title: userInput.substring(0, 50), messages: messagesRef.current, createdAt: new Date(), updatedAt: new Date() }; const u = [n, ...prev.filter((c) => c.id !== convId)]; if (user?.id) localStorage.setItem(`gwehai_chat_history_${user.id}`, JSON.stringify(u)); return u }) }
+        if (isNewChat) { setCurrentChatId(convId); setChatHistory((prev) => { const n: ChatHistory = { id: convId, title: userInput.substring(0, 50), messages: messagesRef.current, createdAt: new Date(), updatedAt: new Date(), chatType: detectChatTypeFromInput(userInput), summary: generateSummaryFromInput(userInput) }; const u = [n, ...prev.filter((c) => c.id !== convId)]; if (user?.id) localStorage.setItem(`gwehai_chat_history_${user.id}`, JSON.stringify(u)); return u }) }
       }
       const es = gwehaiClient.connectToEvents(jobId, (event: GwehAIEvent) => handleStreamEvent(event, streamCtx), (_error) => {
         if (intentionalCloseRef.current) return

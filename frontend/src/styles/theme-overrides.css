@@ -454,6 +454,59 @@
   color: #1a1a1a;
 }
 
+/* ── AI Sidebar: light theme overrides ── */
+[data-theme="light"] .chat-item-icon {
+  background: #f0f0f5;
+  color: #5566cc;
+}
+
+[data-theme="light"] .chat-history-item.active .chat-item-icon {
+  background: #1a1a1a;
+  color: #fff;
+}
+
+[data-theme="light"] .chat-title {
+  color: #333;
+}
+
+[data-theme="light"] .chat-summary {
+  color: #888;
+}
+
+[data-theme="light"] .chat-history-item.active .chat-summary {
+  color: #666;
+}
+
+[data-theme="light"] .chat-type-badge--pentest {
+  background: #e0f5e0;
+  color: #2a7a2a;
+}
+
+[data-theme="light"] .chat-type-badge--qa {
+  background: #e0e8f5;
+  color: #3355aa;
+}
+
+[data-theme="light"] .chat-type-badge--general {
+  background: #eee;
+  color: #666;
+}
+
+[data-theme="light"] .chat-history-item.active .chat-type-badge--pentest {
+  background: #2a7a2a;
+  color: #fff;
+}
+
+[data-theme="light"] .chat-history-item.active .chat-type-badge--qa {
+  background: #3355aa;
+  color: #fff;
+}
+
+[data-theme="light"] .chat-history-item.active .chat-type-badge--general {
+  background: #555;
+  color: #fff;
+}
+
 /* ── Buttons & Inputs (generic) ── */
 [data-theme="light"] button {
   color: inherit;

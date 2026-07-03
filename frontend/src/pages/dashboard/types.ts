@@ -50,6 +50,10 @@ export interface ChatHistory {
   updatedAt: Date
   /** When set, this chat is linked to a pentest job (one job = one conversation). */
   jobId?: string
+  /** Auto-detected chat type based on content. */
+  chatType?: 'pentest' | 'qa' | 'general'
+  /** Auto-generated short summary of the conversation. */
+  summary?: string
 }
 
 /** One row in the Report menu: unique by (domain, conversationId, date) */

@@ -100,6 +100,41 @@ export function hacktivityConversationsEqual(a: HacktivityConversationRow[], b: 
   return a.every((x, i) => x.conversationId === b[i].conversationId && x.count === b[i].count)
 }
 
+/** Pentest-related keywords for chat type detection */
+const PENTEST_KEYWORDS = /\b(pentest|penetration|vulnerability|exploit|scan|security test|hack|nmap|sql injection|xss|csrf|rce|lfi|rfi|sqli|recon|payload|cve|owasp|burp|metasploit|nikto|dirb|gobuster|subfinder|httpx)\b/i
+
+/** Detect chat type from raw user input text (for instant sidebar classification) */
+export function detectChatTypeFromInput(input: string): 'pentest' | 'qa' {
+  return PENTEST_KEYWORDS.test(input) ? 'pentest' : 'qa'
+}
+
+/** Generate a short summary from raw user input */
+export function generateSummaryFromInput(input: string): string {
+  const trimmed = input.trim()
+  if (trimmed.length <= 80) return trimmed
+  return trimmed.substring(0, 77) + '...'
+}
+
+/** Detect chat type from message content and job association */
+function detectChatType(messages: Message[], jobId?: string | null): 'pentest' | 'qa' | 'general' {
+  if (jobId) return 'pentest'
+  for (const msg of messages) {
+    if (msg.role === 'user' && PENTEST_KEYWORDS.test(msg.content)) return 'pentest'
+  }
+  if (messages.length > 0) return 'qa'
+  return 'general'
+}
+
+/** Generate a short summary from the first few messages */
+function generateSummary(messages: Message[]): string {
+  const userMsgs = messages.filter((m) => m.role === 'user').slice(0, 3)
+  if (userMsgs.length === 0) return ''
+  const first = userMsgs[0].content.trim()
+  // Use first user message, truncated to ~80 chars
+  if (first.length <= 80) return first
+  return first.substring(0, 77) + '...'
+}
+
 /** Map DB conversation + messages to ChatHistory entry */
 export function conversationToChatHistory(
   conv: {
@@ -153,12 +188,16 @@ export function conversationToChatHistory(
       }
     })
   const jobId = conv.pentestJobId ?? jobIdFromUrl
+  const chatType = detectChatType(messages, jobId)
+  const summary = generateSummary(messages)
   return {
     id: conv.id,
     title: conv.title || 'New Chat',
     messages,
     createdAt: new Date(conv.createdAt),
     updatedAt: new Date(conv.updatedAt),
+    chatType,
+    summary,
     ...(jobId ? { jobId } : {}),
   }
 }

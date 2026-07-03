@@ -414,12 +414,108 @@
 }
 
 .chat-title {
-  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding-right: 0.5rem;
-  font-size: 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.3;
+  color: oklch(0.82 0.003 60);
+}
+
+/* ─── AI Sidebar: chat type icon ─── */
+.chat-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  margin-right: 0.625rem;
+  background: oklch(0.18 0.005 260 / 0.6);
+  color: oklch(0.65 0.015 260);
+  transition: background 0.2s, color 0.2s;
+}
+
+.chat-history-item.active .chat-item-icon {
+  background: oklch(0.92 0.003 60);
+  color: oklch(0.2 0.005 260);
+}
+
+.chat-item-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ─── AI Sidebar: content wrapper ─── */
+.chat-item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+/* ─── AI Sidebar: summary text ─── */
+.chat-summary {
+  display: block;
+  font-size: 0.75rem;
+  line-height: 1.3;
+  color: oklch(0.55 0.005 60);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.chat-history-item.active .chat-summary {
+  color: oklch(0.45 0.005 60);
+}
+
+/* ─── AI Sidebar: type badge ─── */
+.chat-type-badge {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  margin-top: 0.15rem;
+  line-height: 1.2;
+}
+
+.chat-type-badge--pentest {
+  background: oklch(0.25 0.06 145 / 0.3);
+  color: oklch(0.72 0.12 145);
+}
+
+.chat-type-badge--qa {
+  background: oklch(0.25 0.06 260 / 0.3);
+  color: oklch(0.72 0.12 260);
+}
+
+.chat-type-badge--general {
+  background: oklch(0.25 0.005 60 / 0.3);
+  color: oklch(0.62 0.005 60);
+}
+
+.chat-history-item.active .chat-type-badge--pentest {
+  background: oklch(0.85 0.08 145);
+  color: oklch(0.25 0.06 145);
+}
+
+.chat-history-item.active .chat-type-badge--qa {
+  background: oklch(0.85 0.08 260);
+  color: oklch(0.25 0.06 260);
+}
+
+.chat-history-item.active .chat-type-badge--general {
+  background: oklch(0.88 0.003 60);
+  color: oklch(0.35 0.005 60);
 }
 
 .chat-history-item.active .chat-title {
@@ -607,8 +703,14 @@
 
 .dashboard-sidebar.closed .chat-title,
 .dashboard-sidebar.closed .chat-title-input,
-.dashboard-sidebar.closed .chat-menu-container {
+.dashboard-sidebar.closed .chat-menu-container,
+.dashboard-sidebar.closed .chat-summary,
+.dashboard-sidebar.closed .chat-type-badge {
   display: none;
+}
+
+.dashboard-sidebar.closed .chat-item-icon {
+  margin-right: 0;
 }
 
 .sidebar-upgrade {
