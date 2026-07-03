@@ -63,9 +63,12 @@ export class ConversationService {
     skipDefaultModel?: boolean,
   ): Promise<Conversation> {
     if (conversationId) {
+      // IMPORTANT: do NOT load messages relation here. Loading messages
+      // triggers TypeORM cascade on save(), which causes:
+      //   UPDATE "messages" SET "conversationId" = NULL
+      // Messages are loaded separately in getConversation() when needed for display.
       const conversation = await this.conversationRepo.findOne({
         where: { id: conversationId, userId },
-        relations: ['messages', 'messages.parts'],
       });
       if (conversation) {
         return conversation;

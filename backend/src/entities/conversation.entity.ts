@@ -53,9 +53,9 @@ export class Conversation {
   @UpdateDateColumn()
   updatedAt: Date;
 
-  // Relations
-  @OneToMany(() => Message, (message) => message.conversation, {
-    cascade: true,
-  })
+  // Relations — NO cascade: messages are managed independently.
+  // Cascade causes UPDATE "messages" SET "conversationId" = NULL when saving conversation,
+  // because TypeORM re-hydrates loaded relations with null conversation references.
+  @OneToMany(() => Message, (message) => message.conversation)
   messages: Message[];
 }
