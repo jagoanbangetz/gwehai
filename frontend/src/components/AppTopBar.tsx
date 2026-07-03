@@ -1,4 +1,5 @@
 import React from 'react'
+import ThemeToggle from './ThemeToggle'
 import './AppTopBar.css'
 
 export interface AppTopBarProps {
@@ -54,6 +55,7 @@ const AppTopBar: React.FC<AppTopBarProps> = ({
       </div>
 
       <div className="app-topbar-right">
+        <ThemeToggle />
         {!mobileLayout && userEmail && (
           <span className="app-topbar-email">{userEmail}</span>
         )}

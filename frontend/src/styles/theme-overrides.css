@@ -1,0 +1,532 @@
+/* ===================================================
+   Theme Overrides — Light Mode
+   Applies when data-theme="light" is set on <html>.
+   Uses high-specificity selectors to override hardcoded dark colors.
+   =================================================== */
+
+/* ── Landing Page: Header ── */
+[data-theme="light"] .header {
+  background: #fff;
+  border-bottom-color: #e0e0e0;
+}
+
+[data-theme="light"] .logo,
+[data-theme="light"] .logo-text {
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .logo-badge {
+  background: #f0f0f0;
+  border-color: #d0d0d0;
+  color: #333;
+}
+
+[data-theme="light"] .nav-link {
+  color: #666;
+}
+
+[data-theme="light"] .nav-link:hover {
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .header-link {
+  color: #555;
+}
+
+[data-theme="light"] .header-link:hover {
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .user-info .user-name {
+  color: #333;
+}
+
+[data-theme="light"] .logout-button {
+  color: #666;
+}
+
+/* ── Landing Page: Glass Cards ── */
+[data-theme="light"] .glass-card {
+  background: #fff;
+  border-color: #e0e0e0;
+}
+
+[data-theme="light"] .glass-card:hover {
+  border-color: #bbb;
+}
+
+/* ── Landing Page: Hero ── */
+[data-theme="light"] .hero {
+  background: #f8f8f8;
+}
+
+[data-theme="light"] .hero-title,
+[data-theme="light"] .hero-title span {
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .hero-subtitle {
+  color: #555;
+}
+
+[data-theme="light"] .hero-description {
+  color: #666;
+}
+
+/* ── Landing Page: Stats ── */
+[data-theme="light"] .stats-section {
+  background: #f5f5f5;
+}
+
+[data-theme="light"] .stat-card {
+  background: #fff;
+  border-color: #e0e0e0;
+}
+
+[data-theme="light"] .stat-number {
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .stat-label {
+  color: #666;
+}
+
+/* ── Landing Page: Features ── */
+[data-theme="light"] .features-section {
+  background: #f8f8f8;
+}
+
+[data-theme="light"] .feature-card {
+  background: #fff;
+  border-color: #e0e0e0;
+}
+
+[data-theme="light"] .feature-card:hover {
+  border-color: #bbb;
+}
+
+[data-theme="light"] .feature-title,
+[data-theme="light"] .feature-title span {
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .feature-description {
+  color: #666;
+}
+
+[data-theme="light"] .section-title {
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .section-subtitle {
+  color: #666;
+}
+
+/* ── Landing Page: FAQ ── */
+[data-theme="light"] .faq-section {
+  background: #f5f5f5;
+}
+
+[data-theme="light"] .faq-item {
+  background: #fff;
+  border-color: #e0e0e0;
+}
+
+[data-theme="light"] .faq-question {
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .faq-answer {
+  color: #555;
+}
+
+/* ── Landing Page: Footer ── */
+[data-theme="light"] .footer {
+  background: #f0f0f0;
+  border-top-color: #ddd;
+}
+
+[data-theme="light"] .footer-text,
+[data-theme="light"] .footer-link {
+  color: #666;
+}
+
+[data-theme="light"] .footer-link:hover {
+  color: #1a1a1a;
+}
+
+/* ── CTA Buttons ── */
+[data-theme="light"] .cta-button {
+  background: #1a1a1a;
+  color: #fff;
+}
+
+[data-theme="light"] .cta-button:hover {
+  background: #333;
+}
+
+[data-theme="light"] .hero-button.primary {
+  background: #16a34a;
+  color: #fff;
+}
+
+[data-theme="light"] .hero-button.secondary {
+  background: transparent;
+  border-color: #333;
+  color: #333;
+}
+
+[data-theme="light"] .hero-button.secondary:hover {
+  background: #333;
+  color: #fff;
+}
+
+/* ── Dashboard Layout ── */
+[data-theme="light"] .dashboard-layout {
+  background: #f8f8f8;
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .dashboard-top-line {
+  background: #1a1a1a;
+}
+
+/* ── Dashboard Sidebar ── */
+[data-theme="light"] .app-sidebar,
+[data-theme="light"] .sidebar,
+[data-theme="light"] .sidebarHeader,
+[data-theme="light"] .sidebarFooter {
+  background: #fff;
+}
+
+[data-theme="light"] .app-sidebar {
+  border-right-color: #e0e0e0;
+}
+
+[data-theme="light"] .sidebarHeader {
+  border-bottom-color: #e0e0e0;
+}
+
+[data-theme="light"] .sidebarFooter {
+  border-top-color: #e0e0e0;
+}
+
+[data-theme="light"] .app-sidebar-overlay {
+  background: rgba(0,0,0,0.3);
+}
+
+[data-theme="light"] .app-sidebar-drawer-open {
+  box-shadow: 4px 0 24px rgba(0,0,0,0.1);
+}
+
+/* Sidebar scrollbar light */
+[data-theme="light"] .sidebarScroll::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.15);
+}
+
+[data-theme="light"] .sidebarScroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,0,0,0.25);
+}
+
+[data-theme="light"] .sidebarScroll {
+  scrollbar-color: rgba(0,0,0,0.15) transparent;
+}
+
+/* ── Dashboard TopBar ── */
+[data-theme="light"] .app-topbar {
+  background: #fff;
+  border-bottom-color: #e0e0e0;
+}
+
+[data-theme="light"] .app-topbar-hamburger {
+  color: #333;
+}
+
+[data-theme="light"] .app-topbar-hamburger:hover {
+  background: rgba(0,0,0,0.05);
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .app-topbar-title-text {
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .app-topbar-email {
+  color: #666;
+}
+
+/* ── Chat / Messages Area ── */
+[data-theme="light"] .chat-container,
+[data-theme="light"] .messages-area {
+  background: #f8f8f8;
+}
+
+[data-theme="light"] .chat-input,
+[data-theme="light"] .composer-input {
+  background: #fff;
+  border-color: #ddd;
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .chat-input:focus,
+[data-theme="light"] .composer-input:focus {
+  border-color: #999;
+}
+
+[data-theme="light"] .user-message {
+  background: #f0f0f0;
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .assistant-message {
+  background: #fff;
+  color: #1a1a1a;
+}
+
+/* ── Modals ── */
+[data-theme="light"] .modal-overlay {
+  background: rgba(0,0,0,0.4);
+}
+
+[data-theme="light"] .modal-content {
+  background: #fff;
+  border-color: #ddd;
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .modal-header {
+  border-bottom-color: #e0e0e0;
+}
+
+[data-theme="light"] .modal-title {
+  color: #1a1a1a;
+}
+
+/* ── Auth Pages ── */
+[data-theme="light"] .auth-page,
+[data-theme="light"] .login-page,
+[data-theme="light"] .signup-page {
+  background: #f8f8f8;
+}
+
+[data-theme="light"] .auth-card,
+[data-theme="light"] .login-card,
+[data-theme="light"] .signup-card {
+  background: #fff;
+  border-color: #e0e0e0;
+}
+
+[data-theme="light"] .auth-title,
+[data-theme="light"] .login-title {
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .auth-input,
+[data-theme="light"] .login-input {
+  background: #f5f5f5;
+  border-color: #ddd;
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .auth-input:focus,
+[data-theme="light"] .login-input:focus {
+  border-color: #999;
+  background: #fff;
+}
+
+/* ── Pricing Page ── */
+[data-theme="light"] .pricing-section {
+  background: #f8f8f8;
+}
+
+[data-theme="light"] .pricing-card {
+  background: #fff;
+  border-color: #e0e0e0;
+}
+
+[data-theme="light"] .pricing-card:hover {
+  border-color: #bbb;
+}
+
+[data-theme="light"] .pricing-title {
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .pricing-price {
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .pricing-feature {
+  color: #555;
+}
+
+/* ── Pentest Pages ── */
+[data-theme="light"] .pentest-page,
+[data-theme="light"] .pentest-runner {
+  background: #f8f8f8;
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .pentest-card {
+  background: #fff;
+  border-color: #e0e0e0;
+}
+
+/* ── Admin Pages ── */
+[data-theme="light"] .admin-page,
+[data-theme="light"] .admin-layout {
+  background: #f5f5f5;
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .admin-card {
+  background: #fff;
+  border-color: #e0e0e0;
+}
+
+[data-theme="light"] .admin-table {
+  background: #fff;
+}
+
+[data-theme="light"] .admin-table th {
+  background: #f5f5f5;
+  color: #333;
+  border-bottom-color: #ddd;
+}
+
+[data-theme="light"] .admin-table td {
+  border-bottom-color: #eee;
+  color: #333;
+}
+
+/* ── Toast ── */
+[data-theme="light"] .toast {
+  background: #fff;
+  border-color: #ddd;
+  color: #1a1a1a;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* ── Settings Modal ── */
+[data-theme="light"] .settings-modal {
+  background: #fff;
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .settings-section {
+  border-bottom-color: #e0e0e0;
+}
+
+[data-theme="light"] .settings-label {
+  color: #333;
+}
+
+[data-theme="light"] .settings-input {
+  background: #f5f5f5;
+  border-color: #ddd;
+  color: #1a1a1a;
+}
+
+/* ── Code Blocks ── */
+[data-theme="light"] .code-block,
+[data-theme="light"] pre {
+  background: #f5f5f5;
+  border-color: #e0e0e0;
+  color: #1a1a1a;
+}
+
+[data-theme="light"] code {
+  color: #c7254e;
+}
+
+/* ── Chat Sidebar ── */
+[data-theme="light"] .chat-sidebar-item {
+  color: #555;
+}
+
+[data-theme="light"] .chat-sidebar-item:hover {
+  background: #f0f0f0;
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .chat-sidebar-item.active {
+  background: #e8e8e8;
+  color: #1a1a1a;
+}
+
+/* ── Buttons & Inputs (generic) ── */
+[data-theme="light"] button {
+  color: inherit;
+}
+
+[data-theme="light"] input,
+[data-theme="light"] textarea,
+[data-theme="light"] select {
+  background: #fff;
+  border-color: #ddd;
+  color: #1a1a1a;
+}
+
+/* ── Scrollbar (global) ── */
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.2);
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,0,0,0.3);
+}
+
+/* ── Selection ── */
+[data-theme="light"] ::selection {
+  background: rgba(0,0,0,0.15);
+  color: #1a1a1a;
+}
+
+/* ── Markdown Content ── */
+[data-theme="light"] .markdown-content {
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .markdown-content h1,
+[data-theme="light"] .markdown-content h2,
+[data-theme="light"] .markdown-content h3 {
+  color: #1a1a1a;
+}
+
+[data-theme="light"] .markdown-content a {
+  color: #0066cc;
+}
+
+[data-theme="light"] .markdown-content code {
+  background: #f0f0f0;
+  color: #c7254e;
+}
+
+[data-theme="light"] .markdown-content blockquote {
+  border-left-color: #ddd;
+  color: #666;
+}
+
+[data-theme="light"] .markdown-content table th {
+  background: #f5f5f5;
+  border-color: #ddd;
+}
+
+[data-theme="light"] .markdown-content table td {
+  border-color: #eee;
+}
+
+/* ── Status Badges ── */
+[data-theme="light"] .status-badge {
+  border-color: #ddd;
+}
+
+/* ── Transitions for smooth theme switch ── */
+[data-theme="light"] body,
+[data-theme="light"] .header,
+[data-theme="light"] .dashboard-layout,
+[data-theme="light"] .app-sidebar,
+[data-theme="light"] .app-topbar,
+[data-theme="light"] .modal-content {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}

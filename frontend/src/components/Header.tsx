@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { logo } from '../assets/images'
+import ThemeToggle from './ThemeToggle'
 import './Header.css'
 
 const Header = () => {
@@ -49,6 +50,7 @@ const Header = () => {
           </Link>
         </nav>
         <div className="header-actions">
+          <ThemeToggle />
           {isAuthenticated ? (
             <>
               <Link to="/agent" className="header-link">Agent</Link>

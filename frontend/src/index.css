@@ -48,6 +48,43 @@
   --radius-xl: 1.5rem;
 }
 
+/* ── Light Theme ── */
+[data-theme="light"] {
+  /* Gradients */
+  --gradient-primary: linear-gradient(135deg, #e0e0e0 0%, #bbb 50%, #888 100%);
+  --gradient-accent: linear-gradient(135deg, #222 0%, #444 50%, #666 100%);
+  --gradient-glow: linear-gradient(135deg, rgba(0,0,0,0.05) 0%, rgba(100,100,100,0.08) 100%);
+  --gradient-subtle: linear-gradient(135deg, rgba(0,0,0,0.02) 0%, rgba(100,100,100,0.03) 100%);
+
+  /* Colors */
+  --primary-color: #111;
+  --primary-foreground: #111;
+  --secondary-color: #666;
+  --accent-color: #444;
+  --accent-foreground: #111;
+
+  /* Text */
+  --text-primary: #1a1a1a;
+  --text-secondary: #555;
+  --text-muted: #888;
+
+  /* Backgrounds */
+  --bg-primary: #f8f8f8;
+  --bg-secondary: #fff;
+  --bg-card: rgba(255, 255, 255, 0.9);
+  --bg-glass: rgba(255, 255, 255, 0.7);
+
+  /* Border */
+  --border-color: rgba(0, 0, 0, 0.1);
+  --border-glow: rgba(0, 0, 0, 0.15);
+  --input-color: rgba(255, 255, 255, 0.9);
+
+  /* Glassmorphism */
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+}
+
 html {
   scroll-behavior: smooth;
 }

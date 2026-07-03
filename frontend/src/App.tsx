@@ -1,10 +1,12 @@
 import { useEffect, Suspense, lazy } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { ThemeProvider } from './context/ThemeContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import AdminRoute from './components/AdminRoute'
 import NavLoadingBar from './components/NavLoadingBar'
 import './App.css'
+import './styles/theme-overrides.css'
 
 // Lazy load semua halaman — cuma load yang dibuka user
 const Home = lazy(() => import('./pages/Home'))
@@ -80,13 +82,14 @@ function NotFoundRedirect() {
 
 function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <div className="App">
-          <NavLoadingBar />
-          <ScrollToHash />
-          <Suspense fallback={<LazyFallback />}>
-            <Routes>
+    <ThemeProvider>
+      <AuthProvider>
+        <Router>
+          <div className="App">
+            <NavLoadingBar />
+            <ScrollToHash />
+            <Suspense fallback={<LazyFallback />}>
+              <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
@@ -160,7 +163,8 @@ function App() {
           </Suspense>
         </div>
       </Router>
-    </AuthProvider>
+      </AuthProvider>
+    </ThemeProvider>
   )
 }
 
