@@ -1,6 +1,7 @@
 import { Injectable, HttpException, HttpStatus, Inject, forwardRef } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { execSync } from 'child_process';
+import { promises as dns } from 'dns';
 import { ChatService } from '../chat/chat.service';
 import { getAgentLabel } from '../chat/agent-names';
 import { PENTEST_SYSTEM_PROMPT } from '../prompt/pentest.system-prompt';
@@ -209,52 +210,70 @@ export class GwehAIService {
    * Returns {valid, reason} — fast enough to run synchronously before job creation.
    */
   private async validateTargetUrl(url: string): Promise<{ valid: boolean; reason?: string }> {
+    // Step 1: Parse URL
+    let parsed: URL;
     try {
-      const parsed = new URL(url);
+      parsed = new URL(url);
       if (!['http:', 'https:'].includes(parsed.protocol)) {
         return { valid: false, reason: `Unsupported protocol "${parsed.protocol}". Use http:// or https://` };
       }
-      // Strip trailing path/query for DNS check — we only validate the host
-      const hostname = parsed.hostname;
-      // Quick DNS check — if hostname doesn't resolve, no point running pentest
-      try {
-        execSync(`getent hosts ${hostname} || dig +short ${hostname} || nslookup ${hostname}`, {
-          timeout: 5000,
-          stdio: 'pipe',
-        });
-      } catch {
-        // DNS might fail in restricted env — fall through to HTTP check
-      }
-      // HTTP reachability check
-      try {
-        const resp = await fetch(url, {
-          method: 'HEAD',
-          signal: AbortSignal.timeout(5000),
-          redirect: 'follow',
-        });
-        if (!resp.ok && resp.status >= 400 && resp.status < 500) {
-          // 4xx is fine — site exists, just auth/permission issue
-          return { valid: true };
-        }
-        return { valid: true };
-      } catch (fetchErr: any) {
-        const msg = fetchErr?.message || String(fetchErr);
-        if (msg.includes('ENOTFOUND') || msg.includes('getaddrinfo')) {
-          return { valid: false, reason: `Host "${hostname}" not found. Check the URL spelling and try again.` };
-        }
-        if (msg.includes('ECONNREFUSED')) {
-          return { valid: false, reason: `Connection refused by ${hostname}. The server may be down or blocking our IP.` };
-        }
-        if (msg.includes('CERT_') || msg.includes('SSL_') || msg.includes('self[- ]signed')) {
-          // TLS errors — site exists but cert issue
-          return { valid: true, reason: 'TLS certificate issue detected — site exists but has cert problems.' };
-        }
-        // Unknown error — allow through with warning but log it
-        console.warn(`[target-validation] ${url}: ${msg}`);
-        return { valid: true };
-      }
-    } catch (urlErr: any) {
+    } catch {
       return { valid: false, reason: `Invalid URL format: "${url}". Use https://example.com format.` };
+    }
+
+    const hostname = parsed.hostname;
+
+    // Step 2: DNS resolution — MUST pass. No DNS = no pentest.
+    let dnsOk = false;
+    try {
+      await dns.resolve(hostname);
+      dnsOk = true;
+    } catch {
+      // Try resolve4 as fallback
+      try { await dns.resolve4(hostname); dnsOk = true; } catch { /* still fail */ }
+    }
+
+    if (!dnsOk) {
+      return { valid: false, reason: `Host "${hostname}" does not resolve in DNS. Check the domain spelling.` };
+    }
+
+    // Step 3: HTTP reachability check
+    try {
+      const resp = await fetch(url, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(8000),
+        redirect: 'follow',
+      });
+      // Any HTTP response (including 4xx/5xx) = target is reachable
+      return { valid: true };
+    } catch (fetchErr: any) {
+      const msg = (fetchErr?.cause?.message || fetchErr?.message || String(fetchErr)).toLowerCase();
+
+      // ENOTFOUND despite DNS passing — weird but block
+      if (msg.includes('enotfound') || msg.includes('getaddrinfo')) {
+        return { valid: false, reason: `Cannot reach "${hostname}" — DNS resolves but HTTP connection fails.` };
+      }
+      // Connection refused — server down or blocking
+      if (msg.includes('econnrefused')) {
+        return { valid: false, reason: `Connection refused by ${hostname}. The server may be down or blocking requests.` };
+      }
+      // TLS errors — site exists, cert problem is OK for pentest
+      if (msg.includes('cert_') || msg.includes('ssl_') || msg.includes('tls') || msg.includes('self-signed') || msg.includes('self signed') || msg.includes('expired')) {
+        return { valid: true };
+      }
+      // Timeout — could be slow server, allow but warn
+      if (msg.includes('timeout') || msg.includes('abort')) {
+        console.warn(`[target-validation] ${url}: HTTP timeout (8s) — allowing with warning`);
+        return { valid: true };
+      }
+      // ECONNRESET, EPIPE, etc. — server exists but connection unstable, allow
+      if (msg.includes('econnreset') || msg.includes('epipe') || msg.includes('etimedout')) {
+        console.warn(`[target-validation] ${url}: connection issue (${msg.slice(0,80)}) — allowing`);
+        return { valid: true };
+      }
+      // Truly unknown error — BLOCK, don't silently pass
+      console.error(`[target-validation] ${url}: UNKNOWN error — BLOCKING. ${msg}`);
+      return { valid: false, reason: `Cannot reach "${hostname}". ${fetchErr?.message || 'Unknown network error'}.` };
     }
   }
 
