@@ -21,6 +21,7 @@ const Terms = lazy(() => import('./pages/Terms'))
 const Privacy = lazy(() => import('./pages/Privacy'))
 const Contact = lazy(() => import('./pages/Contact'))
 const PentestRunner = lazy(() => import('./pages/PentestRunner'))
+const PentestStream = lazy(() => import('./pages/PentestStream'))
 const AdminLayout = lazy(() => import('./pages/admin/AdminLayout'))
 const AdminOverview = lazy(() => import('./pages/admin/AdminOverview'))
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
@@ -143,6 +144,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <PentestRunner />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/agent/pentest-stream"
+                element={
+                  <ProtectedRoute>
+                    <PentestStream />
                   </ProtectedRoute>
                 }
               />
