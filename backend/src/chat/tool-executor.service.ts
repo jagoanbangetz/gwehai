@@ -422,6 +422,7 @@ export class ToolExecutorService {
           },
           confidence,
           confidenceReason,
+          conversationId: context.conversationId,
         });
         console.log(`[report_finding] bridge result: ${JSON.stringify(saved)}`);
       } catch (err: any) {
