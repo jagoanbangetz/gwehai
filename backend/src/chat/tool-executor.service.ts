@@ -23,6 +23,7 @@ import { OobDetectorService } from '../tools/oob-detector.service';
 import { WebSearchService } from '../tools/web-search.service';
 import { stripAnsi } from '../utils/ansi.util';
 import { OobPayloadType } from '../entities/oob-log.entity';
+import { WebhookService } from '../webhooks/webhook.service';
 
 /** Max chars for a single tool output before truncation. */
 const MAX_TOOL_OUTPUT_CHARS = 8000;
@@ -74,6 +75,7 @@ export class ToolExecutorService {
     private globalMemoryService: GlobalMemoryService,
     private oobDetectorService: OobDetectorService,
     private webSearchService: WebSearchService,
+    private webhookService: WebhookService,
   ) {}
   private readonly logger = new Logger(ToolExecutorService.name);
 
@@ -454,6 +456,25 @@ export class ToolExecutorService {
       } catch {
         // Silent fail — auto-learning is best-effort, shouldn't break report_finding
       }
+    }
+
+    // Fire webhook for critical/high severity findings
+    const severityLower = String(args.severity ?? '').toLowerCase();
+    if (severityLower === 'critical' || severityLower === 'high') {
+      const webhookEvent = severityLower === 'critical' ? 'finding.critical' : 'finding.high';
+      this.webhookService
+        .fireEvent(context.userId!, webhookEvent, {
+          finding_id: report.id,
+          title: args.title ? String(args.title) : detail.substring(0, 200),
+          severity: severityLower,
+          confidence,
+          confidence_label: confidenceLabel,
+          target: reportTarget,
+          poc: args.poc ? String(args.poc) : undefined,
+          remediation: args.remediation ? String(args.remediation) : undefined,
+          job_id: jobId ?? undefined,
+        })
+        .catch(() => {});
     }
 
     return JSON.stringify({ ok: true, report_id: report.id, confidence, confidence_label: confidenceLabel, message: 'Finding saved to database' });

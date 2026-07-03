@@ -40,6 +40,7 @@ import { MailModule } from './mail/mail.module';
 import { CveFeedModule } from './cve-feed/cve-feed.module';
 import { HealthModule } from './health/health.module';
 import { StorageModule } from './storage/storage.module';
+import { WebhookModule } from './webhooks/webhook.module';
 
 @Module({
   imports: [
@@ -90,6 +91,7 @@ import { StorageModule } from './storage/storage.module';
     HacktivityModule,
     HealthModule,
     StorageModule,
+    WebhookModule,
   ],
   controllers: [AppController],
   providers: [AppService],
