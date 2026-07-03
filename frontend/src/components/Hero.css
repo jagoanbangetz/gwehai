@@ -1,4 +1,4 @@
-/* Hero terminal preview styles — monochrome */
+/* ===== Hero terminal preview — monochrome ===== */
 
 .hero-terminal-preview {
   animation: fadeInUp 0.6s ease-out 0.4s both;
@@ -74,42 +74,14 @@
   to { opacity: 1; transform: translateX(0); }
 }
 
-.t-prompt {
-  color: #eee;
-  font-weight: 700;
-}
-
-.t-cmd {
-  color: #eee;
-}
-
-.t-info {
-  color: #777;
-  font-weight: 600;
-}
-
-.t-warn {
-  color: #999;
-  font-weight: 600;
-}
-
-.t-crit {
-  color: #ddd;
-  font-weight: 600;
-}
-
-.t-text {
-  color: #999;
-}
-
-.t-check {
-  color: #ccc;
-  font-size: 0.9rem;
-}
-
-.terminal-line.success .t-text {
-  color: #ccc;
-}
+.t-prompt { color: #eee; font-weight: 700; }
+.t-cmd { color: #eee; }
+.t-info { color: #777; font-weight: 600; }
+.t-warn { color: #999; font-weight: 600; }
+.t-crit { color: #ddd; font-weight: 600; }
+.t-text { color: #999; }
+.t-check { color: #ccc; font-size: 0.9rem; }
+.terminal-line.success .t-text { color: #ccc; }
 
 .t-cursor {
   color: #eee;
@@ -121,7 +93,97 @@
   50% { opacity: 0; }
 }
 
-/* Mobile: scaled terminal, NOT hidden */
+/* ===== Hero particles ===== */
+
+.hero-particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.hero-particle {
+  position: absolute;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: floatParticle linear infinite;
+  will-change: transform;
+}
+
+@keyframes floatParticle {
+  0%   { transform: translate(0, 0) scale(1); }
+  25%  { transform: translate(30px, -40px) scale(1.1); }
+  50%  { transform: translate(-20px, -80px) scale(0.9); }
+  75%  { transform: translate(40px, -30px) scale(1.05); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+/* ===== Hero title gradient shimmer ===== */
+
+.hero-title-gradient {
+  background: linear-gradient(
+    135deg,
+    #22c55e 0%,
+    #4ade80 30%,
+    #86efac 50%,
+    #4ade80 70%,
+    #22c55e 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0%, 100% { background-position: 0% center; }
+  50% { background-position: 100% center; }
+}
+
+.hero-title-line {
+  display: block;
+}
+
+/* ===== CTA button pulse glow ===== */
+
+.pulse-btn {
+  position: relative;
+}
+
+.pulse-btn::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 14px;
+  background: #22c55e;
+  opacity: 0;
+  z-index: -1;
+  animation: ctaPulse 2.5s ease-in-out infinite;
+}
+
+@keyframes ctaPulse {
+  0%, 100% { opacity: 0; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(1.06); }
+}
+
+/* ===== Hero visibility triggers ===== */
+
+.hero {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.hero.hero-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ===== Responsive ===== */
+
 @media (max-width: 768px) {
   .hero-terminal-preview {
     max-width: 100%;
@@ -145,6 +207,10 @@
 
   .terminal-preview-title {
     font-size: 0.65rem;
+  }
+
+  .hero-particle {
+    display: none;
   }
 }
 

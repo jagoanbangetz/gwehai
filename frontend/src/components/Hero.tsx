@@ -1,11 +1,56 @@
 import { useNavigate } from 'react-router-dom'
+import { useEffect, useRef } from 'react'
 import './Hero.css'
+
+const PARTICLES = Array.from({ length: 18 }, (_, i) => ({
+  id: i,
+  size: 3 + Math.random() * 4,
+  x: Math.random() * 100,
+  y: Math.random() * 100,
+  delay: Math.random() * 6,
+  duration: 8 + Math.random() * 10,
+  opacity: 0.15 + Math.random() * 0.25,
+}))
 
 const Hero = () => {
   const navigate = useNavigate()
+  const heroRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    const section = heroRef.current
+    if (!section) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        section.classList.toggle('hero-visible', entry.isIntersecting)
+      },
+      { threshold: 0.15 }
+    )
+    observer.observe(section)
+    return () => observer.disconnect()
+  }, [])
 
   return (
-    <section className="hero">
+    <section className="hero" ref={heroRef}>
+      {/* Floating particles */}
+      <div className="hero-particles" aria-hidden="true">
+        {PARTICLES.map((p) => (
+          <span
+            key={p.id}
+            className="hero-particle"
+            style={{
+              width: p.size,
+              height: p.size,
+              left: `${p.x}%`,
+              top: `${p.y}%`,
+              animationDelay: `${p.delay}s`,
+              animationDuration: `${p.duration}s`,
+              opacity: p.opacity,
+            }}
+          />
+        ))}
+      </div>
+
       <div className="hero-container">
         <div className="hero-eyebrow">
           <i className="fa-solid fa-shield-halved"></i>
@@ -13,7 +58,8 @@ const Hero = () => {
         </div>
 
         <h1 className="hero-title">
-          Penetration Testing, Automated
+          <span className="hero-title-line">Penetration Testing,</span>
+          <span className="hero-title-gradient"> Automated</span>
         </h1>
 
         <p className="hero-description">
@@ -21,7 +67,7 @@ const Hero = () => {
         </p>
 
         <div className="hero-cta">
-          <button className="hero-button primary" onClick={() => navigate('/signup')}>
+          <button className="hero-button primary pulse-btn" onClick={() => navigate('/signup')}>
             <i className="fa-solid fa-rocket"></i>
             Start Pentesting
           </button>
