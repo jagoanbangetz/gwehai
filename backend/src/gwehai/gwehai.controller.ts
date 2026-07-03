@@ -74,9 +74,44 @@ export class GwehAIController {
   }
 
   /**
-   * Stream endpoint: use the job_id from the chat response.
-   * GET /api/gwehai/chat/stream?stream_id=<job_id>
+   * Continue a chat on an existing conversation.
+   * POST /api/gwehai/chat/:conversationId/continue
+   * Body: { message, model_key?, model_id?, mode? }
    */
+  @Post('chat/:conversationId/continue')
+  @UseGuards(JwtAuthGuard)
+  async continueChat(
+    @Req() req: Request,
+    @Param('conversationId') conversationId: string,
+    @Body() body: any,
+  ) {
+    const user = req.user as any;
+    const payload = { ...body, conversation_id: conversationId };
+
+    if (payload.model_id) {
+      const model = await this.modelRepo.findOne({ where: { id: payload.model_id } });
+      if (!model) {
+        throw new HttpException('Model not found. Please pick another model from the list.', HttpStatus.BAD_REQUEST);
+      }
+      if (!model.isActive) {
+        throw new HttpException('This model is no longer available. Please pick another model from the list.', HttpStatus.BAD_REQUEST);
+      }
+      const key = (model.metadata as Record<string, string> | null)?.key;
+      if (!key || !isChatCapableModelKey(key)) {
+        throw new HttpException('This model cannot be used for chat. Please pick another model from the list.', HttpStatus.BAD_REQUEST);
+      }
+      payload.model_key = payload.model_key || key;
+      payload.modelIdOverride = model.metadata.apiModelId ?? (model.metadata as Record<string, string>)?.defaultModel;
+    }
+    if (payload.max_agents != null) {
+      const n = Number(payload.max_agents);
+      if (Number.isInteger(n) && n >= 1 && n <= 20) {
+        payload.maxAgentsForRun = n;
+      }
+    }
+    console.log(`User ${user.id} continuing chat in conversation ${conversationId}`);
+    return this.gwehaiService.startChat(user.id, payload);
+  }
   @Get('chat/stream')
   async streamChat(@Query('stream_id') streamId: string, @Req() req: Request, @Res() res: Response) {
     if (!streamId) {
@@ -289,6 +324,7 @@ export class GwehAIController {
     // When user switches chats & reconnects, replay the last status/reasoning
     // event so the frontend can show current agent step instead of a generic
     // "Resuming pentest" placeholder.
+    // Also replay the last finding event so the frontend knows about discovered vulns.
     if (lastSentIndex === 0) {
       const events = job.events ?? [];
       // Find the most recent status or reasoning event
@@ -299,11 +335,20 @@ export class GwehAIController {
           break;
         }
       }
+      // Find the most recent finding event for reconnect replay
+      let lastFinding: { type: string; data: any } | null = null;
+      for (let i = events.length - 1; i >= 0; i--) {
+        if (events[i].type === 'finding') {
+          lastFinding = events[i];
+          break;
+        }
+      }
       sendEvent('state_sync', {
         stream_id: job.id,
         current_step: lastStatusOrReasoning?.data?.message ?? 'Running...',
         status: 'running',
         event_count: events.length,
+        last_finding: lastFinding?.data ?? null,
       });
     }
 

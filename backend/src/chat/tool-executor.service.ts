@@ -404,9 +404,10 @@ export class ToolExecutorService {
         // Non-blocking: fallback lookup is best-effort
       }
     }
+    console.log(`[report_finding] bridge: jobId=${jobId}, title=${args.title}, severity=${args.severity}`);
     if (jobId) {
       try {
-        await this.pentestJobs.createPentestFinding(jobId, {
+        const saved = await this.pentestJobs.createPentestFinding(jobId, {
           title: args.title ? String(args.title) : (detail.substring(0, 200) || undefined),
           severity: args.severity ? String(args.severity) : undefined,
           poc: args.poc ? String(args.poc) : undefined,
@@ -420,6 +421,7 @@ export class ToolExecutorService {
           confidence,
           confidenceReason,
         });
+        console.log(`[report_finding] bridge result: ${JSON.stringify(saved)}`);
       } catch (err: any) {
         // Fix: log instead of silent fail
         this.logger.warn(`[report_finding] pentest_findings bridge failed for job ${jobId}: ${err?.message}`);

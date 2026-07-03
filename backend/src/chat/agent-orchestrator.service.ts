@@ -825,9 +825,28 @@ export class AgentOrchestratorService {
             data: { tool: tc.name, output: clipTextPreserveHeadTail(stripAnsi(r.result), 4000) },
           });
 
-          // Track report_finding calls for enforcement
+          // Track report_finding calls for enforcement + emit finding SSE event
           if (tc.name === 'report_finding') {
             reportFindingCalledThisRun++;
+
+            // Emit finding SSE event so frontend can show it in real-time + state_sync replay
+            const resultStr = String(r.result || '');
+            const isError = resultStr.includes('"error"');
+            if (!isError && r.args) {
+              push({
+                type: 'finding',
+                data: {
+                  id: require('crypto').randomUUID(),
+                  title: r.args.title || (r.args.detail || '').substring(0, 120) || 'Untitled Finding',
+                  severity: ((r.args.severity || 'MEDIUM') as string).toUpperCase(),
+                  confidence: Number(r.args.confidence) || 0,
+                  target: String(r.args.target || ''),
+                  poc: String(r.args.poc || ''),
+                  remediation: String(r.args.remediation || ''),
+                  cwe: String(r.args.cwe || ''),
+                },
+              });
+            }
           }
 
           // Layer 1: Vuln detection — if exec output shows vulnerability evidence, remind LLM to call report_finding

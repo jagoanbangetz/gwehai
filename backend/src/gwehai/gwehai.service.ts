@@ -61,7 +61,20 @@ export class GwehAIService {
    */
   async startChat(userId: string, payload: any): Promise<any> {
     const message = this.extractUserMessage(payload);
-    const conversationId = payload.conversation_id;
+    const providedConversationId = payload.conversation_id;
+
+    // ═══ Create conversation in DB BEFORE returning the response ═══
+    // Previously conversation_id was returned as undefined because the conversation
+    // was only created later inside the async agent loop. Now we create it upfront
+    // so the client gets a valid conversation_id immediately.
+    const useModelPicker = !!payload.model_key;
+    const conversation = await this.chatService.getOrCreateConversation(
+      userId,
+      providedConversationId || undefined,
+      undefined,
+      useModelPicker,
+    );
+    const conversationId = conversation.id;
 
     const planId: PlanId = await this.planResolution.getUserPlan(userId);
     const def = this.planResolution.getPlanDefinition(planId);
@@ -135,7 +148,7 @@ export class GwehAIService {
     return {
       job_id: jobId,
       stream_id: jobId,
-      conversation_id: undefined,
+      conversation_id: conversationId,
       status: job.status,
       message: 'Job created',
       plan: planPayload.plan,

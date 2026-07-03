@@ -418,12 +418,15 @@ export class ConversationService {
 
   /**
    * Get user conversations (root only, exclude sub-agent sessions).
+   * When includeMessages is false (default), returns titles/metadata only.
+   * When true, includes the messages relation for full chat history.
    */
-  async getUserConversations(userId: string): Promise<Conversation[]> {
+  async getUserConversations(userId: string, includeMessages: boolean = false): Promise<Conversation[]> {
+    const relations: string[] = includeMessages ? ['messages'] : [];
     return await this.conversationRepo.find({
       where: { userId, parentConversationId: IsNull() },
       order: { updatedAt: 'DESC' },
-      relations: ['messages'],
+      relations,
     });
   }
 

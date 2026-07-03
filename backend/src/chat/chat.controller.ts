@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Delete, Body, Param, UseGuards, Req, Res, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Body, Param, UseGuards, Req, Res, BadRequestException, Query } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Request, Response } from 'express';
@@ -51,10 +51,15 @@ export class ChatController {
     });
   }
 
+  /**
+   * Get user's conversations — titles only by default (lazy-load).
+   * Pass ?include_messages=true to include messages inline.
+   */
   @Get('conversations')
-  async getConversations(@Req() req: Request) {
+  async getConversations(@Req() req: Request, @Query('include_messages') includeMessages?: string) {
     const user = req.user as any;
-    return await this.chatService.getUserConversations(user.id);
+    const includeMsgs = includeMessages === 'true' || includeMessages === '1';
+    return await this.chatService.getUserConversations(user.id, includeMsgs);
   }
 
   @Get('conversations/:id')

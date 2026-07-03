@@ -115,8 +115,8 @@ export class ChatService {
     return this.conversationService.setConversationRunStatus(conversationId, status);
   }
 
-  async getUserConversations(userId: string): Promise<Conversation[]> {
-    return this.conversationService.getUserConversations(userId);
+  async getUserConversations(userId: string, includeMessages: boolean = false): Promise<Conversation[]> {
+    return this.conversationService.getUserConversations(userId, includeMessages);
   }
 
   async getConversation(userId: string, conversationId: string): Promise<Conversation & { memory?: Array<{ path: string; content: string }> }> {
