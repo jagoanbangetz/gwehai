@@ -13,6 +13,7 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         PORT: 3100,
+        PLAYWRIGHT_CHROMIUM_PATH: "/root/.cache/ms-playwright/chromium-1223/chrome-linux64/chrome",
       },
     },
   ],

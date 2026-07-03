@@ -556,15 +556,22 @@ export function handleStreamEvent(
       const isContextTooLong =
         event.data.error_code === 'context_too_long' ||
         /conversation is too long|start a new chat/i.test(errorMessage)
+      const isDbConstraint =
+        event.data.error_code === 'db_constraint' ||
+        /null value in column|violates not-null constraint/i.test(errorMessage)
       if (isAborted) {
         ctx.showToast('Request was cancelled before completion.', 'info', 4000)
       } else if (isContextTooLong) {
         ctx.showToast('Conversation is too long. Start a new chat to continue.', 'warning', 6000)
+      } else if (isDbConstraint) {
+        ctx.showToast('Database error — scan interrupted. Please start a new scan.', 'warning', 6000)
       }
       const displayContent = isAborted
         ? `Stopped: ${errorMessage}`
         : isContextTooLong
         ? `Error: ${errorMessage}\n\nTip: Start a new chat to continue — your previous messages won't be sent to the model.`
+        : isDbConstraint
+        ? `Database error — the scan was interrupted. Please start a new scan.\n\nTip: This usually happens when the conversation wasn't created properly. Starting a fresh scan should resolve it.`
         : `Error: ${errorMessage}\n\nDon't worry, if the run is still active in the backend, findings will continue to be saved in the report.`
       ctx.setMessages((prev) =>
         prev.map((m) =>

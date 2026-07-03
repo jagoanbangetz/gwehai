@@ -287,11 +287,15 @@ export class GwehAIService {
         /maximum context length|context length|requested.*tokens|reduce the length of the messages|conversation is too long/i.test(errMsg);
       const isAborted =
         /\baborted\b|aborterror|request aborted|stream has been aborted|request stream has been aborted|canceled|cancelled/i.test(errMsg);
+      const isDbConstraint =
+        /null value in column|violates not-null constraint|violates foreign key constraint|duplicate key value/i.test(errMsg);
       const friendlyMessage = isContextLength
         ? 'Conversation is too long for the model. Please start a new chat or ask a shorter question.'
         : isAborted
           ? 'Request was cancelled before completion. Please run again.'
-          : normalizeLlmErrorMessage(errMsg);
+          : isDbConstraint
+            ? 'A database error occurred. The scan may have been interrupted — please start a new scan or try again.'
+            : normalizeLlmErrorMessage(errMsg);
       pushEvent({ type: 'status', data: { message: 'An error occurred.' } });
       pushEvent({
         type: 'error',
@@ -299,6 +303,7 @@ export class GwehAIService {
           message: friendlyMessage,
           ...(isContextLength ? { error_code: 'context_too_long' } : {}),
           ...(isAborted ? { error_code: 'request_aborted' } : {}),
+          ...(isDbConstraint ? { error_code: 'db_constraint' } : {}),
         },
       });
       pushEvent({ type: 'done', data: { job_id: jobId, conversation_id: job.conversationId || conversationId } });

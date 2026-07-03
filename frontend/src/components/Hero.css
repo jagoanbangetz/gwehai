@@ -1,26 +1,17 @@
-/* Hero styles are in Landing.css — this file only has terminal preview styles */
+/* Hero terminal preview styles — monochrome */
 
 .hero-terminal-preview {
   animation: fadeInUp 0.6s ease-out 0.4s both;
   max-width: 680px;
   margin: 0 auto;
-  perspective: 1000px;
 }
 
 .terminal-preview-window {
-  background: rgba(8, 8, 16, 0.9);
-  border: 1px solid var(--glass-border);
+  background: #0a0a0a;
+  border: 1px solid #333;
   border-radius: 12px;
   overflow: hidden;
-  box-shadow:
-    0 20px 60px rgba(0, 0, 0, 0.5),
-    0 0 40px rgba(255, 255, 255, 0.04);
-  transform: rotateX(2deg);
-  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.terminal-preview-window:hover {
-  transform: rotateX(0deg);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
 
 .terminal-preview-header {
@@ -28,8 +19,8 @@
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem 1rem;
-  background: rgba(15, 15, 25, 0.8);
-  border-bottom: 1px solid var(--glass-border);
+  background: #1a1a1a;
+  border-bottom: 1px solid #333;
 }
 
 .terminal-preview-dots {
@@ -50,7 +41,7 @@
 .terminal-preview-title {
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.75rem;
-  color: var(--text-muted);
+  color: #777;
   letter-spacing: 0.03em;
 }
 
@@ -84,21 +75,21 @@
 }
 
 .t-prompt {
-  color: var(--primary-color);
+  color: #eee;
   font-weight: 700;
 }
 
 .t-cmd {
-  color: var(--text-primary);
+  color: #eee;
 }
 
 .t-info {
-  color: #999;
+  color: #777;
   font-weight: 600;
 }
 
 .t-warn {
-  color: #bbb;
+  color: #999;
   font-weight: 600;
 }
 
@@ -108,7 +99,7 @@
 }
 
 .t-text {
-  color: var(--text-secondary);
+  color: #999;
 }
 
 .t-check {
@@ -121,7 +112,7 @@
 }
 
 .t-cursor {
-  color: var(--primary-color);
+  color: #eee;
   animation: blink 1s step-end infinite;
 }
 
@@ -130,8 +121,44 @@
   50% { opacity: 0; }
 }
 
+/* Mobile: scaled terminal, NOT hidden */
 @media (max-width: 768px) {
   .hero-terminal-preview {
-    display: none;
+    max-width: 100%;
+    margin: 0;
+  }
+
+  .terminal-preview-body {
+    font-size: 0.7rem;
+    padding: 1rem;
+    min-height: 180px;
+    line-height: 1.6;
+  }
+
+  .terminal-preview-window {
+    border-radius: 8px;
+  }
+
+  .terminal-preview-header {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .terminal-preview-title {
+    font-size: 0.65rem;
+  }
+}
+
+@media (max-width: 375px) {
+  .terminal-preview-body {
+    font-size: 0.62rem;
+    padding: 0.75rem;
+    min-height: 150px;
+    line-height: 1.5;
+    overflow-x: auto;
+  }
+
+  .terminal-line {
+    gap: 0.35rem;
+    white-space: nowrap;
   }
 }

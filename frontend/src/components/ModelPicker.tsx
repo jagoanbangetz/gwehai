@@ -97,7 +97,7 @@ export function getStoredModelKey(): ModelKey {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw && MODEL_KEY_ORDER.includes(raw as ModelKey)) return raw as ModelKey
   } catch (_) {}
-  return 'deepseek_v4'
+  return 'deepseek_chat'
 }
 
 export function getStoredModelId(): string | null {

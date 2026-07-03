@@ -13,15 +13,11 @@ const Hero = () => {
         </div>
 
         <h1 className="hero-title">
-          Automate Your
-          <br />
-          <span className="hero-title-accent">Penetration Testing</span>
+          Penetration Testing, Automated
         </h1>
 
         <p className="hero-description">
-          GwehAI is an advanced AI agent that automates the entire pentest workflow
-          — from reconnaissance to exploit validation and professional report generation.
-          Enterprise-grade security testing, powered by AI.
+          AI-powered security testing from reconnaissance to professional reporting.
         </p>
 
         <div className="hero-cta">

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { logo } from '../assets/images'
 import AnimatedBackground from '../components/AnimatedBackground'
 import './Auth.css'
 
@@ -106,11 +105,8 @@ const Login = () => {
     <div className="auth-page">
       <AnimatedBackground variant="full" intensity="low" />
       <div className="auth-container">
-        <div className="auth-modal">
-          <div className="auth-modal-header">
-            <div className="auth-logo">
-              <img src={logo} alt="GwehAI" className="auth-logo-image" />
-            </div>
+        <div className="auth-card">
+          <div className="auth-card-header">
             <Link to="/" className="auth-close">
               <i className="fa-solid fa-xmark"></i>
             </Link>
