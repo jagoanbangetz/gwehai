@@ -1,5 +1,6 @@
 import { Injectable, HttpException, HttpStatus, Inject, forwardRef } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import { execSync } from 'child_process';
 import { ChatService } from '../chat/chat.service';
 import { getAgentLabel } from '../chat/agent-names';
 import { PENTEST_SYSTEM_PROMPT } from '../prompt/pentest.system-prompt';
@@ -62,6 +63,21 @@ export class GwehAIService {
   async startChat(userId: string, payload: any): Promise<any> {
     const message = this.extractUserMessage(payload);
     const providedConversationId = payload.conversation_id;
+
+    // ═══ Validate target URL BEFORE launching agent ═══
+    // Don't pentest invalid/unreachable targets — wastes tokens and gives false results.
+    if (this.looksLikeTargetRequest(message) && payload.mode !== 'ask') {
+      const target = this.extractTargetFromMessage(message);
+      if (target) {
+        const validation = await this.validateTargetUrl(target);
+        if (!validation.valid) {
+          throw new HttpException(
+            validation.reason || `Target "${target}" is not reachable. Check the URL and try again.`,
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+      }
+    }
 
     // ═══ Create conversation in DB BEFORE returning the response ═══
     // Previously conversation_id was returned as undefined because the conversation
@@ -178,13 +194,68 @@ export class GwehAIService {
   private extractTargetFromMessage(message: string): string {
     const trimmed = message.trim();
     const urlMatch = trimmed.match(/https?:\/\/[^\s"'<>)\]]+/i);
-    if (urlMatch) return urlMatch[0].replace(/[)\]\s,]+$/, '');
+    if (urlMatch) return urlMatch[0].replace(/[)\]\\s,]+$/, '');
     const pentestMatch = trimmed.match(/pentest\s+(\S+)/i);
     if (pentestMatch) {
       const target = pentestMatch[1];
       return /^https?:\/\//i.test(target) ? target : `https://${target}`;
     }
     return '';
+  }
+
+  /**
+   * Validate that a target URL is reachable before launching pentest.
+   * Checks: URL format, DNS resolution, HTTP reachability.
+   * Returns {valid, reason} — fast enough to run synchronously before job creation.
+   */
+  private async validateTargetUrl(url: string): Promise<{ valid: boolean; reason?: string }> {
+    try {
+      const parsed = new URL(url);
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        return { valid: false, reason: `Unsupported protocol "${parsed.protocol}". Use http:// or https://` };
+      }
+      // Strip trailing path/query for DNS check — we only validate the host
+      const hostname = parsed.hostname;
+      // Quick DNS check — if hostname doesn't resolve, no point running pentest
+      try {
+        execSync(`getent hosts ${hostname} || dig +short ${hostname} || nslookup ${hostname}`, {
+          timeout: 5000,
+          stdio: 'pipe',
+        });
+      } catch {
+        // DNS might fail in restricted env — fall through to HTTP check
+      }
+      // HTTP reachability check
+      try {
+        const resp = await fetch(url, {
+          method: 'HEAD',
+          signal: AbortSignal.timeout(5000),
+          redirect: 'follow',
+        });
+        if (!resp.ok && resp.status >= 400 && resp.status < 500) {
+          // 4xx is fine — site exists, just auth/permission issue
+          return { valid: true };
+        }
+        return { valid: true };
+      } catch (fetchErr: any) {
+        const msg = fetchErr?.message || String(fetchErr);
+        if (msg.includes('ENOTFOUND') || msg.includes('getaddrinfo')) {
+          return { valid: false, reason: `Host "${hostname}" not found. Check the URL spelling and try again.` };
+        }
+        if (msg.includes('ECONNREFUSED')) {
+          return { valid: false, reason: `Connection refused by ${hostname}. The server may be down or blocking our IP.` };
+        }
+        if (msg.includes('CERT_') || msg.includes('SSL_') || msg.includes('self[- ]signed')) {
+          // TLS errors — site exists but cert issue
+          return { valid: true, reason: 'TLS certificate issue detected — site exists but has cert problems.' };
+        }
+        // Unknown error — allow through with warning but log it
+        console.warn(`[target-validation] ${url}: ${msg}`);
+        return { valid: true };
+      }
+    } catch (urlErr: any) {
+      return { valid: false, reason: `Invalid URL format: "${url}". Use https://example.com format.` };
+    }
   }
 
   /**
