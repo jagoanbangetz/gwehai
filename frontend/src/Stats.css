@@ -1,0 +1,88 @@
+/* Stats section — monochrome, scroll-triggered counter animation */
+
+.stats-section {
+  padding: 4rem 2rem;
+  position: relative;
+  z-index: 1;
+}
+
+.stats-container {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+}
+
+.stat-card {
+  text-align: center;
+  padding: 2rem 1rem;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 12px;
+  transition: border-color 0.3s, transform 0.3s;
+}
+
+.stat-card:hover {
+  border-color: #555;
+  transform: translateY(-2px);
+}
+
+.stat-value {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: #eee;
+  margin-bottom: 0.25rem;
+  letter-spacing: -0.02em;
+}
+
+.stat-label {
+  font-size: 0.85rem;
+  color: #777;
+  font-weight: 500;
+}
+
+/* Tablet: 2 columns */
+@media (max-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Mobile: 2 columns */
+@media (max-width: 768px) {
+  .stats-section {
+    padding: 3rem 1rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+  }
+
+  .stat-value {
+    font-size: 2rem;
+  }
+}
+
+/* Small mobile: still 2 columns */
+@media (max-width: 375px) {
+  .stats-grid {
+    gap: 0.75rem;
+  }
+
+  .stat-card {
+    padding: 1.25rem 0.75rem;
+  }
+
+  .stat-value {
+    font-size: 1.6rem;
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+  }
+}
