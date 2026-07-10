@@ -29,7 +29,9 @@ const GROUP_CONFIG: Record<string, { icon: string; color: string; description: s
   security: { icon: 'fa-shield-halved',   color: '#8c8c8c',   description: 'Encryption, secrets & access control' },
   auth:     { icon: 'fa-key',             color: '#999999',    description: 'Authentication & OAuth providers' },
   general:  { icon: 'fa-sliders',         color: '#999999',    description: 'General application settings' },
-  branding: { icon: 'fa-palette',         color: '#a5a5a5',  description: 'Logo, favicon & visual identity' },
+  branding: { icon: 'fa-palette',         color: '#a5a5a5',  description: 'Logo, favicon & brand colors' },
+  seo:      { icon: 'fa-magnifying-glass', color: '#a5a5a5', description: 'Meta tags & social sharing preview' },
+  contact:  { icon: 'fa-address-card',    color: '#a5a5a5',  description: 'Public contact details & social links' },
 }
 
 /* ── Field descriptions ── */
@@ -62,6 +64,19 @@ const FIELD_DESCRIPTIONS: Record<string, string> = {
   CACHE_DRIVER:             'Cache backend: file, redis, memcached.',
   site_logo_url:            'Brand logo displayed in the app header and reports.',
   site_favicon_url:         'Browser tab icon (favicon). ICO, PNG, or SVG.',
+  site_primary_color:       'Primary brand color used for buttons, links & accents.',
+  site_accent_color:        'Secondary accent color for highlights & gradients.',
+  seo_meta_title:           'Default browser tab & search-result title (~60 chars).',
+  seo_meta_description:     'Search-result & social snippet description (~155 chars).',
+  seo_meta_keywords:        'Comma-separated keywords for search engines.',
+  seo_og_image_url:         'Image shown when the site is shared on social media (1200×630 recommended).',
+  seo_twitter_handle:       'Twitter/X @handle used in card attribution.',
+  contact_email:            'Public support / contact email address.',
+  contact_phone:            'Public contact phone number.',
+  contact_address:          'Business mailing address shown in the footer & contact page.',
+  contact_twitter_url:      'Full URL to your Twitter/X profile.',
+  contact_linkedin_url:     'Full URL to your LinkedIn page.',
+  contact_github_url:       'Full URL to your GitHub organization.',
 }
 
 /* ── Boolean field detection ── */
@@ -401,7 +416,34 @@ export default function AdminSettings() {
   }
 
   /* ── Group order ── */
-  const GROUP_ORDER = ['ai', 'payment', 'email', 'security', 'auth', 'general', 'branding']
+  const GROUP_ORDER = ['ai', 'payment', 'email', 'security', 'auth', 'general', 'branding', 'seo', 'contact']
+
+  /* ── Field type detection ── */
+  const SECRET_FIELD_PATTERNS = /_(KEY|SECRET|PASS|PASSWORD|TOKEN|SECRET_KEY|PRIVATE_KEY)$/
+  function isSecretField(key: string): boolean {
+    return SECRET_FIELD_PATTERNS.test(key) || BOOLEAN_FIELDS.has(key)
+  }
+
+  const COLOR_FIELDS = new Set(['site_primary_color', 'site_accent_color'])
+  function isColorField(key: string): boolean {
+    return COLOR_FIELDS.has(key)
+  }
+
+  const TEXTAREA_FIELDS = new Set<string>([
+    'seo_meta_description',
+    'contact_address',
+  ])
+  function isTextareaField(key: string): boolean {
+    return TEXTAREA_FIELDS.has(key)
+  }
+
+  function getInputType(key: string): string {
+    if (isColorField(key)) return 'color'
+    if (key.includes('email')) return 'email'
+    if (key.includes('phone') || key.includes('tel')) return 'tel'
+    if (key.endsWith('_url') || key === 'FRONTEND_URL' || key === 'API_BASE_URL') return 'url'
+    return 'text'
+  }
 
   /* Stats */
   const stats = useMemo(() => {
@@ -558,7 +600,8 @@ export default function AdminSettings() {
               {/* Card body */}
               {!isCollapsed && (
                 <div className="settings-group-body">
-                  {groupKey === 'branding' ? (
+                  {/* Branding uploads at top */}
+                  {groupKey === 'branding' && (
                     <div className="branding-grid">
                       <BrandingUploadField
                         type="logo"
@@ -599,97 +642,132 @@ export default function AdminSettings() {
                         showToast={showToast}
                       />
                     </div>
-                  ) : (
-                    <>
-                      {group.fields.map((fieldKey) => {
-                        const meta = data.settings[fieldKey]
-                        if (!meta) return null
-                        const val = getDisplayValue(fieldKey, meta)
-                        const fieldVisible = visible.has(fieldKey)
-                        const dirtyField = isDirty(fieldKey)
-                        const boolField = isBooleanField(fieldKey, meta)
-                        const description = FIELD_DESCRIPTIONS[fieldKey]
+                  )}
 
-                        return (
-                          <div
-                            key={fieldKey}
-                            className={`settings-field${dirtyField ? ' dirty' : ''}${boolField ? ' boolean-field' : ''}`}
-                          >
-                            {/* Field label row */}
-                            <div className="settings-field-header">
-                              <div className="settings-field-label-group">
-                                <label className="settings-field-label" htmlFor={`setting-${fieldKey}`}>
-                                  {meta.label || fieldKey}
-                                </label>
-                                <span className={`settings-source-badge source-${meta.source}`}>
-                                  {meta.source === 'db' ? (
-                                    <><i className="fa-solid fa-database" /> DB</>
-                                  ) : (
-                                    <><i className="fa-solid fa-terminal" /> ENV</>
-                                  )}
-                                </span>
-                              </div>
-                              <div className="settings-field-status">
-                                {dirtyField ? (
-                                  <span className="settings-status-modified">
-                                    <i className="fa-solid fa-pen" /> Modified
-                                  </span>
-                                ) : meta.hasValue ? (
-                                  <span className="settings-status-saved">
-                                    <i className="fa-solid fa-check" /> Saved
-                                  </span>
-                                ) : (
-                                  <span className="settings-status-empty">
-                                    <i className="fa-solid fa-minus" /> Not set
-                                  </span>
-                                )}
-                              </div>
-                            </div>
+                  {/* Regular fields */}
+                  {group.fields.map((fieldKey) => {
+                    const meta = data.settings[fieldKey]
+                    if (!meta) return null
+                    const val = getDisplayValue(fieldKey, meta)
+                    const fieldVisible = visible.has(fieldKey)
+                    const dirtyField = isDirty(fieldKey)
+                    const boolField = isBooleanField(fieldKey, meta)
+                    const description = FIELD_DESCRIPTIONS[fieldKey]
+                    const secret = isSecretField(fieldKey)
+                    const color = isColorField(fieldKey)
+                    const textarea = isTextareaField(fieldKey)
+                    const inputType = getInputType(fieldKey)
 
-                            {/* Description */}
-                            {description && (
-                              <p className="settings-field-description">{description}</p>
-                            )}
-
-                            {/* Input area */}
-                            {boolField ? (
-                              <div className="settings-bool-row">
-                                <ToggleSwitch
-                                  checked={val.toLowerCase() === 'true'}
-                                  onChange={(v) => handleChange(fieldKey, v)}
-                                />
-                                <span className="settings-bool-label">
-                                  {val.toLowerCase() === 'true' ? 'Enabled' : 'Disabled'}
-                                </span>
-                              </div>
+                    return (
+                      <div
+                        key={fieldKey}
+                        className={`settings-field${dirtyField ? ' dirty' : ''}${boolField ? ' boolean-field' : ''}${color ? ' color-field' : ''}`}
+                      >
+                        {/* Field label row */}
+                        <div className="settings-field-header">
+                          <div className="settings-field-label-group">
+                            <label className="settings-field-label" htmlFor={`setting-${fieldKey}`}>
+                              {meta.label || fieldKey}
+                            </label>
+                            <span className={`settings-source-badge source-${meta.source}`}>
+                              {meta.source === 'db' ? (
+                                <><i className="fa-solid fa-database" /> DB</>
+                              ) : (
+                                <><i className="fa-solid fa-terminal" /> ENV</>
+                              )}
+                            </span>
+                          </div>
+                          <div className="settings-field-status">
+                            {dirtyField ? (
+                              <span className="settings-status-modified">
+                                <i className="fa-solid fa-pen" /> Modified
+                              </span>
+                            ) : meta.hasValue ? (
+                              <span className="settings-status-saved">
+                                <i className="fa-solid fa-check" /> Saved
+                              </span>
                             ) : (
-                              <div className="settings-input-wrap">
-                                <input
-                                  id={`setting-${fieldKey}`}
-                                  type={fieldVisible ? 'text' : 'password'}
-                                  className="settings-input"
-                                  value={val}
-                                  placeholder={meta.hasValue ? meta.value : 'Not set — enter value…'}
-                                  onChange={(e) => handleChange(fieldKey, e.target.value)}
-                                  autoComplete="off"
-                                  spellCheck={false}
-                                />
-                                <button
-                                  type="button"
-                                  className="settings-eye-btn"
-                                  onClick={() => toggleVisible(fieldKey)}
-                                  title={fieldVisible ? 'Hide value' : 'Show value'}
-                                  aria-label={fieldVisible ? 'Hide value' : 'Show value'}
-                                >
-                                  <i className={`fa-solid ${fieldVisible ? 'fa-eye-slash' : 'fa-eye'}`} />
-                                </button>
-                              </div>
+                              <span className="settings-status-empty">
+                                <i className="fa-solid fa-minus" /> Not set
+                              </span>
                             )}
                           </div>
-                        )
-                      })}
-                    </>
-                  )}
+                        </div>
+
+                        {/* Description */}
+                        {description && (
+                          <p className="settings-field-description">{description}</p>
+                        )}
+
+                        {/* Input area */}
+                        {boolField ? (
+                          <div className="settings-bool-row">
+                            <ToggleSwitch
+                              checked={val.toLowerCase() === 'true'}
+                              onChange={(v) => handleChange(fieldKey, v)}
+                            />
+                            <span className="settings-bool-label">
+                              {val.toLowerCase() === 'true' ? 'Enabled' : 'Disabled'}
+                            </span>
+                          </div>
+                        ) : color ? (
+                          <div className="settings-color-wrap">
+                            <input
+                              id={`setting-${fieldKey}`}
+                              type="color"
+                              className="settings-color-swatch"
+                              value={val.startsWith('#') && val.length === 7 ? val : '#3182ce'}
+                              onChange={(e) => handleChange(fieldKey, e.target.value)}
+                            />
+                            <input
+                              type="text"
+                              className="settings-input settings-color-hex"
+                              value={val}
+                              placeholder="#3182ce"
+                              onChange={(e) => handleChange(fieldKey, e.target.value)}
+                              autoComplete="off"
+                              spellCheck={false}
+                            />
+                          </div>
+                        ) : textarea ? (
+                          <textarea
+                            id={`setting-${fieldKey}`}
+                            className="settings-input settings-textarea"
+                            value={val}
+                            rows={3}
+                            placeholder={meta.hasValue ? meta.value : 'Not set — enter value…'}
+                            onChange={(e) => handleChange(fieldKey, e.target.value)}
+                            autoComplete="off"
+                            spellCheck
+                          />
+                        ) : (
+                          <div className="settings-input-wrap">
+                            <input
+                              id={`setting-${fieldKey}`}
+                              type={secret ? (fieldVisible ? 'text' : 'password') : inputType}
+                              className="settings-input"
+                              value={val}
+                              placeholder={meta.hasValue ? meta.value : 'Not set — enter value…'}
+                              onChange={(e) => handleChange(fieldKey, e.target.value)}
+                              autoComplete="off"
+                              spellCheck={false}
+                            />
+                            {secret && (
+                              <button
+                                type="button"
+                                className="settings-eye-btn"
+                                onClick={() => toggleVisible(fieldKey)}
+                                title={fieldVisible ? 'Hide value' : 'Show value'}
+                                aria-label={fieldVisible ? 'Hide value' : 'Show value'}
+                              >
+                                <i className={`fa-solid ${fieldVisible ? 'fa-eye-slash' : 'fa-eye'}`} />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>

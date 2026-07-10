@@ -1387,6 +1387,48 @@
   color: #cccccc;
 }
 
+/* Color picker */
+.settings-color-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.settings-color-swatch {
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 6px;
+  border: 1px solid #333;
+  cursor: pointer;
+  padding: 2px;
+  background: #151515;
+}
+
+.settings-color-swatch::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.settings-color-swatch::-webkit-color-swatch {
+  border-radius: 4px;
+  border: none;
+}
+
+.settings-color-hex {
+  max-width: 10rem;
+  padding-right: 0.75rem !important;
+  font-family: var(--font-mono);
+}
+
+/* Textarea */
+.settings-textarea {
+  resize: vertical;
+  min-height: 3.5rem;
+  padding: 0.55rem 0.75rem;
+  font-family: var(--font-mono);
+  line-height: 1.5;
+}
+
 /* Toggle switch */
 .settings-bool-row {
   display: flex;

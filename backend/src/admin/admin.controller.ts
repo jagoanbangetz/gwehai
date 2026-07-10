@@ -708,6 +708,21 @@ export class AdminController {
       // Branding
       site_logo_url:         { group: 'branding', label: 'Site Logo URL' },
       site_favicon_url:      { group: 'branding', label: 'Site Favicon URL' },
+      site_primary_color:    { group: 'branding', label: 'Primary Brand Color' },
+      site_accent_color:     { group: 'branding', label: 'Accent Color' },
+      // SEO
+      seo_meta_title:        { group: 'seo', label: 'Meta Title' },
+      seo_meta_description:  { group: 'seo', label: 'Meta Description' },
+      seo_meta_keywords:     { group: 'seo', label: 'Meta Keywords' },
+      seo_og_image_url:      { group: 'seo', label: 'Open Graph Image URL' },
+      seo_twitter_handle:    { group: 'seo', label: 'Twitter / X Handle' },
+      // Contact
+      contact_email:         { group: 'contact', label: 'Contact Email' },
+      contact_phone:         { group: 'contact', label: 'Contact Phone' },
+      contact_address:       { group: 'contact', label: 'Business Address' },
+      contact_twitter_url:   { group: 'contact', label: 'Twitter / X URL' },
+      contact_linkedin_url:  { group: 'contact', label: 'LinkedIn URL' },
+      contact_github_url:    { group: 'contact', label: 'GitHub URL' },
     };
 
     // Query all DB rows
@@ -760,6 +775,8 @@ export class AdminController {
       auth: 'Authentication',
       general: 'General',
       branding: 'Branding',
+      seo: 'SEO',
+      contact: 'Contact',
     };
 
     const groups: Record<string, { label: string; fields: string[] }> = {};
