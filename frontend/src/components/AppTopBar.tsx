@@ -33,13 +33,11 @@ const AppTopBar: React.FC<AppTopBarProps> = ({
           aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
           aria-expanded={isMenuOpen}
         >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            {isMenuOpen ? (
-              <path d="M6 18L18 6M6 6l12 12" />
-            ) : (
-              <path d="M3 12h18M3 6h18M3 18h18" />
-            )}
-          </svg>
+          {isMenuOpen ? (
+            <i className="fa-solid fa-xmark" />
+          ) : (
+            <i className="fa-solid fa-bars" />
+          )}
         </button>
       )}
 
@@ -47,9 +45,7 @@ const AppTopBar: React.FC<AppTopBarProps> = ({
         <span className="app-topbar-title-text">GwehAI</span>
         {mobileLayout && (
           <span className="app-topbar-title-chevron" aria-hidden>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M6 9l6 6 6-6" />
-            </svg>
+            <i className="fa-solid fa-chevron-down" />
           </span>
         )}
       </div>

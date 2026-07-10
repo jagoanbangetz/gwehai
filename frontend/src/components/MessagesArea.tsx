@@ -71,9 +71,7 @@ const MessagesArea = forwardRef<MessagesAreaRef, MessagesAreaProps>(function Mes
           aria-label="Scroll to bottom"
           title="Scroll to bottom"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 5v14M5 12l7 7 7-7" />
-          </svg>
+          <i className="fa-solid fa-arrow-down messages-area__scroll-icon" />
         </button>
       )}
     </div>

@@ -2,24 +2,9 @@ import type { ChatHistory } from '../types'
 
 /** Chat type icons (SVG inline for performance) */
 const CHAT_TYPE_ICONS: Record<string, React.ReactNode> = {
-  pentest: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M8 1L2 4V8C2 11.3 4.6 14.3 8 15C11.4 14.3 14 11.3 14 8V4L8 1Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
-      <path d="M6 8L7.5 9.5L10 6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  ),
-  qa: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2"/>
-      <path d="M6 6.5C6 5.67 6.9 5 8 5C9.1 5 10 5.67 10 6.5C10 7.33 9.1 8 8 8V9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-      <circle cx="8" cy="10.5" r="0.6" fill="currentColor"/>
-    </svg>
-  ),
-  general: (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M3 3H13V10H7L3 13V3Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
-    </svg>
-  ),
+  pentest: <i className="fa-solid fa-shield-halved" />,
+  qa: <i className="fa-solid fa-circle-question" />,
+  general: <i className="fa-solid fa-comment" />,
 }
 
 /** Badge label per chat type */
